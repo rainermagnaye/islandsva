@@ -1,0 +1,115 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { appRoutes } from "@/content/routes";
+import { safeNextPath } from "@/lib/auth/roles";
+import { requireUser } from "@/lib/auth/session";
+import { UpstreamError } from "@/lib/upstream-error";
+import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
+import type { SubmitResult } from "@/types/form";
+import type { EmailField, EnrollmentResult, MfaField, NewPasswordField, SignInField } from "./contract";
+import * as auth from "./dal";
+import { parseEmail, parseMfaCode, parseNewPassword, parseSignIn } from "./validation";
+
+// Every export here is a public POST endpoint: each validates its input and, where it needs a session,
+// re-checks it — never trust that the caller came from our page.
+
+const UNAVAILABLE = "Sign-in is unavailable right now. Please try again in a few minutes.";
+const TOO_MANY = "Too many attempts. Wait a few minutes, then try again.";
+
+// A symbol, not a string, so it can never collide with an Auth error code.
+const OUTAGE = Symbol("outage");
+
+/** Runs an Auth call; an outage becomes OUTAGE (logged) so the form shows a message, not an error page. */
+async function attempt<T>(call: () => Promise<T>): Promise<T | typeof OUTAGE> {
+  try {
+    return await call();
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Supabase Auth unavailable", { service: error.service, error });
+    return OUTAGE;
+  }
+}
+
+export async function signIn(formData: FormData): Promise<SubmitResult<SignInField>> {
+  const parsed = parseSignIn(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  const { email, password, next } = parsed.value;
+
+  const code = await attempt(() => auth.signInWithPassword(email, password));
+  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  if (code === "over_request_rate_limit") return { ok: false, message: TOO_MANY };
+  // One message for every credential failure, so the form never reveals which emails have accounts.
+  if (code === "invalid_credentials") {
+    return { ok: false, message: "That email and password don't match. Check them or reset your password." };
+  }
+  if (code) {
+    console.error("Sign-in failed", { code }); // e.g. misconfigured key: an operator problem, not a typo
+    return { ok: false, message: "We couldn't sign you in. Please try again." };
+  }
+
+  redirect(safeNextPath(next, appRoutes.dashboard));
+}
+
+export async function signOut(): Promise<void> {
+  await attempt(auth.signOut);
+  redirect(appRoutes.login);
+}
+
+export async function requestPasswordReset(formData: FormData): Promise<SubmitResult<EmailField>> {
+  const parsed = parseEmail(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  const code = await attempt(() => auth.sendPasswordReset(parsed.value.email));
+  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  if (code === "over_request_rate_limit" || code === "over_email_send_rate_limit") return { ok: false, message: TOO_MANY };
+  // Same success for unknown addresses (Supabase sends nothing then): no account enumeration.
+  return { ok: true };
+}
+
+/** Auth codes the user fixes by choosing a different password. */
+const PASSWORD_REJECTED: Partial<Record<string, string>> = {
+  same_password: "Choose a password you haven't used here before.",
+  weak_password: "That password is too easy to guess. Try a longer one.",
+};
+
+export async function setPassword(formData: FormData): Promise<SubmitResult<NewPasswordField>> {
+  await requireUser();
+  const parsed = parseNewPassword(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  const code = await attempt(() => auth.updatePassword(parsed.value.password));
+  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  const rejected = code && PASSWORD_REJECTED[code];
+  if (rejected) return { ok: false, message: FIELD_ERRORS, fieldErrors: { password: rejected } };
+  if (code === "reauthentication_needed") {
+    return { ok: false, message: "For your security, request a new reset link and try again." };
+  }
+  if (code) return { ok: false, message: "We couldn't save your password. Please try again." };
+
+  redirect(appRoutes.dashboard);
+}
+
+/** Creates the authenticator-app factor on demand; the QR code and secret go to the setup screen. */
+export async function startMfaEnrollment(): Promise<EnrollmentResult> {
+  await requireUser();
+  const enrollment = await attempt(auth.enrollTotp);
+  if (enrollment === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  return enrollment.ok ? enrollment : { ok: false, message: "We couldn't start setup. Please try again." };
+}
+
+/** Confirms a 6-digit code: finishes setup, or upgrades this session to two-factor (aal2). */
+export async function verifyMfa(formData: FormData): Promise<SubmitResult<MfaField>> {
+  await requireUser();
+  const parsed = parseMfaCode(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  const code = await attempt(() => auth.verifyTotp(parsed.value.factorId, parsed.value.code));
+  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  if (code === "over_request_rate_limit") return { ok: false, message: TOO_MANY };
+  if (code) {
+    return { ok: false, message: FIELD_ERRORS, fieldErrors: { code: "That code didn't work. Use the newest code in your app." } };
+  }
+
+  redirect(appRoutes.dashboard);
+}

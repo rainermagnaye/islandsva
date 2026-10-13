@@ -1,0 +1,4 @@
+# Supabase CLI local state (linked project, CLI version cache)
+.temp
+.branches
+.env*.local

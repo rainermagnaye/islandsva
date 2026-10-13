@@ -11,9 +11,9 @@ const common = { alt: site.name, width: 938, height: 320, sizes: "118px", loadin
 const { props: night } = getImageProps({ ...common, src: "/logo/lockup-night.png" });
 const { props: day } = getImageProps({ ...common, src: "/logo/lockup-day.png" });
 
-export function Logo({ className }: { className?: string }) {
+export function Logo({ className, href = routes.home }: { className?: string; href?: string }) {
   return (
-    <Link href={routes.home} className={cx("flex min-h-11 items-center", className)}>
+    <Link href={href} className={cx("flex min-h-11 items-center", className)}>
       <picture>
         <source media="(prefers-color-scheme: dark)" srcSet={night.srcSet} sizes={night.sizes} />
         {/* eslint-disable-next-line jsx-a11y/alt-text -- alt comes from getImageProps via the spread */}
