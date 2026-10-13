@@ -3,7 +3,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
-import type { LeadPage, LeadStatus, LeadSummary } from "./contract";
+import type { LeadDetail, LeadPage, LeadStatus, LeadSummary } from "./contract";
 import type { LeadInput } from "./validation";
 
 type NewLead = LeadInput & { ipHash: string | null; userAgent: string | null };
@@ -39,6 +39,8 @@ export async function markLeadNotified(id: string) {
 
 const PAGE_SIZE = 25;
 const SUMMARY_COLUMNS = "id, full_name, email, company_name, package_code, status, created_at";
+// Lead ids are UUIDs; anything else in a URL is a 404, not a database error.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type SummaryRow = { id: string; full_name: string; email: string; company_name: string | null; package_code: string | null; status: LeadStatus; created_at: string };
 
@@ -74,6 +76,15 @@ export async function listLeads({ page = 1, status, pageSize = PAGE_SIZE }: { pa
   return { leads: data.map(toSummary), total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
+/** One lead with its message, or null if it doesn't exist (or isn't visible to the caller). */
+export async function getLead(id: string): Promise<LeadDetail | null> {
+  if (!UUID.test(id)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, message, updated_at`).eq("id", id).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading lead ${id} failed: ${error.message}`, { cause: error });
+  return data && { ...toSummary(data), message: data.message, updatedAt: data.updated_at };
+}
+
 /**
  * Head-only count (no rows transferred), of every lead or of one status. Cached per request: the sidebar
  * badge and the overview both count new leads on the same render.
@@ -94,6 +105,20 @@ export const countNewLeads = () => countLeadsWith("new");
 export async function countLeads() {
   const [total, fresh] = await Promise.all([countLeadsWith(), countLeadsWith("new")]);
   return { total, new: fresh };
+}
+
+/**
+ * Moves a lead to `to`, but only while its status is still one of `from` — checked in the same UPDATE, so
+ * two admins acting at once (or a stale page) can't, say, reopen a lead someone just converted.
+ * Returns false when nothing matched (the lead is gone or has moved on).
+ */
+export async function updateLeadStatus(id: string, to: LeadStatus, from: readonly LeadStatus[]) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("leads").update({ status: to }).eq("id", id).in("status", from).select("id");
+  // IVA04: the database's own status guard refused the move (see the admin_leads_access migration).
+  if (error?.code === "IVA04") return false;
+  if (error) throw new UpstreamError("supabase", `Updating lead ${id} failed: ${error.message}`, { cause: error });
+  return data.length > 0;
 }
 
 /** Why a conversion was refused, from convert_lead()'s own error codes (see the migration). */

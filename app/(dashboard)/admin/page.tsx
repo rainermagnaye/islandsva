@@ -37,8 +37,8 @@ async function AdminHome() {
     <Workspace title="Admin" lead="Leads, clients and your team at a glance.">
       <section aria-label="Totals" className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total leads" value={leadCounts.total} icon="inbox" href={appRoutes.adminLeads} />
-        <StatCard label="New leads" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />
-        <StatCard label="Total clients" value={clientCount} icon="briefcase" />
+        <StatCard label="New leads" value={leadCounts.new} icon="bell" href={`${appRoutes.adminLeads}?status=new`} />
+        <StatCard label="Total clients" value={clientCount} icon="briefcase" href={appRoutes.adminClients} />
       </section>
 
       <Panel id="recent-leads" title="Latest leads" href={appRoutes.adminLeads} linkLabel="All leads">

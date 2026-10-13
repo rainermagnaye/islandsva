@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { adminLeadHref } from "@/content/routes";
 import { isConvertible, type LeadSummary } from "../contract";
 import { ConvertLeadButton } from "./convert-lead-button";
 import { LeadStatusLabel, packageName } from "./lead-status";
@@ -34,9 +36,9 @@ export function LeadsTable({
           {leads.map((lead) => (
             <tr key={lead.id} className="border-t border-border">
               <td className="px-4 py-3">
-                <span className="block type-label text-ink">
+                <Link href={adminLeadHref(lead.id)} className="block type-label text-ink">
                   {lead.fullName}
-                </span>
+                </Link>
                 <span className="text-ink-muted">{lead.email}</span>
               </td>
               <td className="px-4 py-3 text-ink">{lead.companyName ?? "—"}</td>

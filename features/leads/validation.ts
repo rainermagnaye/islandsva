@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { packages } from "@/content/packages";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
-import { CONVERT_LIMITS, LEAD_LIMITS, type ConvertField, type LeadField, type LeadPayload } from "./contract";
+import { CONVERT_LIMITS, LEAD_LIMITS, TRIAGE_STATUSES, type ConvertField, type LeadField, type LeadPayload, type LeadStatusField } from "./contract";
 
 const LEAD_FIELDS = ["name", "email", "company", "message", "package"] as const satisfies readonly LeadField[];
 const PACKAGE_SLUGS = new Set(packages.map((p) => p.slug));
@@ -88,3 +88,16 @@ export type ConvertInput = z.output<typeof convertSchema>;
 /** Validates the "Convert to client" form. A bad lead id is a tampered form (form-level error). */
 export const parseConvert = (input: unknown) =>
   parseWith(convertSchema, input, ["companyName", "contactName", "contactPhone"] satisfies ConvertField[]);
+
+// Admin: change a lead's status -------------------------------------------------------------------------
+
+const statusSchema = z.strictObject({
+  leadId: z.uuid({ error: FORM_ERROR }),
+  // Only the hand-set statuses: "converted" comes from converting the lead, never from this form.
+  status: z.enum(TRIAGE_STATUSES, { error: FORM_ERROR }),
+});
+
+export type LeadStatusInput = z.output<typeof statusSchema>;
+
+/** Validates a status button's form. Both values come from hidden inputs, so any problem is a tampered form. */
+export const parseLeadStatus = (input: unknown) => parseWith(statusSchema, input, [] satisfies LeadStatusField[]);
