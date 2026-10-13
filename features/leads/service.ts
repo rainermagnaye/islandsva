@@ -1,7 +1,7 @@
 import "server-only";
-import { insertLead, markLeadNotified } from "./dal";
+import { convertLeadToClient, insertLead, markLeadNotified } from "./dal";
 import { sendLeadNotification } from "./email";
-import type { LeadInput } from "./validation";
+import type { ConvertInput, LeadInput } from "./validation";
 
 /** Request metadata stored with a lead for abuse checks. Derived from the HTTP request by the route. */
 export type LeadSource = { ipHash: string | null; userAgent: string | null };
@@ -24,4 +24,13 @@ export async function notifyNewLead(id: string, lead: LeadInput) {
   } catch (error) {
     console.error("Lead notification failed", { id, error });
   }
+}
+
+/**
+ * Turns a lead into a pending client (admin only — enforced by the caller and again by the database).
+ * The client gets the lead's email and message; the admin confirms the company and contact names.
+ * Sending the client a login invite is part of onboarding (M3), not conversion.
+ */
+export async function convertLead(input: ConvertInput) {
+  return convertLeadToClient(input);
 }

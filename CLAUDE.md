@@ -38,10 +38,10 @@ npx supabase gen types typescript --project-id <ref> > types/database.ts   # aft
 app/                  routes only — thin pages and endpoints
   (marketing)/        static public site; page-only layout UI in <page>/_components/
   (auth)/             sign-in screens: login · forgot-password · set-password · mfa
-  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only) · admin/users
+  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only, sidebar layout: overview · leads · team)
   auth/confirm/       email-link landing (invite, reset): token hash → session
   api/v1/<resource>/  Route Handlers — the HTTP API
-features/<feature>/   one business area in one place (today: leads, auth, users)
+features/<feature>/   one business area in one place (today: leads, auth, users, clients)
   contract.ts         [shared] payload/response types + limits — no Zod, safe for client imports
   validation.ts       [server] Zod schema + parseX()
   service.ts          [server] use cases — the business logic routes and actions call
