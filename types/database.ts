@@ -126,6 +126,7 @@ export type Database = {
     Views: { [_ in never]: never };
     Functions: {
       custom_access_token_hook: { Args: { event: Json }; Returns: Json };
+      convert_lead: { Args: { lead_id: string; company_name: string; contact_name: string; contact_phone?: string | null }; Returns: string };
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";

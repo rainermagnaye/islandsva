@@ -6,16 +6,16 @@ import { UpstreamError } from "@/lib/upstream-error";
 import type { UserSummary } from "./contract";
 
 /**
- * Everyone, newest first. Read as the signed-in admin (not with the secret key), so the database's own
- * rule — admins with two-factor sign-in may read all profiles — is enforced a second time.
+ * Everyone, newest first (at most `limit`). Read as the signed-in admin (not with the secret key), so the
+ * database's own rule — admins with two-factor sign-in may read all profiles — is enforced a second time.
  */
-export async function listUsers(): Promise<UserSummary[]> {
+export async function listUsers(limit = 500): Promise<UserSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
     .select("id, email, full_name, status, created_at, roles!roles_user_id_fkey(role)")
     .order("created_at", { ascending: false })
-    .limit(500);
+    .limit(limit);
   if (error) throw new UpstreamError("supabase", `Listing users failed: ${error.message}`, { cause: error });
 
   return data.map((row) => ({

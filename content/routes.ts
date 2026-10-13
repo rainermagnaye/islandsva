@@ -23,7 +23,10 @@ export const appRoutes = {
   dashboard: "/dashboard",
   client: "/client",
   va: "/va",
+  closer: "/closer",
   admin: "/admin",
+  adminLeads: "/admin/leads",
+  adminClients: "/admin/clients",
   adminUsers: "/admin/users",
 } as const;
 
@@ -34,3 +37,6 @@ export type AppRoutePath = (typeof appRoutes)[keyof typeof appRoutes];
 export function contactHref(packageSlug?: string) {
   return packageSlug ? `${routes.contact}?package=${encodeURIComponent(packageSlug)}` : routes.contact;
 }
+
+/** One lead in the admin system. Lead ids are random UUIDs, so the URL carries no personal data. */
+export const adminLeadHref = (id: string) => `${appRoutes.adminLeads}/${id}`;

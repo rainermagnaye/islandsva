@@ -1,0 +1,8 @@
+# Store and check out text files with LF on every OS (Windows Git would otherwise convert to CRLF).
+* text=auto eol=lf
+
+# Binary assets: never touch their bytes.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
