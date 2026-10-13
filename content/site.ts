@@ -1,4 +1,4 @@
-import { routes } from "./routes";
+import { appRoutes, routes } from "./routes";
 
 export const site = {
   name: "Islands VA",
@@ -41,7 +41,7 @@ export const site = {
       title: "Get started",
       links: [
         { label: "Book a discovery call", href: routes.contact },
-        { label: "Client login", href: routes.login },
+        { label: "Client login", href: appRoutes.login },
       ],
     },
   ],
