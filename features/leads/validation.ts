@@ -1,18 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import { packages } from "@/content/packages";
-import { LEAD_LIMITS, type LeadField, type LeadFieldErrors, type LeadPayload } from "./contract";
+import { NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
+import { LEAD_LIMITS, type LeadField, type LeadPayload } from "./contract";
 
-const FORM_ERROR = "Something went wrong with the form. Please refresh the page and try again.";
-const FIELDS = new Set<string>(["name", "email", "company", "message", "package"] satisfies LeadField[]);
+const LEAD_FIELDS = ["name", "email", "company", "message", "package"] as const satisfies readonly LeadField[];
 const PACKAGE_SLUGS = new Set(packages.map((p) => p.slug));
-// No control characters; the message may also contain \t \n \r.
-const NO_CONTROL_CHARS = /^[^\u0000-\u001f\u007f]*$/;
-const NO_CONTROL_CHARS_EXCEPT_WHITESPACE = /^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/;
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const tooLong = (what: string, max: number) => `Keep ${what} under ${max} characters.`;
-const emailIncomplete = "That email doesn't look complete — try name@company.com.";
 
 // One entry per LeadPayload key (checked by `satisfies`); strictObject rejects any other key.
 // Every string is trimmed before its checks run.
@@ -23,13 +16,7 @@ const leadShape = {
     .min(1, "Enter your name.")
     .max(LEAD_LIMITS.name, tooLong("your name", LEAD_LIMITS.name))
     .regex(NO_CONTROL_CHARS, tooLong("your name", LEAD_LIMITS.name)),
-  email: z
-    .string({ error: "Enter your email address." })
-    .trim()
-    .toLowerCase()
-    .min(1, "Enter your email address.")
-    .max(LEAD_LIMITS.email, emailIncomplete)
-    .regex(EMAIL_SHAPE, emailIncomplete),
+  email: emailField(LEAD_LIMITS.email),
   company: z
     .string({ error: "Enter a company name or leave it blank." })
     .trim()
@@ -62,30 +49,8 @@ const leadSchema = z.strictObject(leadShape).transform(({ website, turnstileToke
 /** A validated lead — derived from the schema, so the two can't drift apart. */
 export type LeadInput = z.output<typeof leadSchema>["value"];
 
-type ParseResult =
-  | ({ ok: true } & z.output<typeof leadSchema>)
-  | { ok: false; fieldErrors: LeadFieldErrors }
-  // Not tied to a field the user can fix (tampered or stale form): shown as a form-level message.
-  | { ok: false; formError: string };
-
-/**
- * Validates the contact form body. Field problems come back keyed by input name (first message per field);
- * anything else — not an object, unknown keys, a malformed honeypot or token — is a form-level error.
- */
-export function parseLead(input: unknown): ParseResult {
-  const result = leadSchema.safeParse(input);
-  if (!result.success) {
-    const { issues } = result.error;
-    if (issues.some((issue) => issue.code === "unrecognized_keys" || issue.path.length === 0)) {
-      return { ok: false, formError: FORM_ERROR };
-    }
-    const fieldErrors: LeadFieldErrors = {};
-    for (const issue of issues) {
-      const field = issue.path[0];
-      if (typeof field === "string" && FIELDS.has(field)) fieldErrors[field as LeadField] ??= issue.message;
-    }
-    return Object.keys(fieldErrors).length > 0 ? { ok: false, fieldErrors } : { ok: false, formError: FORM_ERROR };
-  }
-
-  return { ok: true, ...result.data };
+/** Validates the contact form body (see parseWith for how errors are reported). */
+export function parseLead(input: unknown) {
+  const result = parseWith(leadSchema, input, LEAD_FIELDS);
+  return result.ok ? { ok: true as const, ...result.value } : result;
 }

@@ -39,9 +39,9 @@ export function LogoLockup({
   );
 }
 
-export function Logo({ className }: { className?: string }) {
+export function Logo({ className, href = routes.home }: { className?: string; href?: string }) {
   return (
-    <Link href={routes.home} className={cx("flex min-h-11 items-center gap-2", className)}>
+    <Link href={href} className={cx("flex min-h-11 items-center gap-2", className)}>
       <LogoLockup alt="" className="size-11 shrink-0" sizes="44px" />
       <span className="grid gap-1">
         <span className="font-display text-[1.5rem] leading-none font-bold tracking-[-0.02em] whitespace-nowrap text-ink">

@@ -1,0 +1,46 @@
+# Supabase CLI settings for this repo. Only what differs from the CLI defaults is listed.
+# The hosted project's Auth settings are set in the Dashboard (or `npx supabase config push`); keep them in
+# step with this file — see CLAUDE.md §6 and §11.
+
+project_id = "islandsva"
+
+[db]
+major_version = 17
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/confirm"]
+jwt_expiry = 3600
+# Invite-only: admins invite staff, Closers invite clients (M3).
+enable_signup = false
+enable_anonymous_sign_ins = false
+# 10–72 characters with letters and digits (PASSWORD_RULES in features/auth/contract.ts).
+minimum_password_length = 10
+password_requirements = "letters_digits"
+
+[auth.email]
+enable_signup = false
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "60s"
+# Invite and reset links stay valid for 24 hours.
+otp_expiry = 86400
+
+# Both links use token hashes that land on /auth/confirm (server-side verification, no open redirect).
+[auth.email.template.invite]
+subject = "You're invited to Islands VA"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Islands VA password"
+content_path = "./supabase/templates/recovery.html"
+
+# Copies the user's roles into app_metadata.roles (supabase/migrations: custom_access_token_hook).
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+# Authenticator-app two-factor sign-in; required for admins (enforced in the app and in RLS).
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true

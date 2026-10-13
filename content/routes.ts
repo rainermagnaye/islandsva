@@ -1,4 +1,6 @@
-// Every page path, defined once. Nav, footer, links, sitemap and robots all derive from here.
+// Every page path, defined once. Nav, footer, links, sitemap, robots and the auth proxy derive from here.
+
+/** Public marketing pages — static, listed in the sitemap. */
 export const routes = {
   home: "/",
   packages: "/packages",
@@ -9,13 +11,24 @@ export const routes = {
   contact: "/contact",
   privacy: "/privacy",
   terms: "/terms",
+} as const;
+
+/** Sign-in and portal pages — per-user, never indexed (disallowed in robots.txt). */
+export const appRoutes = {
   login: "/login",
+  forgotPassword: "/forgot-password",
+  setPassword: "/set-password",
+  mfa: "/mfa",
+  authConfirm: "/auth/confirm",
+  dashboard: "/dashboard",
+  client: "/client",
+  va: "/va",
+  admin: "/admin",
+  adminUsers: "/admin/users",
 } as const;
 
 export type RoutePath = (typeof routes)[keyof typeof routes];
-
-/** Kept out of the sitemap and disallowed in robots.txt (their metadata also sets `robots: { index: false }`). */
-export const unlistedRoutes: readonly RoutePath[] = [routes.login];
+export type AppRoutePath = (typeof appRoutes)[keyof typeof appRoutes];
 
 /** Contact page with a package preselected in the form. */
 export function contactHref(packageSlug?: string) {
