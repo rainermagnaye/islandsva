@@ -7,20 +7,27 @@ export function Workspace({
   lead,
   breadcrumbs,
   children,
+  compact = false,
 }: {
-  title: string;
+  title?: string;
   lead?: ReactNode;
   /** A Breadcrumbs trail, for pages two or more levels deep. */
   breadcrumbs?: ReactNode;
   children?: ReactNode;
+  /** Skip the page title when the content already has the h1, so a dense screen fits without scrolling. */
+  compact?: boolean;
 }) {
   return (
-    <Container className="grid gap-8 py-10 md:py-12">
-      <div className="grid gap-2">
-        {breadcrumbs}
-        <h1 className="m-0 type-h1">{title}</h1>
-        {lead && <p className="m-0 max-w-[60ch] text-ink-muted">{lead}</p>}
-      </div>
+    <Container className={compact ? "grid gap-4 py-4 md:py-6" : "grid gap-8 py-10 md:py-12"}>
+      {compact ? (
+        breadcrumbs
+      ) : (
+        <div className="grid gap-2">
+          {breadcrumbs}
+          <h1 className="m-0 type-h1">{title}</h1>
+          {lead && <p className="m-0 max-w-[60ch] text-ink-muted">{lead}</p>}
+        </div>
+      )}
       {children}
     </Container>
   );

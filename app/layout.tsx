@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Alegreya, Figtree } from "next/font/google";
 import { site } from "@/content/site";
+import { EmailLinkSession } from "@/features/auth/components/email-link-session";
 import "./globals.css";
 
 const alegreya = Alegreya({
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to main content
         </a>
+        <EmailLinkSession />
         {children}
       </body>
     </html>

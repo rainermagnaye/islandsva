@@ -489,6 +489,32 @@ describe("leads", () => {
   });
 });
 
+describe("staff profiles", () => {
+  it("lets a person save their own profile, and an admin with two-factor sign-in read and update it", async () => {
+    await asUser(asVa, `insert into public.staff_profiles (user_id, nationality) values ('${VA}', 'Filipino')`);
+    expect(await asUser(asVa, `select nationality from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ nationality: "Filipino" }]);
+    await asUser(asAdmin, `update public.staff_profiles set current_city = 'Cebu' where user_id = '${VA}'`);
+    expect(await asUser(asAdmin, `select current_city from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ current_city: "Cebu" }]);
+  });
+
+  it("hides a profile from other people, from an admin without two-factor sign-in, and from anon", async () => {
+    expect(await asUser(asVa2, `select user_id from public.staff_profiles where user_id = '${VA}'`)).toEqual([]);
+    expect(await asUser(asCloser, `select user_id from public.staff_profiles where user_id = '${VA}'`)).toEqual([]);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), `select user_id from public.staff_profiles where user_id = '${VA}'`)).toEqual([]);
+    await expect(as("anon", {}, "select user_id from public.staff_profiles")).rejects.toThrow(/permission denied/);
+  });
+
+  it("refuses writing someone else's profile, deleting one, or storing the résumé through the API", async () => {
+    await expect(asUser(asVa, `insert into public.staff_profiles (user_id) values ('${VA2}')`)).rejects.toThrow(/row-level security/);
+    await expect(asUser(asAdmin, `delete from public.staff_profiles where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    await expect(asUser(asVa, `update public.staff_profiles set resume_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+  });
+
+  it("rejects a nationality that is too long", async () => {
+    await expect(asServer(`insert into public.staff_profiles (user_id, nationality) values ('${VA2}', $1)`, ["n".repeat(81)])).rejects.toThrow(/check constraint/);
+  });
+});
+
 describe("hardening", () => {
   it("the server can't truncate tables", async () => {
     await expect(asServer("truncate public.leads")).rejects.toThrow(/permission denied/);

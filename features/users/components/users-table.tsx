@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { adminUserHref } from "@/content/routes";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { STATUS_LABELS, type AccountStatus, type UserSummary } from "../contract";
 
@@ -10,8 +12,16 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone:
 const TONES: Record<AccountStatus, BadgeTone> = { invited: "info", active: "success", inactive: "neutral" };
 
 const COLUMNS: Column<UserSummary>[] = [
-  // Invited accounts may have no name yet: the email then stands in as the title instead of a dash.
-  { key: "name", label: "Name", render: (user) => <CellTitle title={user.fullName || user.email} subtitle={user.fullName ? user.email : undefined} /> },
+  {
+    key: "name",
+    label: "Name",
+    render: (user) => (
+      <Link href={adminUserHref(user.id)} className="staff-row-link" title={user.fullName || undefined}>
+        {user.fullName || "—"}
+      </Link>
+    ),
+  },
+  { key: "email", label: "Email Address", render: (user) => <span title={user.email}>{user.email}</span> },
   { key: "roles", label: "Roles", render: (user) => user.roles.map((role) => ROLE_LABELS[role]).join(", ") || "—" },
   {
     key: "status",

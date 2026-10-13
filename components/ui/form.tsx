@@ -90,9 +90,9 @@ export function Form<Field extends string = string>({
 }
 
 /** Standard success panel for `<Form success={…}>`. */
-export function FormSuccess({ title, children }: { title: string; children?: ReactNode }) {
+export function FormSuccess({ title, children, align = "start" }: { title: string; children?: ReactNode; align?: "start" | "center" }) {
   return (
-    <div className="grid justify-items-start gap-4 rounded-lg border border-border bg-surface-card p-8">
+    <div className={cx("grid gap-4 rounded-lg border border-border bg-surface-card p-8", align === "center" ? "justify-items-center text-center" : "justify-items-start")}>
       <IconBadge name="check" tone="success" />
       <h2 className="m-0 type-h3">{title}</h2>
       {children && <div className="text-ink-muted">{children}</div>}

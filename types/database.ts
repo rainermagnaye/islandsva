@@ -53,6 +53,41 @@ type AssignmentRow = {
   created_at: string;
 };
 
+type StaffProfileRow = {
+  user_id: string;
+  date_of_birth: string | null;
+  gender: Enum<"staff_gender"> | null;
+  nationality: string | null;
+  marital_status: Enum<"staff_marital_status"> | null;
+  current_street: string | null;
+  current_city: string | null;
+  current_province: string | null;
+  current_postal_code: string | null;
+  permanent_street: string | null;
+  permanent_city: string | null;
+  permanent_province: string | null;
+  permanent_postal_code: string | null;
+  mobile_number: string | null;
+  alternate_phone: string | null;
+  emergency_name: string | null;
+  emergency_relationship: string | null;
+  emergency_phone: string | null;
+  highest_education: string | null;
+  certifications: string | null;
+  skills: string | null;
+  languages: string | null;
+  employers: Json;
+  key_responsibilities: string | null;
+  achievements: string | null;
+  resume_name: string | null;
+  resume_type: string | null;
+  resume_bytes: string | null;
+  registration_status: Enum<"staff_registration_status">;
+  invitation_sent_at: string;
+  registration_completed_at: string | null;
+  updated_at: string;
+};
+
 type LeadRow = {
   id: string;
   full_name: string;
@@ -116,6 +151,20 @@ export type Database = {
           ProfilesFk<"client_va_assignments_assigned_by_fkey", "assigned_by">,
         ];
       };
+      staff_profiles: {
+        Row: StaffProfileRow;
+        Insert: InsertOf<StaffProfileRow, "user_id">;
+        Update: Optional<StaffProfileRow>;
+        Relationships: [
+          {
+            foreignKeyName: "staff_profiles_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       leads: {
         Row: LeadRow;
         Insert: InsertOf<LeadRow, "full_name" | "email" | "message">;
@@ -134,6 +183,9 @@ export type Database = {
       client_status: "pending" | "active" | "inactive";
       assignment_status: "active" | "ended";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
+      staff_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
+      staff_marital_status: "single" | "married" | "widowed" | "separated" | "prefer_not_to_say";
+      staff_registration_status: "pending" | "in_progress" | "completed";
     };
     CompositeTypes: { [_ in never]: never };
   };

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { HeroArt } from "./hero-art";
+import { DayNightArt } from "./day-night-art";
 
 type Link = { label: string; href: string };
 
@@ -19,8 +19,8 @@ type HeroProps = {
 
 /**
  * The design system's Hero: eyebrow pill with the sun dot, the promise in Alegreya 800, lead, primary and
- * ghost CTAs, a proof line, and the Sand & Sea mark. Stacks below 880px of container width with the copy
- * first. Never put text over the mark.
+ * ghost CTAs, a proof line, and the day-and-night illustration. The Sand & Sea mark stays in the navbar.
+ * Stacks below 880px of container width with the copy first. Never put text over the illustration.
  */
 export function Hero({ eyebrow, title, lead, primary, secondary, proof }: HeroProps) {
   return (
@@ -46,8 +46,16 @@ export function Hero({ eyebrow, title, lead, primary, secondary, proof }: HeroPr
           </div>
           {proof && <p className="m-0 type-body-sm font-medium text-ink-muted">{proof}</p>}
         </div>
-        <div className="w-full max-w-[520px] justify-self-center">
-          <HeroArt />
+        <div className="group relative w-full max-w-[520px] justify-self-center">
+          <DayNightArt />
+          <div className="float-soft absolute top-3 left-0 flex items-center gap-2 rounded-pill border border-border bg-surface-card px-3 py-2 type-label elevation-md sm:-left-2">
+            <span className="size-2 rounded-full bg-status-success" />
+            Inbox cleared · 7:58 am
+          </div>
+          <div className="float-soft-late absolute right-0 bottom-3 flex items-center gap-2 rounded-pill border border-border bg-surface-card px-3 py-2 type-label elevation-md sm:-right-2">
+            <span className="size-2 rounded-full bg-brand-sun" />
+            Night shift online
+          </div>
         </div>
       </section>
     </div>

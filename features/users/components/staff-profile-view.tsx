@@ -1,0 +1,124 @@
+import type { ReactNode } from "react";
+import { Icon } from "@/components/ui/icon";
+import { GENDER_LABELS, MARITAL_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
+
+const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
+
+function shown(value: string) {
+  const text = value.trim();
+  return text || "Not provided";
+}
+
+function shownDate(value: string) {
+  if (!value) return "Not provided";
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? value : when.format(date);
+}
+
+function address(street: string, city: string, province: string, postal: string) {
+  const line = [street, city, province, postal].map((part) => part.trim()).filter(Boolean);
+  return line.length > 0 ? line.join(", ") : "Not provided";
+}
+
+/** Read-only profile sections. Editing happens in the form, not on this view. */
+export function StaffProfileView({ details, email }: { details: StaffDetails; email: string }) {
+  const emergency = [details.emergencyName, details.emergencyRelationship, details.emergencyPhone].map((part) => part.trim()).filter(Boolean);
+  const jobs = details.employers.filter((job) => job.company.trim() || job.position.trim() || job.duration.trim());
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid gap-4">
+        <Card title="Basic details">
+          <Field label="Date of birth" value={shownDate(details.dateOfBirth)} />
+          <Field label="Gender" value={details.gender ? GENDER_LABELS[details.gender] : "Not provided"} />
+          <Field label="Nationality" value={shown(details.nationality)} />
+          <Field label="Marital status" value={details.maritalStatus ? MARITAL_LABELS[details.maritalStatus] : "Not provided"} />
+        </Card>
+        <Card title="Address information">
+          <Field label="Current address" value={address(details.currentStreet, details.currentCity, details.currentProvince, details.currentPostalCode)} wide />
+          <Field label="Permanent address" value={address(details.permanentStreet, details.permanentCity, details.permanentProvince, details.permanentPostalCode)} wide />
+        </Card>
+        <Card title="Education and skills">
+          <Field label="Highest education" value={shown(details.highestEducation)} />
+          <Field label="Languages" value={shown(details.languages)} />
+          <Field label="Skills" value={shown(details.skills)} />
+          <Field label="Résumé" value={shown(details.resumeName)} />
+          <Field label="Certifications" value={shown(details.certifications)} wide />
+        </Card>
+      </div>
+      <div className="grid gap-4">
+        <Card title="Contact information">
+          <Field label="Email" value={email} />
+          <Field label="Phone" value={shown(details.mobileNumber)} />
+          <Field label="Alternate phone" value={shown(details.alternatePhone)} />
+          <Field label="Emergency contact" value={emergency.length > 0 ? emergency.join(" · ") : "Not provided"} wide />
+        </Card>
+        <Card title="Work experience">
+          {jobs.length === 0 ? (
+            <Field label="Employers" value="Not provided" wide />
+          ) : (
+            jobs.map((job, index) => (
+              <Field
+                key={index}
+                label={job.position.trim() || "Role"}
+                value={[job.company, job.duration].map((part) => part.trim()).filter(Boolean).join(" · ") || "Not provided"}
+                wide
+              />
+            ))
+          )}
+          <Field label="Key responsibilities" value={shown(details.keyResponsibilities)} wide />
+          <Field label="Achievements" value={shown(details.achievements)} wide />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export function RegistrationStepper({ steps }: { steps: readonly RegistrationStep[] }) {
+  return (
+    <section className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-surface-card px-4 py-3">
+      <h2 className="m-0 type-label">Registration</h2>
+      <ol className="m-0 flex list-none flex-wrap gap-y-2 p-0" aria-label="Registration progress">
+        {steps.map((step, index) => (
+          <li key={step.id} className="flex min-w-0 items-center">
+            <span
+              className={
+                step.done
+                  ? "grid size-7 place-items-center rounded-pill bg-status-success-bg text-status-success"
+                  : step.current
+                    ? "grid size-7 place-items-center rounded-pill bg-action-primary text-on-action-primary type-label"
+                    : "grid size-7 place-items-center rounded-pill bg-surface-sunken text-ink-muted type-label"
+              }
+            >
+              {step.done ? <Icon name="check" size={16} /> : index + 1}
+              <span className="sr-only">{step.done ? "Complete" : step.current ? "Current step" : "Not started"}</span>
+            </span>
+            <span className={`px-2 type-label ${step.current ? "text-ink" : "text-ink-muted"}`} aria-current={step.current ? "step" : undefined}>
+              {step.label}
+            </span>
+            {index < steps.length - 1 && <span className="mr-2 h-px w-4 bg-border" aria-hidden="true" />}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function Card({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-border bg-surface-card">
+      <h2 className="m-0 border-b border-border px-4 py-3 type-label">{title}</h2>
+      <dl className="m-0 grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">{children}</dl>
+    </section>
+  );
+}
+
+function Field({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+  const empty = value === "Not provided";
+  return (
+    <div className={wide ? "min-w-0 sm:col-span-2" : "min-w-0"}>
+      <dt className="type-caption text-ink-muted">{label}</dt>
+      <dd className={`m-0 type-body-sm ${empty ? "text-ink-muted" : "text-ink"}`}>{value}</dd>
+    </div>
+  );
+}

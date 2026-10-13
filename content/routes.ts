@@ -20,6 +20,7 @@ export const appRoutes = {
   setPassword: "/set-password",
   mfa: "/mfa",
   authConfirm: "/auth/confirm",
+  acceptInvite: "/accept-invite",
   dashboard: "/dashboard",
   client: "/client",
   va: "/va",
@@ -40,3 +41,6 @@ export function contactHref(packageSlug?: string) {
 
 /** One lead in the admin system. Lead ids are random UUIDs, so the URL carries no personal data. */
 export const adminLeadHref = (id: string) => `${appRoutes.adminLeads}/${id}`;
+
+/** One staff profile. The id is a random UUID, so the URL carries no personal data. */
+export const adminUserHref = (id: string) => `${appRoutes.adminUsers}/${id}`;

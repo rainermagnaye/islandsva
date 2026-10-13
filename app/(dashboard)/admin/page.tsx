@@ -50,7 +50,7 @@ async function AdminHome() {
         />
       </Panel>
 
-      <Panel id="recent-users" title="Latest accounts" href={appRoutes.adminUsers} linkLabel="Team and accounts">
+      <Panel id="recent-users" title="Latest accounts" href={appRoutes.adminUsers} linkLabel="Teams">
         <UsersTable users={recentUsers} headingLevel={3} />
       </Panel>
     </Workspace>
