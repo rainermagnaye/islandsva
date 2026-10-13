@@ -3,11 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { appRoutes } from "@/content/routes";
 import { isConvertible, nextStatuses } from "@/features/leads/contract";
 import { ConvertLeadButton } from "@/features/leads/components/convert-lead-button";
 import { LeadStatusActions } from "@/features/leads/components/lead-status-actions";
-import { LeadStatusLabel, packageName } from "@/features/leads/components/lead-status";
+import { LeadStatusBadge, packageName } from "@/features/leads/components/lead-status";
 import { getLead } from "@/features/leads/dal";
 import { requireRole } from "@/lib/auth/session";
 
@@ -34,10 +35,15 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
   return (
     <Workspace
       title={lead.fullName}
-      lead={
-        <Link href={appRoutes.adminLeads} className="type-label">
-          Back to all leads
-        </Link>
+      lead={lead.companyName ?? undefined}
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: "Admin", href: appRoutes.admin },
+            { label: "Leads", href: appRoutes.adminLeads },
+            { label: lead.fullName },
+          ]}
+        />
       }
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
@@ -55,7 +61,7 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
             </h2>
             <dl className="m-0 grid gap-3 type-body-sm">
               <Detail term="Status">
-                <LeadStatusLabel status={lead.status} />
+                <LeadStatusBadge status={lead.status} />
               </Detail>
               <Detail term="Email">
                 <a href={`mailto:${lead.email}`} className="break-all">
