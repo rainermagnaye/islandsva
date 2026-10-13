@@ -17,9 +17,17 @@ function outcome(error: AuthError | null): AuthOutcome {
   return error.code ?? "unknown";
 }
 
-export async function signInWithPassword(email: string, password: string): Promise<AuthOutcome> {
+/**
+ * Signs in and returns the new session's verified claims, so the caller can route by role without
+ * another request. The token is checked against the project's signing keys (getClaims), not just decoded.
+ */
+export async function signInWithPassword(email: string, password: string) {
   const supabase = await createClient();
-  return outcome((await supabase.auth.signInWithPassword({ email, password })).error);
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const code = outcome(error);
+  if (code || !data.session) return { code: code ?? "unknown", claims: null };
+  const verified = await supabase.auth.getClaims(data.session.access_token);
+  return { code: null, claims: verified.data?.claims ?? null };
 }
 
 /** Ends this browser's session only; the user's other devices stay signed in. */

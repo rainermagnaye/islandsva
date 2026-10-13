@@ -23,6 +23,7 @@ export const appRoutes = {
   dashboard: "/dashboard",
   client: "/client",
   va: "/va",
+  closer: "/closer",
   admin: "/admin",
   adminUsers: "/admin/users",
 } as const;
