@@ -94,7 +94,7 @@ New features get a folder when their phase starts, never earlier.
 
 ## 4. Design system
 
-Source: the **Islands VA** design system (https://claude.ai/artifact/Ha5kSyvZ7axkKvVYjupvpK). This file wins where they differ.
+Source for UI: `design/islands-va-design-system-guide.pdf` (v1.2 team guide) and the live system (https://claude.ai/artifact/Ha5kSyvZ7axkKvVYjupvpK). This file wins on architecture, auth, theme, the Sand & Sea logo, and scope (no blog in the MVP). The PDF's Next.js chapter is not the implementation guide.
 
 - `design/tokens.json` → `npm run tokens` → `app/tokens.css` (generated; never edit or hard-code hex).
 - Tailwind is limited to brand tokens: `bg-surface-card`, `text-ink`, `rounded-lg`, `type-*` text styles, `elevation-*` shadows; 4px spacing scale.
