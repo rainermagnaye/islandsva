@@ -25,6 +25,7 @@ export const appRoutes = {
   va: "/va",
   closer: "/closer",
   admin: "/admin",
+  adminLeads: "/admin/leads",
   adminUsers: "/admin/users",
 } as const;
 

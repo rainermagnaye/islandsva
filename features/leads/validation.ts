@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { packages } from "@/content/packages";
-import { NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
-import { LEAD_LIMITS, type LeadField, type LeadPayload } from "./contract";
+import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
+import { CONVERT_LIMITS, LEAD_LIMITS, type ConvertField, type LeadField, type LeadPayload } from "./contract";
 
 const LEAD_FIELDS = ["name", "email", "company", "message", "package"] as const satisfies readonly LeadField[];
 const PACKAGE_SLUGS = new Set(packages.map((p) => p.slug));
@@ -54,3 +54,37 @@ export function parseLead(input: unknown) {
   const result = parseWith(leadSchema, input, LEAD_FIELDS);
   return result.ok ? { ok: true as const, ...result.value } : result;
 }
+
+// Admin: "Convert to client" -----------------------------------------------------------------------------
+
+const optionalPhone = z
+  .string()
+  .trim()
+  .max(CONVERT_LIMITS.contactPhone, tooLong("the phone number", CONVERT_LIMITS.contactPhone))
+  .regex(NO_CONTROL_CHARS, tooLong("the phone number", CONVERT_LIMITS.contactPhone))
+  .default("");
+
+const convertSchema = z
+  .strictObject({
+    leadId: z.uuid({ error: FORM_ERROR }),
+    companyName: z
+      .string({ error: "Enter the client's company name." })
+      .trim()
+      .min(1, "Enter the client's company name.")
+      .max(CONVERT_LIMITS.companyName, tooLong("the company name", CONVERT_LIMITS.companyName))
+      .regex(NO_CONTROL_CHARS, tooLong("the company name", CONVERT_LIMITS.companyName)),
+    contactName: z
+      .string({ error: "Enter the contact's name." })
+      .trim()
+      .min(1, "Enter the contact's name.")
+      .max(CONVERT_LIMITS.contactName, tooLong("the name", CONVERT_LIMITS.contactName))
+      .regex(NO_CONTROL_CHARS, tooLong("the name", CONVERT_LIMITS.contactName)),
+    contactPhone: optionalPhone,
+  })
+  .transform(({ contactPhone, ...rest }) => ({ ...rest, contactPhone: contactPhone || null }));
+
+export type ConvertInput = z.output<typeof convertSchema>;
+
+/** Validates the "Convert to client" form. A bad lead id is a tampered form (form-level error). */
+export const parseConvert = (input: unknown) =>
+  parseWith(convertSchema, input, ["companyName", "contactName", "contactPhone"] satisfies ConvertField[]);
