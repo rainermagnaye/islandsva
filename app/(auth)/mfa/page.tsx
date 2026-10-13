@@ -7,6 +7,7 @@ import { MfaCodeForm } from "@/features/auth/components/mfa-code-form";
 import { MfaSetup } from "@/features/auth/components/mfa-setup";
 import { SignOutButton } from "@/features/auth/components/sign-out-button";
 import { listTotpFactors } from "@/features/auth/dal";
+import { homeFor } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Two-factor sign-in" };
@@ -25,7 +26,7 @@ export default function MfaPage() {
 /** Enter a code if an authenticator is already set up; otherwise set one up. */
 async function MfaStep() {
   const user = await requireUser();
-  if (user.aal === "aal2") redirect(appRoutes.dashboard);
+  if (user.aal === "aal2") redirect(homeFor(user.roles) ?? appRoutes.dashboard);
 
   const factor = (await listTotpFactors()).find((f) => f.status === "verified");
   if (factor) {

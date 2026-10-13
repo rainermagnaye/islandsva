@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useEffect, useEffectEvent, useRef, type FormEvent, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
 import type { SubmitResult } from "@/types/form";
-import { Icon } from "./icon";
+import { Alert } from "./alert";
 import { IconBadge } from "./icon-badge";
 
 export type FormState<Field extends string = string> = {
@@ -83,17 +83,7 @@ export function Form<Field extends string = string>({
       aria-busy={pending || undefined}
       className={cx("grid gap-5", className)}
     >
-      {failure && (
-        <div
-          ref={summaryRef}
-          tabIndex={-1}
-          role="alert"
-          className="flex items-start gap-2 rounded-md bg-status-danger-bg p-4 type-label text-status-danger"
-        >
-          <Icon name="alert" className="mt-0.5" />
-          {failure.message}
-        </div>
-      )}
+      {failure && <Alert ref={summaryRef} tabIndex={-1} tone="danger" title={failure.message} />}
       {typeof children === "function" ? children({ pending, fieldErrors }) : children}
     </form>
   );

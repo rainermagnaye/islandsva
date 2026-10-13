@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }: LayoutProps<"/">) {
           </Suspense>
         </div>
       </header>
-      <main id="main" className="min-h-[calc(100dvh-4rem)] bg-surface-sunken">
+      <main id="main" className="min-h-[calc(100dvh-4rem)] bg-surface-page">
         {children}
       </main>
     </>

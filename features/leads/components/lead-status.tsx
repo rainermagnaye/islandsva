@@ -1,17 +1,25 @@
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { packages } from "@/content/packages";
 import { LEAD_STATUS_LABELS, type LeadStatus } from "../contract";
 
-const STATUS_TONE: Record<LeadStatus, string> = {
-  new: "text-action-secondary",
-  contacted: "text-ink",
-  qualified: "text-ink",
-  converted: "text-status-success",
-  closed: "text-ink-muted",
+// Tones follow the design system's status rules: info = waiting on us, warning = a decision is due
+// (qualified, ready to convert), success = done, neutral = no action needed.
+const TONES: Record<LeadStatus, BadgeTone> = {
+  new: "info",
+  contacted: "neutral",
+  qualified: "warning",
+  converted: "success",
+  closed: "neutral",
 };
 
-/** A lead's status as coloured text (the colour adds emphasis; the word carries the meaning). */
-export function LeadStatusLabel({ status }: { status: LeadStatus }) {
-  return <span className={STATUS_TONE[status]}>{LEAD_STATUS_LABELS[status]}</span>;
+/** A lead's status as a pill: icon or dot, word and colour together, never colour alone. */
+export function LeadStatusBadge({ status }: { status: LeadStatus }) {
+  const tone = TONES[status];
+  return (
+    <Badge tone={tone} size="sm" dot={tone === "neutral"}>
+      {LEAD_STATUS_LABELS[status]}
+    </Badge>
+  );
 }
 
 const packageNames = new Map(packages.map((p) => [p.slug, p.name]));
