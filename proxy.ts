@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { appRoutes } from "@/content/routes";
+import { homeFor, rolesFromClaims } from "@/lib/auth/roles";
 import { redirectWithSession, updateSession } from "@/lib/supabase/proxy";
 import { UpstreamError } from "@/lib/upstream-error";
 
@@ -28,7 +29,8 @@ export async function proxy(request: NextRequest) {
     return redirectWithSession(request, response, appRoutes.login, `?next=${encodeURIComponent(pathname + search)}`);
   }
   if (claims && SIGNED_OUT_ONLY.some((base) => isUnder(pathname, base))) {
-    return redirectWithSession(request, response, appRoutes.dashboard);
+    // Straight to their workspace (one redirect, not two via /dashboard); that page still checks access.
+    return redirectWithSession(request, response, homeFor(rolesFromClaims(claims)) ?? appRoutes.dashboard);
   }
   return response;
 }

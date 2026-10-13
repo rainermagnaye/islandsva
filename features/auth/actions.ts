@@ -77,7 +77,7 @@ const PASSWORD_REJECTED: Partial<Record<string, string>> = {
 };
 
 export async function setPassword(formData: FormData): Promise<SubmitResult<NewPasswordField>> {
-  await requireUser();
+  const user = await requireUser();
   const parsed = parseNewPassword(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
 
@@ -90,7 +90,8 @@ export async function setPassword(formData: FormData): Promise<SubmitResult<NewP
   }
   if (code) return { ok: false, message: "We couldn't save your password. Please try again." };
 
-  redirect(appRoutes.dashboard);
+  // Straight to their workspace (admins pass through /mfa there); /dashboard only without a role.
+  redirect(homeFor(user.roles) ?? appRoutes.dashboard);
 }
 
 /** Creates the authenticator-app factor on demand; the QR code and secret go to the setup screen. */
