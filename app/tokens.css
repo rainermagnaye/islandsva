@@ -1,0 +1,315 @@
+/* Islands VA — generated from design/tokens.json by scripts/build-tokens.mjs. Do not edit. */
+
+:root {
+  color-scheme: light dark;
+  --brand-deep: #0e3a45;
+  --brand-lagoon: #7dd3c9;
+  --brand-reef: #1ba39c;
+  --brand-sunrise: #ffb662;
+  --brand-sun: #ff8a5b;
+  --brand-palm: #3e7f4f;
+  --brand-ocean: #1f6fa8;
+  --brand-sand: #f5e8d3;
+  --surface-page: #f8fafa;
+  --surface-card: #ffffff;
+  --surface-sunken: #eef3f3;
+  --surface-inverse: #0e3a45;
+  --surface-sand: #f5e8d3;
+  --ink: #0e3a45;
+  --ink-muted: #4a5b60;
+  --ink-inverse: #f5e8d3;
+  --ink-accent: #9c3e16;
+  --ink-on-deep-muted: #b9d3cf;
+  --border: #dce5e5;
+  --border-strong: #687a7e;
+  --action-primary: #ffb662;
+  --action-primary-hover: #ff9f45;
+  --action-primary-active: #f28a2e;
+  --on-action-primary: #0e3a45;
+  --action-secondary: #0f6e68;
+  --action-secondary-hover: #0b5a55;
+  --on-action-secondary: #ffffff;
+  --action-ghost-hover: #0f6e681a;
+  --action-ocean: #1f6fa8;
+  --action-ocean-hover: #185a8a;
+  --on-action-ocean: #ffffff;
+  --link: var(--action-secondary);
+  --focus-ring: #0f6e68;
+  --disabled-fill: #e8eded;
+  --disabled-ink: #7f8a87;
+  --status-success: #2f6b3e;
+  --status-success-bg: #eaf4ec;
+  --status-warning: #8a5a00;
+  --status-warning-bg: #fff4e0;
+  --status-danger: #b42318;
+  --status-danger-bg: #fdecea;
+  --status-info: #0f6e68;
+  --status-info-bg: #e3f3f1;
+  --tag-lagoon-bg: #e0f5f2;
+  --tag-lagoon-ink: #0b5a55;
+  --tag-coral-bg: #ffe9e1;
+  --tag-coral-ink: #9c3e16;
+  --tag-sand-bg: #f5e8d3;
+  --tag-sand-ink: #6b4a1f;
+  --tag-ocean-bg: #e3eef8;
+  --tag-ocean-ink: #1a5a8c;
+  --scrim: #0e3a4599;
+  --shadow-sm: 0 1px 2px rgba(14, 58, 69, 0.08);
+  --shadow-md: 0 6px 20px -6px rgba(14, 58, 69, 0.18);
+  --shadow-lg: 0 24px 48px -12px rgba(14, 58, 69, 0.28);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --container-max: 1200px;
+  --container-prose: 68ch;
+  --nav-height: 72px;
+  --sidebar-width: 264px;
+  --sidebar-rail: 76px;
+  --tap-target: 44px;
+  --z-sticky: 20;
+  --z-nav: 40;
+  --z-overlay: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --font-display: var(--font-alegreya), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-figtree), "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-page: #0b1f26;
+    --surface-card: #13303a;
+    --surface-sunken: #08171c;
+    --surface-inverse: #e8f1f0;
+    --surface-sand: #2a271d;
+    --ink: #e8f1f0;
+    --ink-muted: #9fb3b6;
+    --ink-inverse: #0b1f26;
+    --ink-accent: #ff8f7a;
+    --border: #24434d;
+    --border-strong: #6f8e95;
+    --action-primary-hover: #ffc47f;
+    --action-primary-active: #ffd29c;
+    --on-action-primary: #0b1f26;
+    --action-secondary: #7dd3c9;
+    --action-secondary-hover: #9be0d7;
+    --on-action-secondary: #0b1f26;
+    --action-ghost-hover: #7dd3c91f;
+    --action-ocean: #8cc4f0;
+    --action-ocean-hover: #a9d3f4;
+    --on-action-ocean: #0b1f26;
+    --focus-ring: #ffb662;
+    --disabled-fill: #1e3a44;
+    --disabled-ink: #6b8288;
+    --status-success: #7fcb93;
+    --status-success-bg: #173a2a;
+    --status-warning: #f2c14e;
+    --status-warning-bg: #3a2e12;
+    --status-danger: #ff9c8f;
+    --status-danger-bg: #3d1e1c;
+    --status-info: #7dd3c9;
+    --status-info-bg: #123b3d;
+    --tag-lagoon-bg: #123b3d;
+    --tag-lagoon-ink: #7dd3c9;
+    --tag-coral-bg: #3d241c;
+    --tag-coral-ink: #ffab94;
+    --tag-sand-bg: #33291b;
+    --tag-sand-ink: #f0d9b5;
+    --tag-ocean-bg: #13304a;
+    --tag-ocean-ink: #8cc4f0;
+    --scrim: #000000b3;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 20px -6px rgba(0, 0, 0, 0.55);
+    --shadow-lg: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+  }
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-lagoon: var(--brand-lagoon);
+  --color-brand-reef: var(--brand-reef);
+  --color-brand-sunrise: var(--brand-sunrise);
+  --color-brand-sun: var(--brand-sun);
+  --color-brand-palm: var(--brand-palm);
+  --color-brand-ocean: var(--brand-ocean);
+  --color-brand-sand: var(--brand-sand);
+  --color-surface-page: var(--surface-page);
+  --color-surface-card: var(--surface-card);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-inverse: var(--surface-inverse);
+  --color-surface-sand: var(--surface-sand);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-inverse: var(--ink-inverse);
+  --color-ink-accent: var(--ink-accent);
+  --color-ink-on-deep-muted: var(--ink-on-deep-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-action-primary: var(--action-primary);
+  --color-action-primary-hover: var(--action-primary-hover);
+  --color-action-primary-active: var(--action-primary-active);
+  --color-on-action-primary: var(--on-action-primary);
+  --color-action-secondary: var(--action-secondary);
+  --color-action-secondary-hover: var(--action-secondary-hover);
+  --color-on-action-secondary: var(--on-action-secondary);
+  --color-action-ghost-hover: var(--action-ghost-hover);
+  --color-action-ocean: var(--action-ocean);
+  --color-action-ocean-hover: var(--action-ocean-hover);
+  --color-on-action-ocean: var(--on-action-ocean);
+  --color-link: var(--link);
+  --color-focus-ring: var(--focus-ring);
+  --color-disabled-fill: var(--disabled-fill);
+  --color-disabled-ink: var(--disabled-ink);
+  --color-status-success: var(--status-success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-info: var(--status-info);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-tag-lagoon-bg: var(--tag-lagoon-bg);
+  --color-tag-lagoon-ink: var(--tag-lagoon-ink);
+  --color-tag-coral-bg: var(--tag-coral-bg);
+  --color-tag-coral-ink: var(--tag-coral-ink);
+  --color-tag-sand-bg: var(--tag-sand-bg);
+  --color-tag-sand-ink: var(--tag-sand-ink);
+  --color-tag-ocean-bg: var(--tag-ocean-bg);
+  --color-tag-ocean-ink: var(--tag-ocean-ink);
+  --color-scrim: var(--scrim);
+  --font-*: initial;
+  --font-display: var(--font-alegreya), Georgia, serif;
+  --font-sans: var(--font-figtree), system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --shadow-*: initial;
+}
+
+@theme {
+  --radius-*: initial;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --text-*: initial;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+}
+
+@utility elevation-sm {
+  box-shadow: var(--shadow-sm);
+}
+
+@utility elevation-md {
+  box-shadow: var(--shadow-md);
+}
+
+@utility elevation-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+@utility type-display-xl {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 1.6rem + 3.6vw, 3.5rem);
+  line-height: 1.071;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+@utility type-display-lg {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1.5rem + 2vw, 2.75rem);
+  line-height: 1.136;
+  font-weight: 700;
+}
+
+@utility type-h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 1.6rem + 1.1vw, 2.25rem);
+  line-height: 1.167;
+  font-weight: 700;
+}
+
+@utility type-h2 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.214;
+  font-weight: 700;
+}
+
+@utility type-h3 {
+  font-family: var(--font-sans);
+  font-size: 1.375rem;
+  line-height: 1.273;
+  font-weight: 600;
+}
+
+@utility type-h4 {
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1.333;
+  font-weight: 600;
+}
+
+@utility type-body-lg {
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1.556;
+  font-weight: 400;
+}
+
+@utility type-body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+@utility type-body-sm {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.429;
+  font-weight: 400;
+}
+
+@utility type-label {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.429;
+  font-weight: 600;
+}
+
+@utility type-caption {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.333;
+  font-weight: 500;
+}
+
+@utility type-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.333;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@utility type-code {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.429;
+  font-weight: 400;
+}
