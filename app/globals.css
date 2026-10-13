@@ -69,6 +69,7 @@
  * Scroll pop. Off-screen blocks stay tucked down until they enter, then spring
  * into place (overshoot easing, same idea as the Vet Assist cards). `.pop-ready`
  * is added by ScrollPop so the page stays visible without JS and for reduced motion.
+ * This is time-based on purpose: a view() timeline stays stuck at the start here.
  */
 @media (prefers-reduced-motion: no-preference) {
   html.pop-ready .reveal:not(.is-in) {
