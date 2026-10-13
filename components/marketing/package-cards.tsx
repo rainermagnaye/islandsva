@@ -6,7 +6,7 @@ import { contactHref } from "@/content/routes";
 /** The three packages as cards, showing the lowest monthly price ("from"). */
 export function PackageCards({ headingLevel = 3 }: { headingLevel?: 2 | 3 }) {
   return (
-    <Grid>
+    <Grid className="reveal-stagger">
       {packages.map((p) => (
         <GridItem key={p.id} span={4} md={p.featured ? 8 : 4} lg={4} className="reveal">
           <ServiceCard
