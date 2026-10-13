@@ -28,6 +28,7 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
               </Suspense>
             ),
           },
+          { href: appRoutes.adminClients, label: "Clients", icon: "briefcase" },
           { href: appRoutes.adminUsers, label: "Team", icon: "users" },
         ]}
         footer={

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
-import { parseConvert, parseLead } from "./validation";
+import { parseConvert, parseLead, parseLeadStatus } from "./validation";
 
 const valid = {
   name: "  Ana Cruz ",
@@ -90,5 +90,22 @@ describe("parseConvert", () => {
     ["a non-object", "lead"],
   ])("treats %s as a tampered form", (_, input) => {
     expect(parseConvert(input)).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseLeadStatus", () => {
+  const leadId = "8f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+
+  it("accepts every hand-set status", () => {
+    for (const status of ["new", "contacted", "qualified", "closed"]) {
+      expect(parseLeadStatus({ leadId, status })).toEqual({ ok: true, value: { leadId, status } });
+    }
+  });
+
+  it("rejects 'converted' (only converting a lead sets it), unknown statuses and bad ids as a tampered form", () => {
+    expect(parseLeadStatus({ leadId, status: "converted" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseLeadStatus({ leadId, status: "won" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseLeadStatus({ leadId: "1", status: "closed" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseLeadStatus({ leadId, status: "closed", extra: "x" })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });

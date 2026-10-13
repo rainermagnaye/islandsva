@@ -37,6 +37,30 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   closed: "Closed",
 };
 
+export const LEAD_STATUSES = Object.keys(LEAD_STATUS_LABELS) as LeadStatus[];
+
+/** Statuses an admin sets by hand. "Converted" is set only by converting the lead into a client. */
+export const TRIAGE_STATUSES = ["new", "contacted", "qualified", "closed"] as const satisfies readonly LeadStatus[];
+export type TriageStatus = (typeof TRIAGE_STATUSES)[number];
+
+/** Button text for moving a lead to each triage status. */
+export const TRIAGE_ACTIONS: Record<TriageStatus, string> = {
+  new: "Reopen",
+  contacted: "Mark contacted",
+  qualified: "Mark qualified",
+  closed: "Close lead",
+};
+
+/**
+ * Where a lead can go next by hand. Open leads move between contacted, qualified and closed; a closed lead
+ * can be reopened; a converted lead is final (its client already exists).
+ */
+export function nextStatuses(from: LeadStatus): TriageStatus[] {
+  if (from === "converted") return [];
+  if (from === "closed") return ["new"];
+  return (["contacted", "qualified", "closed"] as const).filter((to) => to !== from);
+}
+
 /** A lead can become a client until it is converted or closed. */
 export const isConvertible = (status: LeadStatus) => status !== "converted" && status !== "closed";
 
@@ -53,6 +77,11 @@ export type LeadSummary = {
 
 /** A page of leads, newest first. */
 export type LeadPage = { leads: LeadSummary[]; total: number; page: number; pageCount: number };
+
+/** One lead on its own admin page: the summary plus the visitor's message. */
+export type LeadDetail = LeadSummary & { message: string; updatedAt: string };
+
+export type LeadStatusField = "status";
 
 /** Limits for "Convert to client" — mirrored by CHECK constraints on clients. */
 export const CONVERT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;

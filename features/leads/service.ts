@@ -1,7 +1,8 @@
 import "server-only";
-import { convertLeadToClient, insertLead, markLeadNotified } from "./dal";
+import { LEAD_STATUSES, nextStatuses } from "./contract";
+import { convertLeadToClient, insertLead, markLeadNotified, updateLeadStatus } from "./dal";
 import { sendLeadNotification } from "./email";
-import type { ConvertInput, LeadInput } from "./validation";
+import type { ConvertInput, LeadInput, LeadStatusInput } from "./validation";
 
 /** Request metadata stored with a lead for abuse checks. Derived from the HTTP request by the route. */
 export type LeadSource = { ipHash: string | null; userAgent: string | null };
@@ -33,4 +34,13 @@ export async function notifyNewLead(id: string, lead: LeadInput) {
  */
 export async function convertLead(input: ConvertInput) {
   return convertLeadToClient(input);
+}
+
+/**
+ * Moves a lead along the triage flow (see nextStatuses). The allowed starting statuses are checked by the
+ * database in the same UPDATE, so a lead converted or closed meanwhile is left alone (returns false).
+ */
+export async function setLeadStatus({ leadId, status }: LeadStatusInput) {
+  const from = LEAD_STATUSES.filter((current) => nextStatuses(current).includes(status));
+  return updateLeadStatus(leadId, status, from);
 }
