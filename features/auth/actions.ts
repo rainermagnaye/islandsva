@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { appRoutes } from "@/content/routes";
-import { safeNextPath } from "@/lib/auth/roles";
+import { homeFor, rolesFromClaims, safeNextPath } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
@@ -36,8 +36,9 @@ export async function signIn(formData: FormData): Promise<SubmitResult<SignInFie
   if (!parsed.ok) return toSubmitResult(parsed);
   const { email, password, next } = parsed.value;
 
-  const code = await attempt(() => auth.signInWithPassword(email, password));
-  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  const result = await attempt(() => auth.signInWithPassword(email, password));
+  if (result === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  const { code, claims } = result;
   if (code === "over_request_rate_limit") return { ok: false, message: TOO_MANY };
   // One message for every credential failure, so the form never reveals which emails have accounts.
   if (code === "invalid_credentials") {
@@ -48,7 +49,9 @@ export async function signIn(formData: FormData): Promise<SubmitResult<SignInFie
     return { ok: false, message: "We couldn't sign you in. Please try again." };
   }
 
-  redirect(safeNextPath(next, appRoutes.dashboard));
+  // Straight to the user's workspace — an admin's page sends them through two-factor first. /dashboard is
+  // the fallback for accounts without a role yet.
+  redirect(safeNextPath(next, homeFor(rolesFromClaims(claims)) ?? appRoutes.dashboard));
 }
 
 export async function signOut(): Promise<void> {
@@ -100,7 +103,7 @@ export async function startMfaEnrollment(): Promise<EnrollmentResult> {
 
 /** Confirms a 6-digit code: finishes setup, or upgrades this session to two-factor (aal2). */
 export async function verifyMfa(formData: FormData): Promise<SubmitResult<MfaField>> {
-  await requireUser();
+  const user = await requireUser();
   const parsed = parseMfaCode(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
 
@@ -111,5 +114,6 @@ export async function verifyMfa(formData: FormData): Promise<SubmitResult<MfaFie
     return { ok: false, message: FIELD_ERRORS, fieldErrors: { code: "That code didn't work. Use the newest code in your app." } };
   }
 
-  redirect(appRoutes.dashboard);
+  // Roles don't change with the second factor, so the pre-upgrade session already knows the destination.
+  redirect(homeFor(user.roles) ?? appRoutes.dashboard);
 }

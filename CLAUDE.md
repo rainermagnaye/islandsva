@@ -38,7 +38,7 @@ npx supabase gen types typescript --project-id <ref> > types/database.ts   # aft
 app/                  routes only — thin pages and endpoints
   (marketing)/        static public site; page-only layout UI in <page>/_components/
   (auth)/             sign-in screens: login · forgot-password · set-password · mfa
-  (dashboard)/        portal: dashboard (role redirect) · client · va · admin (admin + closer) · admin/users
+  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only) · admin/users
   auth/confirm/       email-link landing (invite, reset): token hash → session
   api/v1/<resource>/  Route Handlers — the HTTP API
 features/<feature>/   one business area in one place (today: leads, auth, users)
@@ -133,7 +133,7 @@ Source: the **Islands VA** design system (https://claude.ai/artifact/Ha5kSyvZ7ax
 - **Auth:** `@supabase/ssr` cookie sessions, server-side only (no Supabase in the browser). Verify with `getClaims()`, never trust `getSession()` on the server. Sign-up is disabled — accounts are invite-only (admins invite staff; Closers invite clients in M3). Passwords: 10–72 chars with letters and digits.
 - **Users and roles:** Supabase Auth owns `auth.users`; `profiles` (same id) holds our side and `status` (`invited` → `active` on first sign-in → `inactive` when deactivated). Roles live in `roles` (one row per user per role, `app_role` enum = `ROLES` in `lib/auth/roles.ts`), written only by the server. The `custom_access_token_hook` copies them into `app_metadata.roles` (never `user_metadata`, which users can edit); inactive users get none. Role changes apply at the next token refresh (≤ 1 hour).
 - **Admins need two-factor sign-in (TOTP, `aal2`)** — enforced by `requireRole` and again by RLS ("Admins with 2FA read all…" policies).
-- **Email links** (invite, reset) use the `supabase/templates/` token-hash links to `/auth/confirm`, which accepts only `invite` / `recovery` and redirects to fixed paths (no open redirect). It is the one GET Route Handler outside `createHandler`. Post-login `?next=` goes through `safeNextPath`.
+- **Email links** (invite, reset) use the `supabase/templates/` token-hash links to `/auth/confirm`, which accepts only `invite` / `recovery` and redirects to fixed paths (no open redirect). It is the one GET Route Handler outside `createHandler`. After sign-in the action redirects straight to the user's workspace (role from the new token; admins pass through `/mfa`); `/dashboard` is only the fallback for accounts without a role. Post-login `?next=` goes through `safeNextPath`.
 - Credential errors share one message (no account enumeration); "forgot password" always reports success.
 
 ## 7. Database

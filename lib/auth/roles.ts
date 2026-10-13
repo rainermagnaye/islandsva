@@ -10,10 +10,10 @@ export const ROLES = ["admin", "closer", "va", "client"] as const satisfies read
 
 export const ROLE_LABELS: Record<Role, string> = { admin: "Admin", closer: "Closer", va: "VA", client: "Client" };
 
-/** Closers share the admin workspace in the MVP (one person often holds both roles). */
+/** Each role's workspace. The admin system is for admins only; Closers get their own workspace. */
 export const ROLE_HOME: Record<Role, AppRoutePath> = {
   admin: appRoutes.admin,
-  closer: appRoutes.admin,
+  closer: appRoutes.closer,
   va: appRoutes.va,
   client: appRoutes.client,
 };
@@ -34,7 +34,7 @@ export function homeFor(roles: readonly Role[]): AppRoutePath | null {
   return top ? ROLE_HOME[top] : null;
 }
 
-/** Distinct workspaces a user can switch between, in precedence order (admin + closer share one). */
+/** Distinct workspaces a user can switch between, in precedence order. */
 export function workspacesFor(roles: readonly Role[]): { role: Role; href: AppRoutePath }[] {
   const seen = new Set<AppRoutePath>();
   return ROLES.filter((role) => roles.includes(role))

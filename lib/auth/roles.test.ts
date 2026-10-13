@@ -18,7 +18,7 @@ describe("homeFor", () => {
   it("sends each role to its workspace, highest precedence first", () => {
     expect(homeFor(["client"])).toBe("/client");
     expect(homeFor(["va"])).toBe("/va");
-    expect(homeFor(["closer"])).toBe("/admin");
+    expect(homeFor(["closer"])).toBe("/closer");
     expect(homeFor(["client", "admin"])).toBe("/admin");
   });
 
@@ -28,9 +28,10 @@ describe("homeFor", () => {
 });
 
 describe("workspacesFor", () => {
-  it("lists each workspace once (admin and closer share one)", () => {
-    expect(workspacesFor(["admin", "closer", "va"])).toEqual([
+  it("lists one entry per workspace, in precedence order", () => {
+    expect(workspacesFor(["va", "closer", "admin"])).toEqual([
       { role: "admin", href: "/admin" },
+      { role: "closer", href: "/closer" },
       { role: "va", href: "/va" },
     ]);
   });
