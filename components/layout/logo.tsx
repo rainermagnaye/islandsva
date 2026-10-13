@@ -12,10 +12,13 @@ export function LogoLockup({
   alt,
   className,
   sizes = "44px",
+  trunkClassName = "bg-ink",
 }: {
   alt: string;
   className?: string;
   sizes?: string;
+  /** Trunk mask colour. Light on the fixed dark footer, theme ink everywhere else. */
+  trunkClassName?: string;
 }) {
   const { props } = getImageProps({ alt, sizes, unoptimized: true, ...MARK });
 
@@ -25,7 +28,7 @@ export function LogoLockup({
       <img {...props} className="block h-full w-full" />
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-ink"
+        className={cx("pointer-events-none absolute inset-0", trunkClassName)}
         style={{
           WebkitMaskImage: "url(/logo/trunk.png)",
           maskImage: "url(/logo/trunk.png)",
@@ -39,7 +42,24 @@ export function LogoLockup({
   );
 }
 
-export function Logo({ className, href = routes.home }: { className?: string; href?: string }) {
+type LogoProps = {
+  className?: string;
+  href?: string;
+  /** night = sand mark and name, for the brand-deep footer that looks the same in both themes. */
+  tone?: "auto" | "night";
+};
+
+export function Logo({ className, href = routes.home, tone = "auto" }: LogoProps) {
+  if (tone === "night") {
+    return (
+      <Link href={href} className={cx("flex min-h-11 items-center gap-2", className)}>
+        <LogoLockup alt="" className="size-11 shrink-0" sizes="44px" trunkClassName="bg-brand-sand" />
+        <span className="font-display text-[1.5rem] leading-none font-bold tracking-[-0.02em] whitespace-nowrap text-brand-sand">
+          {site.name}
+        </span>
+      </Link>
+    );
+  }
   return (
     <Link href={href} className={cx("flex min-h-11 items-center gap-2", className)}>
       <LogoLockup alt="" className="size-11 shrink-0" sizes="44px" />

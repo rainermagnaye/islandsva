@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { Suspense } from "react";
-import { Icon } from "@/components/ui/icon";
+import { CountBadge } from "@/components/ui/badge";
 import { appRoutes, routes } from "@/content/routes";
 import { countNewLeads } from "@/features/leads/dal";
 import { getSessionUser, needsSecondFactor } from "@/lib/auth/session";
@@ -8,13 +7,14 @@ import { UpstreamError } from "@/lib/upstream-error";
 import { AdminNav } from "./_components/admin-nav";
 
 /**
- * Admin shell: menu beside (or above, on small screens) the page. The menu is static, so it shows
- * instantly; only the new-lead badge reads the session. Access is still checked by every page and action —
- * this layout never authorizes anything.
+ * Admin shell (the design system's DashboardShell): menu beside the page — a 76px icon rail from 768px,
+ * the full 264px sidebar from 1024px — or above it on phones. The menu is static, so it shows
+ * instantly; only the new-lead badge reads the session. Access is still checked by every page and
+ * action — this layout never authorizes anything.
  */
 export default function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
-    <div className="grid min-h-[inherit] lg:grid-cols-[15rem_minmax(0,1fr)]">
+    <div className="grid min-h-[inherit] md:grid-cols-[76px_minmax(0,1fr)] lg:grid-cols-[264px_minmax(0,1fr)]">
       <AdminNav
         items={[
           { href: appRoutes.admin, label: "Overview", icon: "home", exact: true },
@@ -31,12 +31,7 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
           { href: appRoutes.adminClients, label: "Clients", icon: "briefcase" },
           { href: appRoutes.adminUsers, label: "Team", icon: "users" },
         ]}
-        footer={
-          <Link href={routes.home} className="flex min-h-11 items-center gap-3 rounded-md px-3 type-label text-ink-muted no-underline hover:bg-action-ghost-hover">
-            <Icon name="arrow-right" />
-            View site
-          </Link>
-        }
+        footer={{ href: routes.home, label: "View site", icon: "external" }}
       />
       <div className="min-w-0">{children}</div>
     </div>
@@ -57,12 +52,5 @@ async function NewLeadsBadge() {
     console.error("New-lead count failed", { service: error.service, error });
     return null;
   }
-  if (count === 0) return null;
-
-  return (
-    <span className="min-w-6 rounded-pill bg-action-secondary px-2 text-center type-body-sm text-on-action-secondary">
-      {count > 99 ? "99+" : count}
-      <span className="sr-only"> new</span>
-    </span>
-  );
+  return count > 0 ? <CountBadge count={count} label={count === 1 ? "1 new lead" : `${count} new leads`} /> : null;
 }

@@ -158,3 +158,120 @@
     transform: translateY(-6px);
   }
 }
+
+/* DataTable (components/ui/data-table.tsx) — values from the design system's DataTable. Plain CSS because
+   the phone layout turns rows into cards with container queries and per-cell labels. */
+.data-table {
+  container-type: inline-size;
+}
+.data-table__scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+.data-table table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font: 400 0.875rem/1.25rem var(--font-sans);
+  color: var(--ink);
+}
+.data-table caption {
+  caption-side: top;
+  text-align: left;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  font: 600 1.125rem/1.5rem var(--font-sans);
+}
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 44px;
+  padding: 0 var(--space-4);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  font: 600 0.8125rem/1.125rem var(--font-sans);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody th,
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody th {
+  font-weight: 600;
+}
+.data-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.data-table tbody tr {
+  transition: background-color 120ms ease;
+}
+.data-table tbody tr:hover {
+  background: var(--action-ghost-hover);
+}
+.data-table .data-table__end {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@container (max-width: 599px) {
+  .data-table__scroll {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .data-table table,
+  .data-table tbody,
+  .data-table tr {
+    display: block;
+  }
+  .data-table tbody {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .data-table tbody tr {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-4);
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .data-table tbody th,
+  .data-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 2px 0;
+    border: 0;
+    text-align: right;
+  }
+  .data-table tbody th {
+    display: block;
+    padding-bottom: var(--space-2);
+    font-size: 1rem;
+    text-align: left;
+  }
+  .data-table td::before {
+    content: attr(data-label);
+    color: var(--ink-muted);
+    font-weight: 500;
+    text-align: left;
+  }
+  .data-table td:not([data-label]) {
+    justify-content: flex-end;
+  }
+}

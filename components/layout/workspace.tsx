@@ -1,11 +1,23 @@
 import type { ReactNode } from "react";
 import { Container } from "@/components/ui/container";
 
-/** A portal page: its h1, an optional supporting line, then the content. */
-export function Workspace({ title, lead, children }: { title: string; lead?: ReactNode; children?: ReactNode }) {
+/** A portal page: optional breadcrumbs, its h1, an optional supporting line, then the content. */
+export function Workspace({
+  title,
+  lead,
+  breadcrumbs,
+  children,
+}: {
+  title: string;
+  lead?: ReactNode;
+  /** A Breadcrumbs trail, for pages two or more levels deep. */
+  breadcrumbs?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
     <Container className="grid gap-8 py-10 md:py-12">
       <div className="grid gap-2">
+        {breadcrumbs}
         <h1 className="m-0 type-h1">{title}</h1>
         {lead && <p className="m-0 max-w-[60ch] text-ink-muted">{lead}</p>}
       </div>

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatCard } from "@/components/ui/stat-card";
 import { appRoutes } from "@/content/routes";
 import { countClients } from "@/features/clients/dal";
 import { LeadsTable } from "@/features/leads/components/leads-table";
@@ -9,7 +11,6 @@ import { countLeads, listLeads } from "@/features/leads/dal";
 import { UsersTable } from "@/features/users/components/users-table";
 import { listUsers } from "@/features/users/dal";
 import { requireRole } from "@/lib/auth/session";
-import { StatCard } from "./_components/stat-card";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -42,11 +43,15 @@ async function AdminHome() {
       </section>
 
       <Panel id="recent-leads" title="Latest leads" href={appRoutes.adminLeads} linkLabel="All leads">
-        <LeadsTable leads={recentLeads.leads} caption="Latest leads" />
+        <LeadsTable
+          leads={recentLeads.leads}
+          caption="Latest leads"
+          empty={<EmptyState compact headingLevel={3} title="No leads yet" description="They appear here as soon as someone sends the contact form." />}
+        />
       </Panel>
 
       <Panel id="recent-users" title="Latest accounts" href={appRoutes.adminUsers} linkLabel="Team and accounts">
-        <UsersTable users={recentUsers} />
+        <UsersTable users={recentUsers} headingLevel={3} />
       </Panel>
     </Workspace>
   );
