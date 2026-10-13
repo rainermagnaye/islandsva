@@ -20,7 +20,8 @@ export function CtaBand({
           <p className="m-0 max-w-[52ch] text-ink-muted">{body}</p>
         </div>
         <div className="flex flex-wrap gap-3 md:justify-end">
-          <Button href={site.cta.href} size="lg" iconRight="arrow-right">
+          {/* Ocean, not sunrise: the sticky nav already shows the page's one sunrise button. */}
+          <Button href={site.cta.href} size="lg" variant="ocean" iconRight="arrow-right">
             {site.cta.label}
           </Button>
           <Button href={routes.pricing} size="lg" variant="ghost">

@@ -11,7 +11,22 @@ const common = { alt: site.name, width: 938, height: 320, sizes: "118px", loadin
 const { props: night } = getImageProps({ ...common, src: "/logo/lockup-night.png" });
 const { props: day } = getImageProps({ ...common, src: "/logo/lockup-day.png" });
 
-export function Logo({ className, href = routes.home }: { className?: string; href?: string }) {
+type LogoProps = {
+  className?: string;
+  href?: string;
+  /** night = always the night lockup, for brand-deep grounds (footer) that look the same in both themes. */
+  tone?: "auto" | "night";
+};
+
+export function Logo({ className, href = routes.home, tone = "auto" }: LogoProps) {
+  if (tone === "night") {
+    return (
+      <Link href={href} className={cx("flex min-h-11 items-center", className)}>
+        {/* eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element -- already optimised by getImageProps (alt comes from the spread) */}
+        <img {...night} className="h-10 w-auto" />
+      </Link>
+    );
+  }
   return (
     <Link href={href} className={cx("flex min-h-11 items-center", className)}>
       <picture>

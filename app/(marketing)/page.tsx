@@ -2,12 +2,10 @@ import Link from "next/link";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { FaqList } from "@/components/marketing/faq-list";
 import { FeatureList } from "@/components/marketing/feature-list";
-import { HeroArt } from "@/components/marketing/hero-art";
+import { Hero } from "@/components/marketing/hero";
 import { PackageCards } from "@/components/marketing/package-cards";
 import { Section } from "@/components/marketing/section";
-import { TestimonialCarousel } from "@/components/marketing/testimonial-carousel";
-import { Button } from "@/components/ui/button";
-import { CheckList } from "@/components/ui/check-list";
+import { TestimonialGrid } from "@/components/marketing/testimonial-card";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
 import { routes } from "@/content/routes";
@@ -20,29 +18,21 @@ const highlights = ["Vetted assistants from the Philippines", "Day, night or bot
 export default function HomePage() {
   return (
     <>
-      <Container className="grid items-center gap-12 py-12 md:py-16 lg:grid-cols-[1.1fr_1fr] lg:py-24">
-        <div className="grid gap-6">
-          <p className="m-0 type-eyebrow text-ink-accent">{site.tagline}</p>
-          <h1 className="m-0 type-display-xl text-balance">Your business, handled while you sleep</h1>
-          <p className="m-0 max-w-[52ch] type-body-lg text-ink-muted">
-            A dedicated virtual assistant who learns how you work — then takes your inbox, calendar, customer replies and
-            admin off your plate. Around the clock, if you need it.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button href={site.cta.href} size="lg" iconRight="arrow-right">
-              {site.cta.label}
-            </Button>
-            <Button href={routes.packages} size="lg" variant="ghost">
-              See packages
-            </Button>
-          </div>
-          <CheckList items={highlights} className="pt-2 type-body-sm text-ink-muted sm:flex sm:flex-wrap sm:gap-x-6" />
-        </div>
-        <HeroArt />
+      <Container>
+        <Hero
+          eyebrow={site.tagline}
+          title="Your business, handled while you sleep"
+          lead="A dedicated virtual assistant who learns how you work — then takes your inbox, calendar, customer replies and admin off your plate. Around the clock, if you need it."
+          primary={site.cta}
+          secondary={{ label: "See packages", href: routes.packages }}
+          proof={highlights.join(" · ")}
+        />
+        {/* TODO(content): a LogoStrip ("Trusted by teams at…") goes here once clients agree to be named. */}
       </Container>
 
       <Section
         id="services"
+        align="center"
         tone="sunken"
         eyebrow="What your VA handles"
         title="Hand off the work that eats your week"
@@ -51,7 +41,7 @@ export default function HomePage() {
         <FeatureList items={services} />
       </Section>
 
-      <Section id="how-it-works" eyebrow="How it works" title="From first call to first task in days" lead="We handle the hiring, matching and onboarding. You get an assistant who's ready to work.">
+      <Section id="how-it-works" align="center" eyebrow="How it works" title="From first call to first task in days" lead="We handle the hiring, matching and onboarding. You get an assistant who's ready to work.">
         <ol className="m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map((step, i) => (
             <li key={step.title} className="reveal grid content-start gap-3">
@@ -67,6 +57,7 @@ export default function HomePage() {
 
       <Section
         id="day-and-night"
+        align="center"
         tone="deep"
         eyebrow="Support, day and night"
         title="Your business doesn't stop at 5 pm. Neither do we."
@@ -86,20 +77,20 @@ export default function HomePage() {
         </div>
       </Section>
 
-      <Section id="packages" eyebrow="Packages" title="Pick the support that fits" lead="Every package includes a dedicated, vetted VA and a team that has their back.">
+      <Section id="packages" align="center" eyebrow="Packages" title="Pick the support that fits" lead="Every package includes a dedicated, vetted VA and a team that has their back.">
         <PackageCards />
-        <p className="mt-8 mb-0 type-body-sm text-ink-muted">
+        <p className="mt-8 mb-0 text-center type-body-sm text-ink-muted">
           Prices shown for a 12-month commitment. <Link href={routes.pricing}>Compare monthly, 6- and 12-month pricing</Link>.
         </p>
       </Section>
 
       {testimonials.length > 0 && (
-        <Section id="testimonials" tone="sunken" eyebrow="Testimonials" title="What clients say">
-          <TestimonialCarousel items={testimonials} />
+        <Section id="testimonials" align="center" tone="sunken" eyebrow="Testimonials" title="What clients say">
+          <TestimonialGrid items={testimonials} />
         </Section>
       )}
 
-      <Section id="faq" eyebrow="Questions" title="Good to know">
+      <Section id="faq" align="center" eyebrow="Questions" title="Good to know">
         <FaqList items={faqs} />
       </Section>
 

@@ -99,7 +99,7 @@ Source: the **Islands VA** design system (https://claude.ai/artifact/Ha5kSyvZ7ax
 - `design/tokens.json` → `npm run tokens` → `app/tokens.css` (generated; never edit or hard-code hex).
 - Tailwind is limited to brand tokens: `bg-surface-card`, `text-ink`, `rounded-lg`, `type-*` text styles, `elevation-*` shadows; 4px spacing scale.
 - Theme follows the visitor's OS (`prefers-color-scheme`): token classes adapt automatically, otherwise use `dark:`. No toggle, no theme cookie.
-- Reuse `components/ui` and `components/layout`; add variants via props, not one-off styles.
+- Reuse `components/ui` and `components/layout`; add variants via props, not one-off styles. Portal building blocks follow the system's components: `Badge` (status = icon or dot + word + tint, never colour alone), `Alert`, `EmptyState`, `StatCard`, `DataTable` (rows become cards under 600px; its CSS is in `globals.css`), `Pagination` and `Breadcrumbs`; marketing pages use its `Hero` (day-and-night art), FAQ accordion (on `<details>`, with FAQPage JSON-LD), testimonial grid, CTA band and wave `Footer` — all server components. Showcase content (logos, quotes, prices, phone numbers) is never copied: real content or `TODO(content)`. Last synced 2026-10-13 (tokens, icons, components, landing page). Intentional differences: no theme toggle (below), a tab row instead of a drawer for short phone menus, no Toast until an action needs one.
 - Voice: sentence case, verb-first buttons ("Request my team", never "Submit"), "you / we / your VA". Orange is a fill, never text on light backgrounds.
 
 ## 5. Code conventions
