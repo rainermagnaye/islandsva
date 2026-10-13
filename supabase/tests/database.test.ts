@@ -360,7 +360,7 @@ describe("relationships", () => {
   });
 });
 
-describe("leads (server only)", () => {
+describe("leads", () => {
   const insert = (values: Record<string, unknown>) => {
     const row = { full_name: "Ana Cruz", email: "ana@x.co", message: "Inbox help, please.", ...values };
     const keys = Object.keys(row);
@@ -375,9 +375,106 @@ describe("leads (server only)", () => {
     await expect(asServer("update public.leads set notified_at = now() where id = $1", [lead.id])).resolves.toBeDefined();
   });
 
-  it("is invisible to signed-in users, even admins, and to anon", async () => {
-    await expect(asUser(asAdmin, "select id from public.leads")).rejects.toThrow(/permission denied/);
+  it("only admins with two-factor sign-in can read leads", async () => {
+    expect((await asUser(asAdmin, "select id from public.leads")).length).toBeGreaterThan(0);
+    for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser, asVa, asClient]) {
+      expect(await asUser(claims, "select id from public.leads")).toEqual([]);
+    }
+    await expect(as("anon", {}, "select id from public.leads")).rejects.toThrow(/permission denied/);
+  });
+
+  it("nobody inserts or deletes leads through the API (the contact form uses the server key)", async () => {
+    await expect(asUser(asAdmin, "insert into public.leads (full_name, email, message) values ('a', 'a@b.co', 'hi')")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "delete from public.leads")).rejects.toThrow(/permission denied/);
     await expect(as("anon", {}, "insert into public.leads (full_name, email, message) values ('a', 'a@b.co', 'hi')")).rejects.toThrow(/permission denied/);
+  });
+
+  it("admins change only the triage columns", async () => {
+    const [lead] = await insert({});
+    expect(await asUser(asAdmin, "update public.leads set status = 'contacted' where id = $1 returning id", [lead.id])).toHaveLength(1);
+    await expect(asUser(asAdmin, "update public.leads set email = 'x@y.co' where id = $1", [lead.id])).rejects.toThrow(/permission denied/);
+    expect(await asUser(asCloser, "update public.leads set status = 'closed' where id = $1 returning id", [lead.id])).toHaveLength(0);
+  });
+
+  describe("status flow", () => {
+    const setStatus = (id: string, status: string) =>
+      asUser(asAdmin, "update public.leads set status = $2 where id = $1 returning id", [id, status]);
+
+    it("open leads move freely between open statuses and closed", async () => {
+      const [lead] = await insert({});
+      for (const status of ["contacted", "qualified", "new", "closed"]) expect(await setStatus(lead.id, status)).toHaveLength(1);
+    });
+
+    it("a closed lead can only be reopened", async () => {
+      const [lead] = await insert({ status: "closed" });
+      for (const status of ["contacted", "qualified"]) await expect(setStatus(lead.id, status)).rejects.toMatchObject({ code: "IVA04" });
+      expect(await setStatus(lead.id, "new")).toHaveLength(1);
+    });
+
+    it("a converted lead is final, even for the server key", async () => {
+      const [lead] = await insert({});
+      await asUser(asAdmin, "select public.convert_lead($1, 'Cruz Co', 'Ana Cruz')", [lead.id]);
+      for (const status of ["new", "closed"]) await expect(setStatus(lead.id, status)).rejects.toMatchObject({ code: "IVA04" });
+      await expect(asServer("update public.leads set converted_client_id = null, status = 'new' where id = $1", [lead.id])).rejects.toMatchObject({ code: "IVA04" });
+    });
+
+    it("links a client only to a converted lead", async () => {
+      const [lead] = await insert({});
+      const [other] = await insert({});
+      const [{ id: clientId }] = await asUser<{ id: string }>(asAdmin, "select public.convert_lead($1, 'Cruz Co', 'Ana Cruz') as id", [other.id]);
+      await expect(asUser(asAdmin, "update public.leads set converted_client_id = $2 where id = $1", [lead.id, clientId])).rejects.toThrow(
+        /leads_client_only_when_converted/,
+      );
+    });
+  });
+
+  describe("convert_lead", () => {
+    const convert =(claims: Claims, leadId: string, company = "Cruz Co") =>
+      asUser<{ id: string }>(claims, "select public.convert_lead($1, $2, 'Ana Cruz') as id", [leadId, company]);
+
+    it("creates one pending client from the lead and marks the lead converted", async () => {
+      const [lead] = await insert({ email: "convert@x.co", message: "Need inbox help." });
+      const [{ id: clientId }] = await convert(asAdmin, lead.id);
+      const [client] = await asServer<Record<string, unknown>>("select * from public.clients where id = $1", [clientId]);
+      expect(client).toMatchObject({
+        company_name: "Cruz Co",
+        contact_name: "Ana Cruz",
+        contact_email: "convert@x.co",
+        notes: "Need inbox help.",
+        status: "pending",
+        created_by: ADMIN,
+      });
+      const [stored] = await asServer<{ status: string; converted_client_id: string }>("select status, converted_client_id from public.leads where id = $1", [lead.id]);
+      expect(stored).toEqual({ status: "converted", converted_client_id: clientId });
+    });
+
+    it("refuses to convert the same lead twice", async () => {
+      const [lead] = await insert({});
+      await convert(asAdmin, lead.id);
+      await expect(convert(asAdmin, lead.id)).rejects.toMatchObject({ code: "IVA02" });
+      expect(await asServer("select id from public.clients where id in (select converted_client_id from public.leads where id = $1)", [lead.id])).toHaveLength(1);
+    });
+
+    it("refuses closed and unknown leads", async () => {
+      const [lead] = await insert({ status: "closed" });
+      await expect(convert(asAdmin, lead.id)).rejects.toMatchObject({ code: "IVA03" });
+      await expect(convert(asAdmin, "00000000-0000-0000-0000-0000000000aa")).rejects.toMatchObject({ code: "IVA01" });
+    });
+
+    it("leaves nothing behind when the client is invalid (all or nothing)", async () => {
+      const [lead] = await insert({});
+      await expect(convert(asAdmin, lead.id, "")).rejects.toThrow(/violates check constraint/);
+      const [stored] = await asServer<{ status: string }>("select status from public.leads where id = $1", [lead.id]);
+      expect(stored.status).toBe("new");
+    });
+
+    it("is for admins with two-factor sign-in only", async () => {
+      const [lead] = await insert({});
+      for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser, asVa, asClient]) {
+        await expect(convert(claims, lead.id)).rejects.toThrow(/admins with two-factor sign-in only/);
+      }
+      await expect(as("anon", {}, "select public.convert_lead('00000000-0000-0000-0000-0000000000aa', 'x', 'y')")).rejects.toThrow(/permission denied/);
+    });
   });
 
   it.each([
