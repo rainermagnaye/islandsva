@@ -1,24 +1,45 @@
 <!doctype html>
 <html lang="en">
-  <body style="margin:0;padding:24px;background:#f6f3ee;font-family:Arial,Helvetica,sans-serif;color:#1d2a33">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px">
-      <tr>
-        <td style="padding:32px">
-          <h1 style="margin:0 0 16px;font-size:22px">Reset your password</h1>
-          <p style="margin:0 0 24px;font-size:16px;line-height:24px">
-            We received a request to reset the password for your Islands VA account.
-          </p>
-          <p style="margin:0 0 24px">
-            <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery"
-               style="display:inline-block;padding:12px 20px;border-radius:8px;background:#1d2a33;color:#ffffff;text-decoration:none;font-weight:bold">
-              Choose a new password
-            </a>
-          </p>
-          <p style="margin:0;font-size:14px;line-height:20px;color:#5b6770">
-            This link works once and expires in 24 hours. If you didn't ask for it, ignore this email — your password stays the same.
-          </p>
-        </td>
-      </tr>
-    </table>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Reset your Islands VA password</title>
+  <link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@700&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:#f8fafa;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Choose a new password for your Islands VA account. The link works once.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafa;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #dce5e5;border-radius:16px;">
+          <tr>
+            <td style="background:#0e3a45;border-radius:16px 16px 0 0;padding:24px 32px;">
+              <p style="margin:0;font-family:'Alegreya',Georgia,'Times New Roman',serif;font-size:24px;line-height:28px;font-weight:700;color:#f5e8d3;">Islands VA</p>
+              <p style="margin:6px 0 0;font-family:'Figtree',Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#ffb662;">Support, day and night</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;font-family:'Figtree',Arial,Helvetica,sans-serif;">
+              <h1 style="margin:0 0 16px;font-family:'Alegreya',Georgia,'Times New Roman',serif;font-size:28px;line-height:34px;font-weight:700;color:#0e3a45;">Reset your password</h1>
+              <p style="margin:0 0 8px;font-size:16px;line-height:24px;color:#0e3a45;">{{ if .Data.full_name }}Hi {{ .Data.full_name }},{{ else }}Hi,{{ end }}</p>
+              <p style="margin:0 0 24px;font-size:16px;line-height:24px;color:#0e3a45;">We received a request to reset the password for your Islands VA account. Choose a new one below.</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                <tr>
+                  <td bgcolor="#ffb662" style="border-radius:10px;">
+                    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery" style="display:inline-block;padding:14px 24px;font-family:'Figtree',Arial,Helvetica,sans-serif;font-size:16px;line-height:20px;font-weight:600;color:#0e3a45;text-decoration:none;border-radius:10px;">Choose a new password</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 24px;font-size:14px;line-height:20px;color:#4a5b60;">This link works once and expires in 24 hours. If you didn't ask for a reset, you can ignore this email. Your password stays the same.</p>
+              <p style="margin:0;padding-top:16px;border-top:1px solid #dce5e5;font-size:12px;line-height:16px;color:#4a5b60;">Button not working? Copy this link into your browser:<br><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery" style="color:#0e3a45;word-break:break-all;">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery</a></p>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:16px 0 0;font-family:'Figtree',Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#4a5b60;">Islands VA · Dedicated virtual assistants from the Philippines</p>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>
