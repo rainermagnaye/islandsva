@@ -2,15 +2,13 @@
 
 import { refresh } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { appRoutes } from "@/content/routes";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import { STAFF_LIMITS, type InviteField } from "./contract";
 import { getStaffProfile, getUser, saveStaffProfile } from "./dal";
-import { deactivateStaff, inviteStaff as invite, removeStaff } from "./service";
+import { deactivateStaff, inviteStaff as invite } from "./service";
 import { parseEmployers, parseInvite, parseStaffDetails, parseStaffId, withEmployers, type StaffDetailsInput } from "./validation";
 import { parseResumeText, resumeText } from "./resume-text";
 
@@ -60,26 +58,6 @@ export async function disableStaffMember(userId: string): Promise<{ ok: true } |
   }
 
   refresh();
-  return { ok: true };
-}
-
-/** Deletes a staff account. From a profile, `returnToList` leaves the page that no longer exists. */
-export async function removeStaffMember(userId: string, returnToList = false): Promise<{ ok: true } | { ok: false; message: string }> {
-  const admin = await requireRole(["admin"]);
-  const parsed = parseStaffId({ userId });
-  if (!parsed.ok) return { ok: false, message: "That account couldn't be found." };
-
-  try {
-    const result = await removeStaff(parsed.value.userId, admin.id);
-    if (!result.ok) return result;
-  } catch (error) {
-    if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff removal failed", { service: error.service, error });
-    return { ok: false, message: "We couldn't remove that account. Please try again." };
-  }
-
-  refresh();
-  if (returnToList) redirect(appRoutes.adminUsers);
   return { ok: true };
 }
 

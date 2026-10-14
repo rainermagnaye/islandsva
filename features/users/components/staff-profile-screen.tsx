@@ -8,14 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/modal";
 import { STATUS_LABELS, type AccountStatus, type RegistrationStep, type StaffDetails, type UserSummary } from "../contract";
-import { disableStaffMember, removeStaffMember } from "../actions";
+import { disableStaffMember } from "../actions";
 import { StaffProfileForm } from "./staff-profile-form";
 import { RegistrationStepper, StaffProfileView } from "./staff-profile-view";
 
 const ACCOUNT_TONES: Record<AccountStatus, BadgeTone> = { invited: "info", active: "success", inactive: "neutral" };
 
 /**
- * The profile opens read-only. Edit, disable and delete sit in the header, beside the name.
+ * The profile opens read-only. Edit and disable sit in the header, beside the name. Accounts are
+ * deactivated, never deleted, so their history stays resolvable (CLAUDE.md §7).
  * A picture is not stored yet, so the header shows initials.
  */
 export function StaffProfileScreen({
@@ -23,13 +24,11 @@ export function StaffProfileScreen({
   actorId,
   details,
   steps,
-  hasHistory,
 }: {
   user: UserSummary;
   actorId: string;
   details: StaffDetails;
   steps: RegistrationStep[];
-  hasHistory: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const name = details.fullName || user.email;
@@ -51,7 +50,6 @@ export function StaffProfileScreen({
           name={name}
           inactive={user.status === "inactive"}
           ownAccount={ownAccount}
-          hasHistory={hasHistory}
           editing={editing}
           onEdit={() => setEditing((open) => !open)}
         />
@@ -86,7 +84,6 @@ function ProfileMenu({
   name,
   inactive,
   ownAccount,
-  hasHistory,
   editing,
   onEdit,
 }: {
@@ -94,12 +91,10 @@ function ProfileMenu({
   name: string;
   inactive: boolean;
   ownAccount: boolean;
-  hasHistory: boolean;
   editing: boolean;
   onEdit: () => void;
 }) {
   const disableReason = ownAccount ? "You can't disable your own account." : inactive ? "This profile is already disabled." : undefined;
-  const deleteReason = ownAccount ? "You can't delete your own account." : hasHistory ? "This profile has client history, so it can't be deleted." : undefined;
 
   return (
     <div className="ml-auto flex flex-wrap justify-end gap-2">
@@ -107,7 +102,6 @@ function ProfileMenu({
         {editing ? "Close editor" : "Edit profile"}
       </Button>
       <DisableProfile userId={userId} name={name} disabled={disableReason !== undefined} reason={disableReason} />
-      <DeleteProfile userId={userId} name={name} disabled={deleteReason !== undefined} reason={deleteReason} />
     </div>
   );
 }
@@ -154,53 +148,6 @@ function DisableProfile({ userId, name, disabled, reason }: { userId: string; na
             </Button>
             <Button onClick={confirm} loading={pending}>
               {pending ? "Disabling" : "Disable profile"}
-            </Button>
-          </>
-        }
-      >
-        {error && <Alert tone="danger" title={error} />}
-      </Modal>
-    </>
-  );
-}
-
-function DeleteProfile({ userId, name, disabled, reason }: { userId: string; name: string; disabled: boolean; reason?: string }) {
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function confirm() {
-    setPending(true);
-    setError(undefined);
-    const result = await removeStaffMember(userId, true);
-    if (!result.ok) {
-      setError(result.message);
-      setPending(false);
-    }
-  }
-
-  return (
-    <>
-      <span title={reason}>
-        <Button variant="ghost" size="sm" iconLeft="trash" onClick={() => setOpen(true)} disabled={disabled}>
-          Delete profile
-        </Button>
-      </span>
-      <Modal
-        open={open}
-        onClose={() => {
-          if (!pending) setOpen(false);
-        }}
-        title="Delete this profile?"
-        description={`${name} will lose their sign-in. This can't be undone.`}
-        role="alertdialog"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-              Keep profile
-            </Button>
-            <Button variant="danger" onClick={confirm} loading={pending}>
-              {pending ? "Deleting" : "Delete profile"}
             </Button>
           </>
         }

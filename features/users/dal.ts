@@ -79,18 +79,10 @@ export async function setAccountInactive(userId: string) {
   if (error) throw new UpstreamError("supabase", `Deactivating ${userId} failed: ${error.message}`, { cause: error });
 }
 
-/** True when a client or assignment still points at this person, so the account has to stay. */
-export async function staffHasHistory(userId: string) {
-  const admin = createAdminClient();
-  const [clients, assignments] = await Promise.all([
-    admin.from("clients").select("id", { count: "exact", head: true }).eq("created_by", userId),
-    admin.from("client_va_assignments").select("id", { count: "exact", head: true }).eq("va_id", userId),
-  ]);
-  if (clients.error) throw new UpstreamError("supabase", `Checking clients for ${userId} failed: ${clients.error.message}`, { cause: clients.error });
-  if (assignments.error) throw new UpstreamError("supabase", `Checking assignments for ${userId} failed: ${assignments.error.message}`, { cause: assignments.error });
-  return (clients.count ?? 0) > 0 || (assignments.count ?? 0) > 0;
-}
-
+/**
+ * Only to roll back an invite whose role grant failed (service.ts) — accounts are deactivated, never
+ * deleted (CLAUDE.md §7).
+ */
 export async function deleteAuthUser(userId: string) {
   const { error } = await createAdminClient().auth.admin.deleteUser(userId);
   if (error) throw new UpstreamError("supabase-auth", `Deleting user ${userId} failed: ${error.message}`, { cause: error });

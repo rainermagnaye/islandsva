@@ -9,15 +9,13 @@ export function StaffProfile({
   user,
   actorId,
   profile,
-  hasHistory,
 }: {
   user: UserSummary;
   actorId: string;
   profile: StaffProfileRecord | null;
-  hasHistory: boolean;
 }) {
   const details: StaffDetails = { ...(profile?.details ?? emptyStaffDetails(user.fullName)), fullName: profile?.details.fullName || user.fullName };
   const sections = profile?.sections ?? staffSections(details);
 
-  return <StaffProfileScreen user={user} actorId={actorId} details={details} steps={registrationSteps(sections)} hasHistory={hasHistory} />;
+  return <StaffProfileScreen user={user} actorId={actorId} details={details} steps={registrationSteps(sections)} />;
 }
