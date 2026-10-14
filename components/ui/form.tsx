@@ -22,6 +22,7 @@ type FormProps<Field extends string> = {
   /** Runs after every failed submit, e.g. to reset a single-use captcha token. */
   onError?: (result: Extract<SubmitResult<Field>, { ok: false }>) => void;
   className?: string;
+  id?: string;
   "aria-label"?: string;
 };
 
@@ -40,6 +41,7 @@ export function Form<Field extends string = string>({
   success,
   onError,
   className,
+  id,
   "aria-label": ariaLabel,
 }: FormProps<Field>) {
   const [result, dispatch, pending] = useActionState<SubmitResult<Field> | null, FormData>(
@@ -78,6 +80,7 @@ export function Form<Field extends string = string>({
     // GET, so field values (names, emails) never end up in the URL, history or server logs.
     <form
       ref={formRef}
+      id={id}
       method="post"
       onSubmit={handleSubmit}
       aria-label={ariaLabel}

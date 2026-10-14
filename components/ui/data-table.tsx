@@ -22,6 +22,10 @@ type DataTableProps<Row> = {
   rowKey: (row: Row) => Key;
   /** Shown instead of the table when there are no rows — usually a compact EmptyState. */
   empty: ReactNode;
+  /** Keep the column headers and show `empty` in the body, inside the same rounded card. */
+  keepHeader?: boolean;
+  /** Drop the table's own border and radius when a parent card already draws them. */
+  attached?: boolean;
 };
 
 /**
@@ -30,13 +34,13 @@ type DataTableProps<Row> = {
  * label–value pairs). Server-rendered; long lists paginate server-side with Pagination. Styles: the
  * `.data-table` block in app/globals.css.
  */
-export function DataTable<Row>({ caption, showCaption, columns, rows, rowKey, empty }: DataTableProps<Row>) {
-  if (rows.length === 0) return <>{empty}</>;
+export function DataTable<Row>({ caption, showCaption, columns, rows, rowKey, empty, keepHeader = false, attached = false }: DataTableProps<Row>) {
+  if (rows.length === 0 && !keepHeader && !attached) return <>{empty}</>;
   const [first, ...rest] = columns;
 
   return (
     <div className="data-table">
-      <div className="data-table__scroll">
+      <div className={cx("data-table__scroll", attached && "data-table__scroll--plain")}>
         <table>
           <caption className={showCaption ? undefined : "sr-only"}>{caption}</caption>
           <thead>
@@ -49,16 +53,24 @@ export function DataTable<Row>({ caption, showCaption, columns, rows, rowKey, em
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={rowKey(row)}>
-                <th scope="row">{first.render(row)}</th>
-                {rest.map((column) => (
-                  <td key={column.key} data-label={column.hideLabel ? undefined : column.label} className={cx(column.align === "end" && "data-table__end")}>
-                    {column.render(row)}
-                  </td>
-                ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="data-table__empty">
+                  {empty}
+                </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((row) => (
+                <tr key={rowKey(row)}>
+                  <th scope="row">{first.render(row)}</th>
+                  {rest.map((column) => (
+                    <td key={column.key} data-label={column.hideLabel ? undefined : column.label} className={cx(column.align === "end" && "data-table__end")}>
+                      {column.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

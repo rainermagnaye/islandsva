@@ -48,8 +48,16 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
       }
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
-        <Panel boxed title="Their message">
-          <p className="m-0 whitespace-pre-wrap break-words text-ink">{lead.message}</p>
+        <Panel boxed title="Discovery call">
+          <dl className="m-0 grid gap-3 type-body-sm">
+            <Detail term="Company">{lead.companyName ?? "—"}</Detail>
+            <Detail term="Industry">{lead.industry ?? "—"}</Detail>
+            <Detail term="Country">{lead.country ?? "—"}</Detail>
+            <Detail term="Package">{packageName(lead.packageCode)}</Detail>
+            <Detail term="How can we help?">
+              <span className="whitespace-pre-wrap break-words">{lead.message}</span>
+            </Detail>
+          </dl>
         </Panel>
 
         <div className="grid gap-6">
@@ -63,8 +71,7 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
                   {lead.email}
                 </a>
               </Detail>
-              <Detail term="Company">{lead.companyName ?? "—"}</Detail>
-              <Detail term="Package">{packageName(lead.packageCode)}</Detail>
+              <Detail term="Assigned closer">{lead.closerName ?? "—"}</Detail>
               <Detail term="Received">{when.format(new Date(lead.createdAt))} UTC</Detail>
               {lead.updatedAt !== lead.createdAt && <Detail term="Last updated">{when.format(new Date(lead.updatedAt))} UTC</Detail>}
             </dl>

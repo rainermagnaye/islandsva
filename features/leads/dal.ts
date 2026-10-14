@@ -18,6 +18,8 @@ export async function insertLead(lead: NewLead): Promise<string> {
       full_name: lead.name,
       email: lead.email,
       company_name: lead.company,
+      industry: lead.industry,
+      country: lead.country,
       message: lead.message,
       package_code: lead.packageSlug,
       ip_hash: lead.ipHash,
@@ -38,61 +40,108 @@ export async function markLeadNotified(id: string) {
 // own rules — admins with two-factor sign-in only — are enforced a second time.
 
 const PAGE_SIZE = 25;
-const SUMMARY_COLUMNS = "id, full_name, email, company_name, package_code, status, created_at";
+const SUMMARY_COLUMNS = "id, full_name, email, company_name, package_code, status, closer_id, created_at";
 // Lead ids are UUIDs; anything else in a URL is a 404, not a database error.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type SummaryRow = { id: string; full_name: string; email: string; company_name: string | null; package_code: string | null; status: LeadStatus; created_at: string };
+type SummaryRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  company_name: string | null;
+  package_code: string | null;
+  status: LeadStatus;
+  closer_id: string | null;
+  created_at: string;
+};
 
-const toSummary = (row: SummaryRow): LeadSummary => ({
+const toSummary = (row: SummaryRow, closerName: string | null): LeadSummary => ({
   id: row.id,
   fullName: row.full_name,
   email: row.email,
   companyName: row.company_name,
   packageCode: row.package_code,
   status: row.status,
+  closerName,
   createdAt: row.created_at,
 });
 
+/** Names for the closers on this page. One read; a missing profile (deactivated, other tenant) stays unnamed. */
+async function closerNames(ids: readonly string[]) {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map<string, string>();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("profiles").select("id, full_name").in("id", unique);
+  if (error) throw new UpstreamError("supabase", `Reading closer names failed: ${error.message}`, { cause: error });
+  return new Map(data.map((row) => [row.id, row.full_name]));
+}
+
+async function withClosers(rows: readonly SummaryRow[]) {
+  const names = await closerNames(rows.flatMap((row) => (row.closer_id ? [row.closer_id] : [])));
+  return rows.map((row) => toSummary(row, row.closer_id ? (names.get(row.closer_id) ?? null) : null));
+}
+
 /**
- * Leads newest first, one page at a time, optionally with one status (pages start at 1; a page past the
- * end comes back empty). Backed by the (status, created_at) and (created_at) indexes.
+ * Leads newest first, one page at a time, optionally with one status and a name/email search (pages start
+ * at 1; a page past the end comes back empty). Backed by the (status, created_at) and (created_at) indexes.
+ * `search` is already stripped of filter syntax by the page.
  */
-export async function listLeads({ page = 1, status, pageSize = PAGE_SIZE }: { page?: number; status?: LeadStatus; pageSize?: number } = {}): Promise<LeadPage> {
+export async function listLeads({
+  page = 1,
+  status,
+  search,
+  pageSize = PAGE_SIZE,
+}: { page?: number; status?: LeadStatus; search?: string; pageSize?: number } = {}): Promise<LeadPage> {
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
   let query = supabase.from("leads").select(SUMMARY_COLUMNS, { count: "exact" });
   if (status) query = query.eq("status", status);
+  if (search) {
+    const pattern = `%${search}%`;
+    query = query.or(`full_name.ilike."${pattern}",email.ilike."${pattern}"`);
+  }
   const { data, error, count } = await query.order("created_at", { ascending: false }).range(from, from + pageSize - 1);
 
   // PostgREST answers a page past the end with "range not satisfiable" instead of an empty list.
   if (error?.code === "PGRST103") {
-    const total = await countLeadsWith(status);
+    const total = await countLeadsWith(status, search);
     return { leads: [], total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
   }
   if (error) throw new UpstreamError("supabase", `Listing leads failed: ${error.message}`, { cause: error });
 
   const total = count ?? 0;
-  return { leads: data.map(toSummary), total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+  return { leads: await withClosers(data), total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
 /** One lead with its message, or null if it doesn't exist (or isn't visible to the caller). */
 export async function getLead(id: string): Promise<LeadDetail | null> {
   if (!UUID.test(id)) return null;
   const supabase = await createClient();
-  const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, message, updated_at`).eq("id", id).maybeSingle();
+  const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, industry, country, message, updated_at`).eq("id", id).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading lead ${id} failed: ${error.message}`, { cause: error });
-  return data && { ...toSummary(data), message: data.message, updatedAt: data.updated_at };
+  if (!data) return null;
+  const names = await closerNames(data.closer_id ? [data.closer_id] : []);
+  return {
+    ...toSummary(data, data.closer_id ? (names.get(data.closer_id) ?? null) : null),
+    industry: data.industry,
+    country: data.country,
+    message: data.message,
+    updatedAt: data.updated_at,
+  };
 }
 
 /**
  * Head-only count (no rows transferred), of every lead or of one status. Cached per request: the sidebar
  * badge and the overview both count new leads on the same render.
  */
-const countLeadsWith = cache(async (status?: LeadStatus) => {
+const countLeadsWith = cache(async (status?: LeadStatus, search?: string) => {
   const supabase = await createClient();
   let query = supabase.from("leads").select("id", { count: "exact", head: true });
   if (status) query = query.eq("status", status);
+  if (search) {
+    const pattern = `%${search}%`;
+    query = query.or(`full_name.ilike."${pattern}",email.ilike."${pattern}"`);
+  }
   const { count, error } = await query;
   if (error) throw new UpstreamError("supabase", `Counting leads failed: ${error.message}`, { cause: error });
   return count ?? 0;

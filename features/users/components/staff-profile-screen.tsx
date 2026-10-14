@@ -1,43 +1,82 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/modal";
+import { appRoutes } from "@/content/routes";
 import { STATUS_LABELS, type AccountStatus, type RegistrationStep, type StaffDetails, type UserSummary } from "../contract";
-import { disableStaffMember } from "../actions";
+import type { StaffProfileMeta } from "../profile-fields";
+import { disableStaffMember, removeStaffMember } from "../actions";
 import { StaffProfileForm } from "./staff-profile-form";
 import { RegistrationStepper, StaffProfileView } from "./staff-profile-view";
 
 const ACCOUNT_TONES: Record<AccountStatus, BadgeTone> = { invited: "info", active: "success", inactive: "neutral" };
 
 /**
- * The profile opens read-only. Edit and disable sit in the header, beside the name. Accounts are
- * deactivated, never deleted, so their history stays resolvable (CLAUDE.md §7).
- * A picture is not stored yet, so the header shows initials.
+ * The profile opens read-only. Edit, disable and delete sit in the header, beside the name.
+ * Delete stays available only when the account has no client or assignment history.
  */
 export function StaffProfileScreen({
   user,
   actorId,
   details,
   steps,
+  meta,
+  hasHistory,
 }: {
   user: UserSummary;
   actorId: string;
   details: StaffDetails;
   steps: RegistrationStep[];
+  meta: StaffProfileMeta;
+  hasHistory: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [profilePic, setProfilePic] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [pictureVersion, setPictureVersion] = useState(0);
   const name = details.fullName || user.email;
   const ownAccount = user.id === actorId;
+
+  function choosePhoto(file: File | undefined) {
+    const next = file && file.size > 0 ? file : null;
+    setProfilePic(next);
+    setPreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return next ? URL.createObjectURL(next) : null;
+    });
+  }
+
+  function stopEditing(saved: boolean) {
+    setEditing(false);
+    setProfilePic(null);
+    if (saved) {
+      setPictureVersion(Date.now());
+      return;
+    }
+    setPreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  }
 
   return (
     <div className="grid gap-4">
       <Card as="header" padding="sm" className="flex flex-wrap items-center gap-3">
-        <Avatar name={name} />
+        <div className="relative size-12 shrink-0">
+          <Avatar key={preview ?? `${user.id}-${pictureVersion}`} name={name} src={preview ?? `/admin/users/${user.id}/avatar?v=${pictureVersion}`} />
+          {editing && (
+            <label className="absolute inset-0 grid cursor-pointer place-items-end overflow-hidden rounded-lg" title="Change picture">
+              <span className="w-full bg-ink/80 text-center type-caption text-surface-card">Edit</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => choosePhoto(event.target.files?.[0])} className="sr-only" />
+            </label>
+          )}
+        </div>
         <div className="min-w-0">
           <h1 className="m-0 truncate type-h3">{name}</h1>
           <p className="m-0 truncate type-body-sm text-ink-muted">{user.email}</p>
@@ -50,21 +89,38 @@ export function StaffProfileScreen({
           name={name}
           inactive={user.status === "inactive"}
           ownAccount={ownAccount}
+          hasHistory={hasHistory}
           editing={editing}
-          onEdit={() => setEditing((open) => !open)}
+          onEdit={() => (editing ? stopEditing(false) : setEditing(true))}
         />
       </Card>
       <RegistrationStepper steps={steps} />
       {editing ? (
-        <StaffProfileForm userId={user.id} email={user.email} details={details} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} />
+        <StaffProfileForm
+          userId={user.id}
+          email={user.email}
+          details={details}
+          meta={meta}
+          profilePic={profilePic}
+          onSaved={() => stopEditing(true)}
+          onCancel={() => stopEditing(false)}
+        />
       ) : (
-        <StaffProfileView details={details} email={user.email} />
+        <StaffProfileView details={details} email={user.email} meta={meta} />
       )}
     </div>
   );
 }
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, src }: { name: string; src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!failed) {
+    return (
+      // A small portrait served by our own route. next/image would add client JS for one 48px picture.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt="" className="size-12 shrink-0 rounded-lg object-cover" onError={() => setFailed(true)} />
+    );
+  }
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -84,6 +140,7 @@ function ProfileMenu({
   name,
   inactive,
   ownAccount,
+  hasHistory,
   editing,
   onEdit,
 }: {
@@ -91,10 +148,12 @@ function ProfileMenu({
   name: string;
   inactive: boolean;
   ownAccount: boolean;
+  hasHistory: boolean;
   editing: boolean;
   onEdit: () => void;
 }) {
   const disableReason = ownAccount ? "You can't disable your own account." : inactive ? "This profile is already disabled." : undefined;
+  const deleteReason = ownAccount ? "You can't delete your own account." : hasHistory ? "This profile has history, so it can only be disabled." : undefined;
 
   return (
     <div className="ml-auto flex flex-wrap justify-end gap-2">
@@ -102,6 +161,7 @@ function ProfileMenu({
         {editing ? "Close editor" : "Edit profile"}
       </Button>
       <DisableProfile userId={userId} name={name} disabled={disableReason !== undefined} reason={disableReason} />
+      <DeleteProfile userId={userId} name={name} disabled={deleteReason !== undefined} reason={deleteReason} />
     </div>
   );
 }
@@ -149,6 +209,58 @@ function DisableProfile({ userId, name, disabled, reason }: { userId: string; na
             </Button>
             <Button onClick={confirm} loading={pending}>
               {pending ? "Disabling" : "Disable profile"}
+            </Button>
+          </>
+        }
+      >
+        {error && <Alert tone="danger" title={error} />}
+      </Modal>
+    </>
+  );
+}
+
+function DeleteProfile({ userId, name, disabled, reason }: { userId: string; name: string; disabled: boolean; reason?: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function confirm() {
+    setPending(true);
+    setError(undefined);
+    try {
+      const result = await removeStaffMember(userId);
+      if (result.ok) router.push(appRoutes.adminUsers);
+      else setError(result.message);
+    } catch {
+      setError("We couldn't delete that account. Check your connection and try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <span title={reason}>
+        <Button variant="ghost" size="sm" iconLeft="trash" onClick={() => setOpen(true)} disabled={disabled}>
+          Delete profile
+        </Button>
+      </span>
+      <Modal
+        open={open}
+        onClose={() => {
+          if (!pending) setOpen(false);
+        }}
+        title="Delete this profile?"
+        description={`${name} is removed, along with their sign-in. This can't be undone.`}
+        role="alertdialog"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
+              Keep profile
+            </Button>
+            <Button variant="danger" onClick={confirm} loading={pending}>
+              {pending ? "Deleting" : "Delete profile"}
             </Button>
           </>
         }

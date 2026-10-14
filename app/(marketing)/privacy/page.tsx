@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <h2>What we collect</h2>
           <ul>
             <li>
-              <strong>Contact form:</strong> your name, email address, company and message.
+              <strong>Contact form:</strong> your name, email address, company, industry, country and message.
             </li>
             <li>
               <strong>Security data:</strong> a one-way hash of your IP address and your browser&apos;s user agent, used only to

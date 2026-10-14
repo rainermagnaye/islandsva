@@ -39,15 +39,16 @@ async function AdminHome() {
     <Workspace title="Admin" lead="Leads, clients and your team at a glance.">
       <section aria-label="Totals" className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total leads" value={leadCounts.total} icon="inbox" href={appRoutes.adminLeads} />
-        <StatCard label="New leads" value={leadCounts.new} icon="bell" href={`${appRoutes.adminLeads}?status=new`} />
+        <StatCard label="New leads" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />
         <StatCard label="Total clients" value={clientCount} icon="briefcase" href={appRoutes.adminClients} />
       </section>
 
       <Panel title="Latest leads" action={<ViewAll href={appRoutes.adminLeads}>All leads</ViewAll>}>
         <LeadsTable
+          variant="summary"
           leads={recentLeads.leads}
           caption="Latest leads"
-          empty={<EmptyState compact headingLevel={3} title="No leads yet" description="They appear here as soon as someone sends the contact form." />}
+          empty={<EmptyState compact headingLevel={3} title="No leads yet" description="They appear here as soon as someone sends the discovery call form." />}
         />
       </Panel>
 

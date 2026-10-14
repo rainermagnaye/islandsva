@@ -17,10 +17,21 @@ export function filterFrom<Value extends string>(value: Param, options: Readonly
   return raw && Object.hasOwn(options, raw) ? (raw as Value) : undefined;
 }
 
+/**
+ * `?q=` for the lead search. Anything that could change the database filter (wildcards, commas, dots
+ * that PostgREST treats as syntax) is dropped; a blank search means no filter.
+ */
+export function searchFrom(value: Param) {
+  const raw = first(value)?.normalize("NFKC").trim() ?? "";
+  const safe = raw.replace(/[%_\\,().]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  return safe || undefined;
+}
+
 /** A list URL keeping the given filters; page 1 and empty values are left out. */
-export function listHref(base: string, params: { status?: string; page?: number }) {
+export function listHref(base: string, params: { status?: string; page?: number; q?: string }) {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
+  if (params.q) query.set("q", params.q);
   if (params.page && params.page > 1) query.set("page", String(params.page));
   const search = query.toString();
   return search ? `${base}?${search}` : base;

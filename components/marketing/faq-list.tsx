@@ -10,10 +10,19 @@ type Faq = { question: string; answer: string };
  * sunrise × when open. Every answer starts closed until the visitor opens it. Also emits FAQPage
  * structured data for search results.
  */
-export function FaqList({ items, headingLevel = 3 }: { items: readonly Faq[]; headingLevel?: 3 | 4 }) {
+export function FaqList({
+  items,
+  headingLevel = 3,
+  align = "center",
+}: {
+  items: readonly Faq[];
+  headingLevel?: 3 | 4;
+  /** center = the marketing band. start = the left edge of the page content, full width. */
+  align?: "center" | "start";
+}) {
   const Heading = `h${headingLevel}` as const;
   return (
-    <div className="mx-auto grid w-full max-w-[820px] gap-3">
+    <div className={cx("grid w-full gap-3", align === "center" && "mx-auto max-w-[820px]")}>
       {items.map((item) => (
         <details
           key={item.question}

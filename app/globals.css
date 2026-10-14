@@ -163,6 +163,20 @@
   }
 }
 
+/* Admin: the portal header is a centered 1200px bar, and the menu is a full-bleed column, so on a wide
+   window the logo sits away from the items. Drop the cap and use the menu's own inset (its row padding
+   plus each item's padding) so the mark lines up with Overview. */
+body:has(nav[aria-label="Admin"]) .portal-header {
+  max-width: none !important;
+  margin-inline: 0 !important;
+  padding-left: 1.25rem !important;
+}
+@media (min-width: 768px) {
+  body:has(nav[aria-label="Admin"]) .portal-header {
+    padding-left: 1.5rem !important;
+  }
+}
+
 /* DataTable (components/ui/data-table.tsx) — values from the design system's DataTable. Plain CSS because
    the phone layout turns rows into cards with container queries and per-cell labels. */
 .data-table {
@@ -173,6 +187,12 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-card);
+}
+/* Inside a parent card the table must stay square — a second radius shows as a curved corner. */
+.data-table__scroll--plain {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .data-table table {
   width: 100%;
@@ -214,6 +234,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.data-table td.data-table__empty {
+  overflow: visible;
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+  text-overflow: clip;
+  white-space: normal;
+  color: var(--ink-muted);
 }
 .data-table tbody th {
   font-weight: 600;
@@ -319,5 +347,18 @@
   }
   .data-table td:not([data-label]) {
     justify-content: flex-end;
+  }
+  .data-table tr:has(td.data-table__empty) {
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+  .data-table td.data-table__empty {
+    display: block;
+    padding: var(--space-8) var(--space-4);
+    text-align: center;
+  }
+  .data-table td.data-table__empty::before {
+    content: none;
   }
 }

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
-import { parseConvert, parseLead, parseLeadStatus } from "./validation";
+import { parseAdminLead, parseConvert, parseLead, parseLeadStatus } from "./validation";
 
 const valid = {
   name: "  Ana Cruz ",
   email: " Ana@Example.COM ",
-  company: "",
+  company: " Cruz Co ",
+  industry: " Real estate ",
+  country: "Philippines",
   package: "executive",
   message: "Inbox help, please.",
   website: "",
@@ -17,14 +19,25 @@ describe("parseLead", () => {
     const result = parseLead(valid);
     expect(result).toEqual({
       ok: true,
-      value: { name: "Ana Cruz", email: "ana@example.com", company: null, packageSlug: "executive", message: "Inbox help, please." },
+      value: {
+        name: "Ana Cruz",
+        email: "ana@example.com",
+        company: "Cruz Co",
+        industry: "Real estate",
+        country: "Philippines",
+        packageSlug: "executive",
+        message: "Inbox help, please.",
+      },
       isBot: false,
       turnstileToken: "token",
     });
   });
 
-  it("accepts only the required fields", () => {
-    expect(parseLead({ name: "Ana", email: "a@b.co", message: "Hi" }).ok).toBe(true);
+  it("requires company, industry and country", () => {
+    expect(parseLead({ name: "Ana", email: "a@b.co", message: "Hi", company: " ", industry: "", country: "Atlantis" })).toMatchObject({
+      ok: false,
+      fieldErrors: { company: "Enter your company name.", industry: "Choose an industry.", country: "Choose a country." },
+    });
   });
 
   it("accepts values exactly at each limit and rejects one over", () => {
@@ -59,6 +72,22 @@ describe("parseLead", () => {
 
   it("flags a filled honeypot as a bot without failing validation", () => {
     expect(parseLead({ ...valid, website: "spam.example" })).toMatchObject({ ok: true, isBot: true });
+  });
+});
+
+describe("parseAdminLead", () => {
+  it("stores the same lead as a discovery-call submission", () => {
+    expect(parseAdminLead({ name: " Ana Cruz ", email: "Ana@Example.COM", company: "Cruz Co", industry: "Real estate", country: "Philippines", package: "", message: "Inbox help." })).toEqual({
+      ok: true,
+      value: { name: "Ana Cruz", email: "ana@example.com", company: "Cruz Co", industry: "Real estate", country: "Philippines", packageSlug: null, message: "Inbox help." },
+    });
+  });
+
+  it("requires a name, email and company", () => {
+    expect(parseAdminLead({ name: " ", email: "not-an-email", company: "", industry: "Legal", country: "Philippines", message: "Hi" })).toMatchObject({
+      ok: false,
+      fieldErrors: { name: "Enter their name.", email: expect.any(String), company: "Enter their company name." },
+    });
   });
 });
 

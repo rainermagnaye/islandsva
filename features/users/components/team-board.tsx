@@ -16,8 +16,8 @@ import { UsersTable } from "./users-table";
 const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as AccountStatus[]).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
 /**
- * The team list in the sample layout: the title, a centered search, and Filter plus Create new on the
- * right. Create new opens the invite form. Search and status run on the list already loaded for this admin.
+ * The team list: the title on the left, then search beside Filter and Create new. Create new opens the
+ * invite form. Search and status run on the list already loaded for this admin.
  */
 export function TeamBoard({ users, total }: { users: readonly UserSummary[]; total: number }) {
   const [query, setQuery] = useState("");
@@ -31,7 +31,7 @@ export function TeamBoard({ users, total }: { users: readonly UserSummary[]; tot
       if (status && user.status !== status) return false;
       if (!term) return true;
       const roles = user.roles.map((role) => ROLE_LABELS[role]).join(" ");
-      return `${user.fullName} ${user.email} ${roles}`.toLowerCase().includes(term);
+      return `${user.fullName} ${user.email} ${user.phone ?? ""} ${roles}`.toLowerCase().includes(term);
     });
   }, [users, query, status]);
 
@@ -42,10 +42,10 @@ export function TeamBoard({ users, total }: { users: readonly UserSummary[]; tot
 
   return (
     <Container className="grid gap-7 py-10 md:py-12">
-      <div className="grid items-center gap-4 lg:grid-cols-[1fr_auto_1fr]">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="m-0 type-h1">Teams</h1>
-        <SearchField label="Search teams" value={query} onChange={(event) => setQuery(event.target.value)} className="justify-self-center lg:w-70" />
-        <div className="flex flex-wrap gap-3 lg:justify-self-end">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchField label="Search teams" value={query} onChange={(event) => setQuery(event.target.value)} className="w-full sm:w-70" />
           <FilterMenu options={STATUS_OPTIONS} value={status} onChange={setStatus} />
           <Button iconLeft="plus" onClick={openInvite}>
             Create new

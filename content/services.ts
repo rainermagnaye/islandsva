@@ -16,6 +16,30 @@ export const steps: { title: string; description: string }[] = [
   { title: "Hand it off", description: "Your VA takes over, with regular check-ins and a team behind them." },
 ];
 
+/** Questions for the discovery-call page. Answers only restate what that page already says. */
+export const discoveryFaqs: { question: string; answer: string }[] = [
+  {
+    question: "Is the discovery call free?",
+    answer: "Yes. There's no cost and no commitment.",
+  },
+  {
+    question: "How long is the call?",
+    answer: "About 30 minutes. We learn how you work and what you'd like to hand off, then recommend a package.",
+  },
+  {
+    question: "How soon will you reply?",
+    answer: "Within one business day, to book the call.",
+  },
+  {
+    question: "Do I need to choose a package first?",
+    answer: "No. Leave the package as \"Not sure yet\" and we'll recommend one on the call.",
+  },
+  {
+    question: "Where is your team based?",
+    answer: "In the Philippines. The team covers day and night shifts.",
+  },
+];
+
 export const faqs: { question: string; answer: string }[] = [
   {
     question: "Where are your virtual assistants based?",
