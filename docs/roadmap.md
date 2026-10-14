@@ -21,4 +21,5 @@ What is not in the MVP is a rule for every change, so it lives in `CLAUDE.md` §
   - Split the icon set to win back ~1.2 KB per page (`/admin` is at 158.9 of 160 KB).
   - Content accessors (`getPackages()`); rename `monthlyPrice` → `monthlyPriceCents`; `type-*` instead of arbitrary font sizes.
   - Resend and revoke invites.
+  - Tenants in the app (the database is ready): act on `super_admin` in `lib/auth/roles.ts` and `requireRole`; offer "Admin" in the invite form only to Super Admins (the database refuses anyone else); Super Admin screens (tenants, cross-tenant lists); invites and the contact form choose a tenant once there is more than one.
 - **Content and legal:** prices, contact email, About story, client testimonials and logos (with written consent), legal review, privacy policy accuracy.

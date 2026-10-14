@@ -550,3 +550,138 @@ describe("hardening", () => {
     await expect(asUser(asClient, "select private.handle_new_user()")).rejects.toThrow(/permission denied/);
   });
 });
+
+describe("tenants", () => {
+  // A second tenant beside the default one. Its users start in the default tenant (as every invite does)
+  // and the server moves them, as a Super Admin would.
+  const SUPER = "00000000-0000-0000-0000-000000000010";
+  const ADMIN_B = "00000000-0000-0000-0000-0000000000b1";
+  const VA_B = "00000000-0000-0000-0000-0000000000b2";
+  const CLOSER_B = "00000000-0000-0000-0000-0000000000b3";
+  let tenantA = "";
+  let tenantB = "";
+  let clientInB = "";
+  const asSuper = token(SUPER, ["super_admin"], "aal2");
+  const asAdminB = { ...token(ADMIN_B, ["admin"], "aal2"), app_metadata: { roles: ["admin"], tenant_id: "" } };
+
+  beforeAll(async () => {
+    [{ id: tenantA }] = await asServer<{ id: string }>("select id from public.tenants where is_default");
+    [{ id: tenantB }] = await asServer<{ id: string }>("insert into public.tenants (name, slug) values ('Other agency', 'other-agency') returning id");
+    asAdminB.app_metadata.tenant_id = tenantB;
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email) values
+        ('${SUPER}', 'super@x.co'), ('${ADMIN_B}', 'admin-b@x.co'), ('${VA_B}', 'va-b@x.co'), ('${CLOSER_B}', 'closer-b@x.co')`);
+    await asServer(`update public.profiles set tenant_id = $1 where id in ('${ADMIN_B}', '${VA_B}', '${CLOSER_B}')`, [tenantB]);
+    await asServer(`
+      insert into public.roles (user_id, role) values
+        ('${SUPER}', 'super_admin'), ('${ADMIN_B}', 'admin'), ('${VA_B}', 'va'), ('${CLOSER_B}', 'closer')`);
+    [{ id: clientInB }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Delta', 'Contact', 'delta@x.co', $1) returning id",
+      [CLOSER_B],
+    );
+  });
+
+  it("every row inherits a tenant: users the default, clients their creator's, assignments their client's", async () => {
+    const tenantOf = async (sql: string) => (await asServer<{ tenant_id: string }>(sql))[0].tenant_id;
+    expect(await tenantOf(`select tenant_id from public.profiles where id = '${ADMIN}'`)).toBe(tenantA);
+    expect(await tenantOf(`select tenant_id from public.clients where id = '${clientA}'`)).toBe(tenantA);
+    expect(await tenantOf(`select tenant_id from public.client_va_assignments where client_id = '${clientA}'`)).toBe(tenantA);
+    expect(await tenantOf(`select tenant_id from public.roles where user_id = '${ADMIN_B}'`)).toBe(tenantB);
+    expect(await tenantOf(`select tenant_id from public.clients where id = '${clientInB}'`)).toBe(tenantB);
+    const [lead] = await asServer<{ tenant_id: string }>("insert into public.leads (full_name, email, message) values ('A', 'a@x.co', 'hi') returning tenant_id");
+    expect(lead.tenant_id).toBe(tenantA);
+  });
+
+  it("the token carries the user's tenant", async () => {
+    expect(((await hookRoles(ADMIN_B)) as unknown as { tenant_id: string }).tenant_id).toBe(tenantB);
+  });
+
+  it("an admin sees only their own tenant, with or without the tenant in the token", async () => {
+    expect(ids(await asUser<{ id: string }>(asAdminB, "select id from public.clients"))).toEqual([clientInB]);
+    expect(ids(await asUser<{ id: string }>(asAdminB, "select id from public.profiles"))).toEqual([ADMIN_B, CLOSER_B, VA_B].sort());
+    expect(await asUser(asAdminB, "select id from public.leads")).toEqual([]);
+    // asAdmin's token predates the tenant claim: the tenant comes from the profile.
+    const seen = ids(await asUser<{ id: string }>(asAdmin, "select id from public.clients"));
+    expect(seen).toContain(clientA);
+    expect(seen).not.toContain(clientInB);
+    expect(await asUser(asAdmin, "select id from public.profiles where id = $1", [ADMIN_B])).toEqual([]);
+    expect(await asUser(asAdmin, "select id from public.roles where user_id = $1", [VA_B])).toEqual([]);
+  });
+
+  it("other roles stay inside their tenant too", async () => {
+    expect(await asUser(token(CLOSER_B, ["closer"]), "select id from public.clients")).toHaveLength(1);
+    expect(await asUser(asCloser, "select id from public.clients where id = $1", [clientInB])).toEqual([]);
+    expect(await asUser(asAdminB, "select id from public.tenants")).toEqual([{ id: tenantB }]);
+  });
+
+  it("a Super Admin with two-factor sees every tenant; without it, nothing beyond their own rows", async () => {
+    expect(ids(await asUser<{ id: string }>(asSuper, "select id from public.clients"))).toEqual(expect.arrayContaining([clientA, clientInB]));
+    expect(await asUser(asSuper, "select id from public.tenants")).toHaveLength(2);
+    expect((await asUser(asSuper, "select id from public.leads")).length).toBeGreaterThan(0);
+    const noMfa = token(SUPER, ["super_admin"], "aal1");
+    expect(await asUser(noMfa, "select id from public.clients")).toEqual([]);
+    expect(await asUser(noMfa, "select id from public.leads")).toEqual([]);
+    expect(await asUser(noMfa, "select id from public.profiles where id = $1", [ADMIN_B])).toEqual([]);
+    expect(await asUser(noMfa, "select id from public.tenants")).toEqual([{ id: tenantA }]);
+  });
+
+  it("an admin can't change rows in another tenant", async () => {
+    expect(await asUser(asAdmin, "update public.leads set status = 'closed' where tenant_id = $1 returning id", [tenantB])).toEqual([]);
+    expect(await asUser(asAdminB, "update public.client_va_assignments set status = 'active' where client_id = $1 returning id", [clientA])).toEqual([]);
+  });
+
+  it("rows can't point at another tenant's data", async () => {
+    const [{ id: unassigned }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('H', 'C', 'h@x.co', $1) returning id",
+      [CLOSER],
+    );
+    await expect(asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [unassigned, VA_B])).rejects.toThrow(/foreign key/);
+    await expect(
+      asServer("insert into public.clients (company_name, contact_name, contact_email, created_by, tenant_id) values ('E', 'C', 'e@x.co', $1, $2)", [CLOSER_B, tenantA]),
+    ).rejects.toThrow(/foreign key/);
+    await expect(asServer("insert into public.leads (full_name, email, message, closer_id) values ('A', 'a@x.co', 'hi', $1)", [CLOSER_B])).rejects.toThrow(/foreign key/);
+  });
+
+  it("signed-in users can't set or change a row's tenant", async () => {
+    await expect(asUser(asCloser, "update public.clients set tenant_id = $1 where created_by = $2", [tenantB, CLOSER])).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(asCloser, "insert into public.clients (company_name, contact_name, contact_email, created_by, tenant_id) values ('F', 'C', 'f@x.co', $1, $2)", [CLOSER, tenantB]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "insert into public.tenants (name, slug) values ('X', 'x')")).rejects.toThrow(/permission denied/);
+  });
+
+  it("only a Super Admin grants admin rights; an admin grants roles only inside their tenant", async () => {
+    const grant = (user: string, role: string, by: string) =>
+      asServer("insert into public.roles (user_id, role, assigned_by) values ($1, $2, $3) returning id", [user, role, by]);
+    await expect(grant(VA_B, "admin", ADMIN_B)).rejects.toThrow(/only a Super Admin grants the admin role/);
+    await expect(grant(VA_B, "super_admin", ADMIN_B)).rejects.toThrow(/only a Super Admin/);
+    await expect(grant(VA_B, "closer", ADMIN)).rejects.toThrow(/admin of the same tenant/);
+    await expect(grant(VA_B, "closer", VA_B)).rejects.toThrow(/admin of the same tenant/);
+    await expect(grant(VA_B, "closer", ADMIN_B)).resolves.toHaveLength(1);
+    await expect(grant(VA_B, "admin", SUPER)).resolves.toHaveLength(1);
+    await asServer("delete from public.roles where user_id = $1 and role in ('closer', 'admin')", [VA_B]);
+  });
+
+  it("a Super Admin may stand in where an admin is allowed", async () => {
+    await expect(
+      asServer("insert into public.clients (company_name, contact_name, contact_email, created_by) values ('G', 'C', 'g@x.co', $1) returning id", [SUPER]),
+    ).resolves.toHaveLength(1);
+  });
+
+  it("moving a user carries their roles and staff profile; it's refused while they own clients", async () => {
+    await asServer("insert into public.staff_profiles (user_id) values ($1)", [VA_B]);
+    await asServer("update public.profiles set tenant_id = $1 where id = $2", [tenantA, VA_B]);
+    expect((await asServer<{ tenant_id: string }>("select tenant_id from public.roles where user_id = $1", [VA_B]))[0].tenant_id).toBe(tenantA);
+    expect((await asServer<{ tenant_id: string }>("select tenant_id from public.staff_profiles where user_id = $1", [VA_B]))[0].tenant_id).toBe(tenantA);
+    await expect(asServer("update public.profiles set tenant_id = $1 where id = $2", [tenantA, CLOSER_B])).rejects.toThrow(/foreign key/);
+  });
+
+  it("the default tenant is unique", async () => {
+    await expect(asServer("update public.tenants set is_default = true where id = $1", [tenantB])).rejects.toThrow(/duplicate key/);
+  });
+
+  it("tenant helpers can't be called by visitors", async () => {
+    await expect(as("anon", {}, "select private.tenant_id()")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asClient, "select private.assign_tenant()")).rejects.toThrow(/permission denied/);
+  });
+});

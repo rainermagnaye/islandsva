@@ -10,6 +10,7 @@ Architecture decisions and why they were made. Change one by PR, updating the ru
 | `@supabase/ssr` + `supabase-js` on the server only; CLI migrations in `supabase/` | Auth sessions and typed queries; versioned schema; browser bundle unchanged | — |
 | Roles in the access token (custom access token hook) | Role checks read the token — no database query per request | If roles must apply instantly (sign the user out on change) |
 | Admin two-factor enforced in the app and in RLS | Admins see every client's data | — |
+| Multi-tenancy prepared, one tenant: `tenant_id` on every tenant-owned row, in the token, one restrictive RLS policy per table, composite foreign keys; Super Admin (2FA) across tenants; one tenant per user | Adding a second agency later is a data change, not a rewrite; existing per-role policies stay as they are | When a second tenant arrives: tenant per contact form and invite, Super Admin screens; memberships if a user needs several tenants |
 | PGlite for database tests | Real Postgres without Docker; runs in CI | If tests need Supabase services beyond Postgres |
 | Static CSP without nonces | Keeps public pages static | Portal pages, if a script-injection risk appears there |
 | Theme follows the OS, no toggle | No script or cookie; public pages stay static | — |
