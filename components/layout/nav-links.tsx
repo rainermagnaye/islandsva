@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useCurrentPath } from "@/hooks/use-current-path";
 import { cx } from "@/lib/cx";
 
 export type NavLink = { label: string; href: string };
@@ -11,7 +11,6 @@ const linkClasses =
 
 /** Marks the current page with aria-current; the only reason this is a client component. */
 export function NavLinks({ links, variant }: { links: readonly NavLink[]; variant: "inline" | "drawer" }) {
-  const pathname = usePathname();
   return (
     <ul
       className={cx(
@@ -21,15 +20,19 @@ export function NavLinks({ links, variant }: { links: readonly NavLink[]; varian
     >
       {links.map((link) => (
         <li key={link.href} className={variant === "inline" ? "nth-[n+4]:hidden @min-[1024px]:nth-[n+4]:list-item" : undefined}>
-          <Link
-            href={link.href}
-            aria-current={pathname === link.href ? "page" : undefined}
-            className={cx(linkClasses, variant === "drawer" && "w-full text-[1rem]")}
-          >
-            {link.label}
-          </Link>
+          <SiteNavLink link={link} className={cx(linkClasses, variant === "drawer" && "w-full text-[1rem]")} />
         </li>
       ))}
     </ul>
+  );
+}
+
+/** One link; its own component because hooks can't run inside the map above. Exact match only. */
+function SiteNavLink({ link, className }: { link: NavLink; className: string }) {
+  const current = useCurrentPath(link.href, { exact: true });
+  return (
+    <Link href={link.href} aria-current={current ? "page" : undefined} className={className}>
+      {link.label}
+    </Link>
   );
 }
