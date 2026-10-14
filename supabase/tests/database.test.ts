@@ -513,6 +513,20 @@ describe("staff profiles", () => {
   it("rejects a nationality that is too long", async () => {
     await expect(asServer(`insert into public.staff_profiles (user_id, nationality) values ('${VA2}', $1)`, ["n".repeat(81)])).rejects.toThrow(/check constraint/);
   });
+
+  it("leaves registration progress to the server: nobody sets it through the API", async () => {
+    for (const claims of [asVa, asAdmin]) {
+      await expect(asUser(claims, `update public.staff_profiles set registration_status = 'completed' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+      await expect(asUser(claims, `update public.staff_profiles set registration_completed_at = now() where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    }
+    await expect(asUser(asVa2, `insert into public.staff_profiles (user_id, registration_status) values ('${VA2}', 'completed')`)).rejects.toThrow(/permission denied/);
+    expect(await asServer(`update public.staff_profiles set registration_status = 'completed' where user_id = '${VA}' returning user_id`)).toHaveLength(1);
+  });
+
+  it("only staff have a staff profile: a client can't create one for themselves", async () => {
+    await expect(asUser(asClient, `insert into public.staff_profiles (user_id) values ('${CLIENT}')`)).rejects.toThrow(/row-level security/);
+    await expect(asUser(asVa2, `insert into public.staff_profiles (user_id) values ('${VA2}') returning user_id`)).resolves.toHaveLength(1);
+  });
 });
 
 describe("hardening", () => {
