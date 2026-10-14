@@ -17,6 +17,7 @@ import { parseEmail, parseMfaCode, parseNewPassword, parseSignIn } from "./valid
 
 const UNAVAILABLE = SIGN_IN_MESSAGES.unavailable;
 const TOO_MANY = SIGN_IN_MESSAGES.rateLimited;
+const RESET_EMAIL_UNAVAILABLE = "We couldn't send the reset email right now. Please try again in a few minutes.";
 
 // A symbol, not a string, so it can never collide with an Auth error code.
 const OUTAGE = Symbol("outage");
@@ -27,7 +28,9 @@ async function attempt<T>(call: () => Promise<T>): Promise<T | typeof OUTAGE> {
     return await call();
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Supabase Auth unavailable", { service: error.service, error });
+    // The details go in the message text: some log sinks (the dev log file) drop object fields as "{}".
+    const cause = error.cause as { status?: number; code?: string } | undefined;
+    console.error(`Supabase Auth unavailable (${error.service}, ${cause?.status ?? "no status"}, ${cause?.code ?? "no code"}): ${error.message}`);
     return OUTAGE;
   }
 }
@@ -62,9 +65,12 @@ export async function requestPasswordReset(formData: FormData): Promise<SubmitRe
   if (!parsed.ok) return toSubmitResult(parsed);
 
   const code = await attempt(() => auth.sendPasswordReset(parsed.value.email));
-  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  // Supabase answers 5xx when it can't send the email (e.g. the SMTP provider refuses the sender).
+  if (code === OUTAGE) return { ok: false, message: RESET_EMAIL_UNAVAILABLE };
   if (code === "over_request_rate_limit" || code === "over_email_send_rate_limit") return { ok: false, message: TOO_MANY };
-  // Same success for unknown addresses (Supabase sends nothing then): no account enumeration.
+  // Anything else still reports success (no account enumeration), but an operator should see it.
+  if (code) console.error(`Password reset email not sent: ${code}`);
+  // Same success for unknown addresses (Supabase sends nothing then).
   return { ok: true };
 }
 
