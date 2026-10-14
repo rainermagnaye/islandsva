@@ -24,7 +24,7 @@ export function LogoLockup({
 
   return (
     <span className={cx("relative block", className)} style={{ aspectRatio: "214 / 215" }}>
-      {/* eslint-disable-next-line jsx-a11y/alt-text -- alt comes from getImageProps via the spread */}
+      {/* eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element -- a 9 KB mark served as-is at 44px (unoptimized above); alt comes from the spread */}
       <img {...props} className="block h-full w-full" />
       <span
         aria-hidden="true"
