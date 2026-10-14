@@ -5,9 +5,9 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { ConvertField, LeadStatusField } from "./contract";
-import { convertLead as convert, setLeadStatus } from "./service";
-import { parseConvert, parseLeadStatus } from "./validation";
+import type { ConvertField, LeadField, LeadStatusField } from "./contract";
+import { convertLead as convert, createLead, setLeadStatus } from "./service";
+import { parseAdminLead, parseConvert, parseLeadStatus } from "./validation";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
 
@@ -32,6 +32,24 @@ export async function convertLead(formData: FormData): Promise<SubmitResult<Conv
   }
 
   refresh(); // re-render the lead list and stats in the same round trip
+  return { ok: true };
+}
+
+/** An admin adds a lead that didn't come through the discovery form. Stored the same way, with no visitor IP. */
+export async function addLead(formData: FormData): Promise<SubmitResult<LeadField>> {
+  await requireRole(["admin"]);
+  const parsed = parseAdminLead(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  try {
+    await createLead(parsed.value, { ipHash: null, userAgent: null });
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Creating a lead failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't add this lead just now. Please try again in a moment." };
+  }
+
+  refresh();
   return { ok: true };
 }
 

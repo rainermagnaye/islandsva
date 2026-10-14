@@ -1,5 +1,6 @@
 import { emptyStaffDetails, registrationSteps, staffSections, type StaffDetails, type UserSummary } from "../contract";
 import type { StaffProfileRecord } from "../dal";
+import type { StaffProfileMeta } from "../profile-fields";
 import { StaffProfileScreen } from "./staff-profile-screen";
 
 /**
@@ -9,13 +10,22 @@ export function StaffProfile({
   user,
   actorId,
   profile,
+  hasHistory,
 }: {
   user: UserSummary;
   actorId: string;
   profile: StaffProfileRecord | null;
+  hasHistory: boolean;
 }) {
   const details: StaffDetails = { ...(profile?.details ?? emptyStaffDetails(user.fullName)), fullName: profile?.details.fullName || user.fullName };
   const sections = profile?.sections ?? staffSections(details);
+  const steps = registrationSteps(sections);
+  const meta: StaffProfileMeta = {
+    registrationStatus: profile?.registrationStatus ?? "pending",
+    invitationSentAt: profile?.invitationSentAt ?? user.createdAt,
+    registrationCompletedAt: profile?.registrationCompletedAt ?? null,
+    progress: steps.find((step) => step.current)?.label ?? "Invitation sent",
+  };
 
-  return <StaffProfileScreen user={user} actorId={actorId} details={details} steps={registrationSteps(sections)} />;
+  return <StaffProfileScreen user={user} actorId={actorId} details={details} steps={steps} meta={meta} hasHistory={hasHistory} />;
 }

@@ -8,10 +8,11 @@ import { cardSurface } from "@/components/ui/card";
 import { Form, FormSuccess } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
+import { COUNTRIES } from "@/content/countries";
 import { packages } from "@/content/packages";
 import { routes } from "@/content/routes";
 import { submitLead } from "../api-client";
-import { LEAD_LIMITS, type LeadField, type LeadPayload } from "../contract";
+import { INDUSTRIES, LEAD_LIMITS, type LeadField, type LeadPayload } from "../contract";
 import { Turnstile } from "./turnstile";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
@@ -22,6 +23,8 @@ function submit(formData: FormData) {
     name: value("name"),
     email: value("email"),
     company: value("company"),
+    industry: value("industry"),
+    country: value("country"),
     package: value("package"),
     message: value("message"),
     website: value("website"),
@@ -64,7 +67,11 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
             <TextField label="Full name" name="name" autoComplete="name" required maxLength={LEAD_LIMITS.name} error={fieldErrors.name} />
             <TextField label="Work email" name="email" type="email" autoComplete="email" required maxLength={LEAD_LIMITS.email} error={fieldErrors.email} />
           </div>
-          <TextField label="Company" name="company" autoComplete="organization" optional maxLength={LEAD_LIMITS.company} error={fieldErrors.company} />
+          <TextField label="Company" name="company" autoComplete="organization" required maxLength={LEAD_LIMITS.company} error={fieldErrors.company} />
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Select label="Industry" name="industry" required placeholder="Choose an industry" options={[...INDUSTRIES]} error={fieldErrors.industry} />
+            <Select label="Country" name="country" required autoComplete="country-name" placeholder="Choose a country" options={[...COUNTRIES]} error={fieldErrors.country} />
+          </div>
           <Select
             label="Package you're interested in"
             name="package"

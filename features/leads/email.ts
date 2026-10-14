@@ -29,7 +29,9 @@ export async function sendLeadNotification(lead: LeadInput) {
       text: [
         `Name: ${lead.name}`,
         `Email: ${lead.email}`,
-        `Company: ${lead.company ?? "—"}`,
+        `Company: ${lead.company}`,
+        `Industry: ${lead.industry}`,
+        `Country: ${lead.country}`,
         `Package: ${packageName}`,
         "",
         lead.message,

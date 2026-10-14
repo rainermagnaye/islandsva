@@ -93,6 +93,8 @@ type StaffProfileRow = {
   resume_name: string | null;
   resume_type: string | null;
   resume_bytes: string | null;
+  avatar_type: string | null;
+  avatar_bytes: string | null;
   registration_status: Enum<"staff_registration_status">;
   invitation_sent_at: string;
   registration_completed_at: string | null;
@@ -105,6 +107,8 @@ type LeadRow = {
   full_name: string;
   email: string;
   company_name: string | null;
+  industry: string | null;
+  country: string | null;
   message: string;
   package_code: string | null;
   status: Enum<"lead_status">;
@@ -203,7 +207,7 @@ export type Database = {
       assignment_status: "active" | "ended";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
       staff_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
-      staff_marital_status: "single" | "married" | "widowed" | "separated" | "prefer_not_to_say";
+      staff_marital_status: "single" | "married" | "widowed" | "divorced" | "separated" | "prefer_not_to_say";
       staff_registration_status: "pending" | "in_progress" | "completed";
     };
     CompositeTypes: { [_ in never]: never };

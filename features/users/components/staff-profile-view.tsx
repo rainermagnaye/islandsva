@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
-import { GENDER_LABELS, MARITAL_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
+import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
+import { formatAddress, formatProfileDate, type StaffProfileMeta } from "../profile-fields";
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
@@ -16,13 +17,8 @@ function shownDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : when.format(date);
 }
 
-function address(street: string, city: string, province: string, postal: string) {
-  const line = [street, city, province, postal].map((part) => part.trim()).filter(Boolean);
-  return line.length > 0 ? line.join(", ") : "Not provided";
-}
-
-/** Read-only profile sections. Editing happens in the form, not on this view. */
-export function StaffProfileView({ details, email }: { details: StaffDetails; email: string }) {
+/** Read-only profile sections. Editing replaces each value with a field and keeps these cards. */
+export function StaffProfileView({ details, email, meta }: { details: StaffDetails; email: string; meta: StaffProfileMeta }) {
   const emergency = [details.emergencyName, details.emergencyRelationship, details.emergencyPhone].map((part) => part.trim()).filter(Boolean);
   const jobs = details.employers.filter((job) => job.company.trim() || job.position.trim() || job.duration.trim());
 
@@ -30,14 +26,15 @@ export function StaffProfileView({ details, email }: { details: StaffDetails; em
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="grid gap-4">
         <DetailsCard title="Basic details">
+          <Field label="Full name" value={shown(details.fullName)} />
           <Field label="Date of birth" value={shownDate(details.dateOfBirth)} />
           <Field label="Gender" value={details.gender ? GENDER_LABELS[details.gender] : "Not provided"} />
           <Field label="Nationality" value={shown(details.nationality)} />
           <Field label="Marital status" value={details.maritalStatus ? MARITAL_LABELS[details.maritalStatus] : "Not provided"} />
         </DetailsCard>
         <DetailsCard title="Address information">
-          <Field label="Current address" value={address(details.currentStreet, details.currentCity, details.currentProvince, details.currentPostalCode)} wide />
-          <Field label="Permanent address" value={address(details.permanentStreet, details.permanentCity, details.permanentProvince, details.permanentPostalCode)} wide />
+          <Field label="Current address" value={shown(formatAddress(details.currentStreet, details.currentCity, details.currentProvince, details.currentPostalCode))} wide />
+          <Field label="Permanent address" value={shown(formatAddress(details.permanentStreet, details.permanentCity, details.permanentProvince, details.permanentPostalCode))} wide />
         </DetailsCard>
         <DetailsCard title="Education and skills">
           <Field label="Highest education" value={shown(details.highestEducation)} />
@@ -69,6 +66,14 @@ export function StaffProfileView({ details, email }: { details: StaffDetails; em
           )}
           <Field label="Key responsibilities" value={shown(details.keyResponsibilities)} wide />
           <Field label="Achievements" value={shown(details.achievements)} wide />
+        </DetailsCard>
+      </div>
+      <div className="lg:col-span-2">
+        <DetailsCard title="System metadata">
+          <Field label="Registration status" value={REGISTRATION_STATUS_LABELS[meta.registrationStatus]} />
+          <Field label="Progress tracker" value={meta.progress} />
+          <Field label="Date of invitation sent" value={formatProfileDate(meta.invitationSentAt)} />
+          <Field label="Date of registration completed" value={formatProfileDate(meta.registrationCompletedAt)} />
         </DetailsCard>
       </div>
     </div>
@@ -120,7 +125,7 @@ function Field({ label, value, wide = false }: { label: string; value: string; w
   return (
     <div className={wide ? "min-w-0 sm:col-span-2" : "min-w-0"}>
       <dt className="type-caption text-ink-muted">{label}</dt>
-      <dd className={`m-0 type-body-sm ${empty ? "text-ink-muted" : "text-ink"}`}>{value}</dd>
+      <dd className={`m-0 whitespace-pre-line type-body-sm ${empty ? "text-ink-muted" : "text-ink"}`}>{value}</dd>
     </div>
   );
 }

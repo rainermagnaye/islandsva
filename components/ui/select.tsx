@@ -1,6 +1,6 @@
 import type { SelectHTMLAttributes } from "react";
 import { cx } from "@/lib/cx";
-import { Field, controlClasses, describedBy } from "./field";
+import { Field, compactControlClasses, controlClasses, describedBy } from "./field";
 import { Icon } from "./icon";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
@@ -16,14 +16,16 @@ type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "name" | "id" |
   hint?: string;
   error?: string;
   optional?: boolean;
+  /** One-line height so the menu matches a profile view cell. */
+  compact?: boolean;
   className?: string;
 };
 
 /** Native <select>: free keyboard support, screen-reader semantics and the OS picker on phones. */
-export function Select({ label, name, id = `field-${name}`, options, placeholder, hint, error, optional, className, ...rest }: SelectProps) {
+export function Select({ label, name, id = `field-${name}`, options, placeholder, hint, error, optional, compact, className, ...rest }: SelectProps) {
   return (
-    <Field id={id} label={label} hint={hint} error={error} required={rest.required} optional={optional}>
-      <div className="relative">
+    <Field id={id} label={label} hint={hint} error={error} required={rest.required} optional={optional} compact={compact}>
+      <div className="relative w-full min-w-0 max-w-full">
         <select
           defaultValue={placeholder && rest.value === undefined && rest.defaultValue === undefined ? "" : undefined}
           {...rest}
@@ -31,7 +33,7 @@ export function Select({ label, name, id = `field-${name}`, options, placeholder
           name={name}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy(id, hint, error)}
-          className={cx(controlClasses, "cursor-pointer appearance-none pr-11", className)}
+          className={cx(compact ? compactControlClasses : controlClasses, "cursor-pointer appearance-none pr-8", className)}
         >
           {placeholder && (
             <option value="" disabled>

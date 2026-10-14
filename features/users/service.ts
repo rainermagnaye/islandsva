@@ -1,6 +1,6 @@
 import "server-only";
 import { appRoutes } from "@/content/routes";
-import { deleteAuthUser, grantRole, inviteAuthUser, setAccountInactive } from "./dal";
+import { deleteAuthUser, grantRole, inviteAuthUser, setAccountInactive, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -33,5 +33,23 @@ export async function inviteStaff(input: InviteInput, invitedBy: string, origin:
 export async function deactivateStaff(userId: string, actorId: string) {
   if (userId === actorId) return { ok: false as const, message: "You can't disable your own account." };
   await setAccountInactive(userId);
+  return { ok: true as const };
+}
+
+/**
+ * Removes an account that has no client or assignment history. Anything else is deactivated instead,
+ * so the record of who did the work stays resolvable.
+ */
+export async function removeStaff(userId: string, actorId: string) {
+  if (userId === actorId) return { ok: false as const, message: "You can't delete your own account." };
+  if (await staffHasHistory(userId)) return { ok: false as const, message: "This profile has history, so it can only be disabled." };
+  try {
+    await deleteAuthUser(userId);
+  } catch (error) {
+    if (error instanceof Error && /restrict|foreign key|database error deleting/i.test(error.message)) {
+      return { ok: false as const, message: "This profile has history, so it can only be disabled." };
+    }
+    throw error;
+  }
   return { ok: true as const };
 }

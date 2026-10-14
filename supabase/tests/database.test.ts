@@ -370,6 +370,13 @@ describe("leads", () => {
     );
   };
 
+  it("stores industry and country, and rejects a value past the limit", async () => {
+    const [lead] = await insert({ industry: "Real estate", country: "Philippines" });
+    expect(await asServer("select industry, country from public.leads where id = $1", [lead.id])).toEqual([{ industry: "Real estate", country: "Philippines" }]);
+    await expect(insert({ industry: "x".repeat(81) })).rejects.toThrow(/check constraint/);
+    await expect(insert({ country: "x".repeat(81) })).rejects.toThrow(/check constraint/);
+  });
+
   it("stores a contact-form lead and marks it notified", async () => {
     const [lead] = await insert({ package_code: "executive", ip_hash: "a".repeat(64), user_agent: "UA" });
     await expect(asServer("update public.leads set notified_at = now() where id = $1", [lead.id])).resolves.toBeDefined();
@@ -513,6 +520,7 @@ describe("staff profiles", () => {
     await expect(asUser(asVa, `insert into public.staff_profiles (user_id) values ('${VA2}')`)).rejects.toThrow(/row-level security/);
     await expect(asUser(asAdmin, `delete from public.staff_profiles where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
     await expect(asUser(asVa, `update public.staff_profiles set resume_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    await expect(asUser(asVa, `update public.staff_profiles set avatar_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
   });
 
   it("rejects a nationality that is too long", async () => {

@@ -6,10 +6,16 @@ import { adminUserHref } from "@/content/routes";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { STATUS_LABELS, type AccountStatus, type UserSummary } from "../contract";
 
-const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
-
 // Invited = waiting on them to accept, active = signed in, deactivated = no action needed.
 const TONES: Record<AccountStatus, BadgeTone> = { invited: "info", active: "success", inactive: "neutral" };
+
+function clipped(value: string) {
+  return (
+    <span className="block truncate" title={value}>
+      {value}
+    </span>
+  );
+}
 
 const COLUMNS: Column<UserSummary>[] = [
   {
@@ -21,7 +27,8 @@ const COLUMNS: Column<UserSummary>[] = [
       </Link>
     ),
   },
-  { key: "email", label: "Email Address", render: (user) => <span title={user.email}>{user.email}</span> },
+  { key: "email", label: "Email Address", render: (user) => clipped(user.email) },
+  { key: "phone", label: "Phone Number", render: (user) => (user.phone ? clipped(user.phone) : "—") },
   { key: "roles", label: "Roles", render: (user) => user.roles.map((role) => ROLE_LABELS[role]).join(", ") || "—" },
   {
     key: "status",
@@ -32,7 +39,6 @@ const COLUMNS: Column<UserSummary>[] = [
       </Badge>
     ),
   },
-  { key: "joined", label: "Joined", render: (user) => <span className="whitespace-nowrap text-ink-muted">{joined.format(new Date(user.createdAt))}</span> },
 ];
 
 export function UsersTable({ users, headingLevel = 2 }: { users: readonly UserSummary[]; headingLevel?: 2 | 3 }) {

@@ -8,6 +8,8 @@ type FilterTabsProps<Value extends string> = {
   href: string;
   options: Readonly<Record<Value, string>>;
   current: Value | undefined;
+  /** Kept on every tab link, e.g. the current search. */
+  search?: string;
 };
 
 /**
@@ -15,7 +17,7 @@ type FilterTabsProps<Value extends string> = {
  * tabs that need their own URL): shareable, the back button works, no client JavaScript. Changing the
  * filter starts again at page 1.
  */
-export function FilterTabs<Value extends string>({ label, href, options, current }: FilterTabsProps<Value>) {
+export function FilterTabs<Value extends string>({ label, href, options, current, search }: FilterTabsProps<Value>) {
   const tabs: [Value | undefined, string][] = [[undefined, "All"], ...(Object.entries(options) as [Value, string][])];
 
   return (
@@ -24,7 +26,7 @@ export function FilterTabs<Value extends string>({ label, href, options, current
         {tabs.map(([value, text]) => (
           <li key={value ?? "all"}>
             <Link
-              href={listHref(href, { status: value })}
+              href={listHref(href, { status: value, q: search })}
               aria-current={value === current ? "page" : undefined}
               className="inline-flex min-h-9 items-center rounded-pill px-4 type-label whitespace-nowrap text-ink-muted no-underline transition-colors hover:bg-action-ghost-hover hover:text-ink aria-[current=page]:bg-surface-card aria-[current=page]:text-action-secondary aria-[current=page]:elevation-sm"
             >

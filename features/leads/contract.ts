@@ -4,13 +4,32 @@ import type { Enums } from "@/types/database";
 // and keeping the schema (validation.ts, server-only) out of it keeps Zod out of the browser bundle.
 
 /** Length limits — form `maxLength` and server checks. Mirrored by CHECK constraints on the leads table. */
-export const LEAD_LIMITS = { name: 120, email: 254, company: 160, message: 5000 } as const;
+export const LEAD_LIMITS = { name: 120, email: 254, company: 160, industry: 80, country: 80, message: 5000 } as const;
+
+/** Industries the discovery form offers. Stored as the label; the column stays plain text. */
+export const INDUSTRIES = [
+  "Accounting and finance",
+  "Construction",
+  "Consulting",
+  "Education",
+  "Healthcare",
+  "Hospitality",
+  "Legal",
+  "Marketing",
+  "Real estate",
+  "Retail",
+  "Technology",
+  "Travel",
+  "Other",
+] as const;
 
 /** Exact JSON body of POST /api/v1/leads. */
 export type LeadPayload = {
   name: string;
   email: string;
   company: string;
+  industry: string;
+  country: string;
   package: string;
   message: string;
   /** Honeypot — people leave it empty. */
@@ -19,7 +38,7 @@ export type LeadPayload = {
 };
 
 /** Form inputs that can show a field error (matches the input `name`s). */
-export type LeadField = "name" | "email" | "company" | "message" | "package";
+export type LeadField = "name" | "email" | "company" | "industry" | "country" | "message" | "package";
 
 /** `data` of a successful POST /api/v1/leads. Nothing about the stored lead is exposed. */
 export type LeadCreated = { ok: true };
@@ -37,6 +56,15 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 };
 
 export const LEAD_STATUSES = Object.keys(LEAD_STATUS_LABELS) as LeadStatus[];
+
+/** Lead-list tabs. A junk lead is one that was closed. */
+export const LEAD_VIEWS = {
+  contacted: "Contacted",
+  converted: "Converted Leads",
+  closed: "Junk Leads",
+} as const satisfies Partial<Record<LeadStatus, string>>;
+
+export type LeadView = keyof typeof LEAD_VIEWS;
 
 /** Statuses an admin sets by hand. "Converted" is set only by converting the lead into a client. */
 export const TRIAGE_STATUSES = ["new", "contacted", "qualified", "closed"] as const satisfies readonly LeadStatus[];
@@ -71,6 +99,8 @@ export type LeadSummary = {
   companyName: string | null;
   packageCode: string | null;
   status: LeadStatus;
+  /** Name of the assigned closer, when `closer_id` points at a profile this admin can read. */
+  closerName: string | null;
   createdAt: string;
 };
 
@@ -78,7 +108,7 @@ export type LeadSummary = {
 export type LeadPage = { leads: LeadSummary[]; total: number; page: number; pageCount: number };
 
 /** One lead on its own admin page: the summary plus the visitor's message. */
-export type LeadDetail = LeadSummary & { message: string; updatedAt: string };
+export type LeadDetail = LeadSummary & { message: string; industry: string | null; country: string | null; updatedAt: string };
 
 export type LeadStatusField = "status";
 

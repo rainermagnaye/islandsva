@@ -15,6 +15,8 @@ export type UserSummary = {
   id: string;
   email: string;
   fullName: string;
+  /** Mobile number from the staff profile, when one has been saved. */
+  phone: string | null;
   roles: Role[];
   status: AccountStatus;
   createdAt: string;
@@ -47,6 +49,7 @@ export const STAFF_LIMITS = {
   employers: 8,
   resumeName: 200,
   resumeBytes: 2_097_152,
+  avatarBytes: 524_288,
 } as const;
 
 export const GENDERS = ["female", "male", "non_binary", "prefer_not_to_say"] as const;
@@ -54,22 +57,34 @@ export type StaffGender = (typeof GENDERS)[number];
 export const GENDER_LABELS: Record<StaffGender, string> = {
   female: "Female",
   male: "Male",
-  non_binary: "Non-binary",
+  non_binary: "Other",
   prefer_not_to_say: "Prefer not to say",
 };
 
-export const MARITAL_STATUSES = ["single", "married", "widowed", "separated", "prefer_not_to_say"] as const;
+/** The choices the profile form offers. Stored values stay on the existing gender set. */
+export const GENDER_CHOICES = ["male", "female", "non_binary"] as const satisfies readonly StaffGender[];
+
+export const MARITAL_STATUSES = ["single", "married", "widowed", "divorced", "separated", "prefer_not_to_say"] as const;
 export type MaritalStatus = (typeof MARITAL_STATUSES)[number];
 export const MARITAL_LABELS: Record<MaritalStatus, string> = {
   single: "Single",
   married: "Married",
   widowed: "Widowed",
+  divorced: "Divorced",
   separated: "Separated",
   prefer_not_to_say: "Prefer not to say",
 };
 
+/** The choices the profile form offers. Older rows may still be Separated or Prefer not to say. */
+export const MARITAL_CHOICES = ["single", "married", "widowed", "divorced"] as const satisfies readonly MaritalStatus[];
+
 export const REGISTRATION_STATUSES = ["pending", "in_progress", "completed"] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
+export const REGISTRATION_STATUS_LABELS: Record<RegistrationStatus, string> = {
+  pending: "Pending",
+  in_progress: "In progress",
+  completed: "Completed",
+};
 
 export type StaffEmployer = { company: string; position: string; duration: string };
 

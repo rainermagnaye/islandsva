@@ -20,7 +20,8 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
     .limit(limit);
   if (error) throw new UpstreamError("supabase", `Listing users failed: ${error.message}`, { cause: error });
 
-  return data.map(toSummary);
+  const phones = await phoneNumbers(data.map((row) => row.id));
+  return data.map((row) => toSummary(row, phones.get(row.id) ?? null));
 }
 
 /** How many accounts the signed-in admin can see. Head-only count: no rows are transferred. */
@@ -40,7 +41,18 @@ export async function getUser(id: string): Promise<UserSummary | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading user ${id} failed: ${error.message}`, { cause: error });
-  return data ? toSummary(data) : null;
+  if (!data) return null;
+  const phones = await phoneNumbers([data.id]);
+  return toSummary(data, phones.get(data.id) ?? null);
+}
+
+/** Mobile numbers for these accounts. People without a staff profile, or with it blank, are absent. */
+async function phoneNumbers(ids: readonly string[]) {
+  if (ids.length === 0) return new Map<string, string>();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("staff_profiles").select("user_id, mobile_number").in("user_id", [...ids]);
+  if (error) throw new UpstreamError("supabase", `Reading phone numbers failed: ${error.message}`, { cause: error });
+  return new Map(data.flatMap((row) => (row.mobile_number ? [[row.user_id, row.mobile_number] as const] : [])));
 }
 
 function toSummary(row: {
@@ -50,11 +62,12 @@ function toSummary(row: {
   status: UserSummary["status"];
   created_at: string;
   roles: { role: Role }[];
-}): UserSummary {
+}, phone: string | null): UserSummary {
   return {
     id: row.id,
     email: row.email,
     fullName: row.full_name,
+    phone,
     roles: ROLES.filter((role) => row.roles.some((granted) => granted.role === role)),
     status: row.status,
     createdAt: row.created_at,
@@ -127,7 +140,49 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
  * Saves the profile with the secret key. profiles has no update policy, and resume bytes are not granted
  * to the API, so this runs only after the caller has checked the admin role.
  */
-export async function saveStaffProfile(userId: string, invitedAt: string, details: StaffDetails, resume?: { name: string; type: string; bytes: Uint8Array }) {
+export async function staffHasHistory(userId: string) {
+  const supabase = await createClient();
+  const [clients, assignments] = await Promise.all([
+    supabase.from("clients").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    supabase.from("client_va_assignments").select("id", { count: "exact", head: true }).eq("va_id", userId),
+  ]);
+  if (clients.error) throw new UpstreamError("supabase", `Checking client history for ${userId} failed: ${clients.error.message}`, { cause: clients.error });
+  if (assignments.error) throw new UpstreamError("supabase", `Checking assignment history for ${userId} failed: ${assignments.error.message}`, { cause: assignments.error });
+  return (clients.count ?? 0) > 0 || (assignments.count ?? 0) > 0;
+}
+
+/**
+ * The picture bytes are not granted to the API (same as a résumé), so this read uses the secret key
+ * after the caller has checked the admin role.
+ */
+export async function getStaffAvatar(userId: string): Promise<{ type: string; bytes: Uint8Array } | null> {
+  const { data, error } = await createAdminClient().from("staff_profiles").select("avatar_type, avatar_bytes").eq("user_id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading profile picture ${userId} failed: ${error.message}`, { cause: error });
+  if (!data?.avatar_type || !data.avatar_bytes) return null;
+  return { type: data.avatar_type, bytes: decodeBytea(data.avatar_bytes) };
+}
+
+function decodeBytea(value: string) {
+  const hex = value.startsWith("\\x") ? value.slice(2) : /^[0-9a-fA-F]+$/.test(value) ? value : "";
+  if (hex && hex.length % 2 === 0) return Uint8Array.from(Buffer.from(hex, "hex"));
+  return Uint8Array.from(Buffer.from(value, "base64"));
+}
+
+/** Changes the sign-in email. A trigger copies it onto the profile. */
+export async function updateStaffEmail(userId: string, email: string) {
+  const { error } = await createAdminClient().auth.admin.updateUserById(userId, { email, email_confirm: true });
+  if (!error) return { ok: true as const };
+  if (error.code === "email_exists" || /already/i.test(error.message)) return { ok: false as const, reason: "exists" as const };
+  throw new UpstreamError("supabase-auth", `Updating email ${userId} failed: ${error.message}`, { cause: error });
+}
+
+export async function saveStaffProfile(
+  userId: string,
+  invitedAt: string,
+  details: StaffDetails,
+  resume?: { name: string; type: string; bytes: Uint8Array },
+  avatar?: { type: string; bytes: Uint8Array },
+) {
   const admin = createAdminClient();
   const { data: existing, error: readError } = await admin
     .from("staff_profiles")
@@ -173,6 +228,9 @@ export async function saveStaffProfile(userId: string, invitedAt: string, detail
     registration_completed_at: completedAt,
     ...(resume
       ? { resume_type: resume.type, resume_bytes: `\\x${Buffer.from(resume.bytes).toString("hex")}` }
+      : {}),
+    ...(avatar
+      ? { avatar_type: avatar.type, avatar_bytes: `\\x${Buffer.from(avatar.bytes).toString("hex")}` }
       : {}),
   };
 
