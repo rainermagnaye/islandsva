@@ -6,10 +6,10 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { STAFF_LIMITS, type InviteField } from "./contract";
+import { STAFF_LIMITS, type InviteField, type StaffDetailField } from "./contract";
 import { getStaffProfile, getUser, saveStaffProfile } from "./dal";
 import { deactivateStaff, inviteStaff as invite } from "./service";
-import { parseEmployers, parseInvite, parseStaffDetails, parseStaffId, withEmployers, type StaffDetailsInput } from "./validation";
+import { parseEmployers, parseInvite, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
 import { parseResumeText, resumeText } from "./resume-text";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
@@ -67,7 +67,7 @@ const RESUME_TYPES: Record<string, string> = {
 };
 
 /** Saves the staff profile. A résumé fills any section the form left blank when the file has those headings. */
-export async function saveStaffProfileForm(formData: FormData): Promise<SubmitResult<keyof StaffDetailsInput>> {
+export async function saveStaffProfileForm(formData: FormData): Promise<SubmitResult<StaffDetailField>> {
   await requireRole(["admin"]);
   const parsedId = parseStaffId({ userId: formData.get("userId") });
   if (!parsedId.ok) return { ok: false, message: "That account couldn't be found." };
