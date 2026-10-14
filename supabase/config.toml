@@ -1,6 +1,6 @@
 # Supabase CLI settings for this repo. Only what differs from the CLI defaults is listed.
 # The hosted project's Auth settings are set in the Dashboard (or `npx supabase config push`); keep them in
-# step with this file — see CLAUDE.md §6 and §11.
+# step with this file — the steps are in docs/operations.md (Supabase).
 
 project_id = "islandsva"
 
