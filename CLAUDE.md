@@ -35,7 +35,7 @@ npm run admin:create -- <email>        # make an account admin in the project .e
 npx supabase migration new <name>      # new SQL file in supabase/migrations/
 ```
 
-`lint`, `typecheck`, `test` and `build` must pass before every push — run them one after another (the PGlite suite can starve in parallel). No `format` script or CI yet.
+`lint`, `typecheck`, `test` and `build` must pass before every push — run them one after another (the PGlite suite can starve in parallel). CI (`.github/workflows/ci.yml`) runs all five, plus `npm run size`, on every PR and push to `main`. No `format` script yet.
 
 **Gotchas:** `next build` while `next dev` runs in the same folder leaves the dev server serving stale CSS — restart it, or build in a separate `git worktree`. Windows paths in `node_modules` can exceed 260 characters; delete such folders with `\\?\`-prefixed paths.
 
@@ -150,7 +150,7 @@ vercel.json           function region sin1 (next to Supabase)
 
 ## 9. Workflow and documentation
 
-- `main` changes only by PR with approval (plus green CI once it exists). Branches `feat/` `fix/` `chore/` `refactor/` `db/`, short-lived; Conventional Commits (`feat(contact): add lead form`).
+- `main` changes only by PR with approval and green CI; fill in the PR template (`.github/pull_request_template.md`). Branches `feat/` `fix/` `chore/` `refactor/` `db/`, short-lived; Conventional Commits (`feat(contact): add lead form`).
 - PRs under 400 lines, describing changes, trade-offs, testing and any env var, dependency or schema change. 1 approval; 2 for database, auth, security or payments.
 - **Where documentation lives:** this file = everyday rules and the map; `supabase/CLAUDE.md` and `components/CLAUDE.md` = their area's rules (loaded only when working there); `docs/` = runbooks, decisions and roadmap for people. Each fact in exactly one place — link, don't copy. `README.md` only points here; no other READMEs, folder guides or doc folders without a PR that updates this rule.
 - A PR that changes a convention, folder, script, env var or decision updates the right file above in the same PR.
