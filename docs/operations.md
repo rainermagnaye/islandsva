@@ -14,7 +14,7 @@ How to set up, change and run the live project. Rules for writing code are in `C
 Project ref: `qqqfahnyajwgugylcbtn` (Singapore). `supabase/config.toml` only configures a local stack — every hosted setting below is made in the Supabase dashboard.
 
 - **Access token hook** (required — without it nobody gets a role): Authentication → Auth Hooks → Customize Access Token → Postgres, `public.custom_access_token_hook`. Enabled 2026-10-13.
-- **Sign-ups:** disable (accounts are invite-only). *Pending.*
+- **Sign-ups:** Authentication → Sign In / Providers → turn **"Allow new users to sign up" off** (accounts are invite-only). *Pending.* Leave the **Email provider enabled** — switching it off disables password sign-in for everyone (`email_provider_disabled`; it happened on 2026-10-14).
 - **URLs:** Site URL, plus redirect URLs `/auth/confirm` and, while the temporary invite flow exists, `/accept-invite`. *Pending for production.*
 - **Email:** 24-hour link expiry, password rules (10–72, letters and digits), custom SMTP (Resend) and the two `supabase/templates/`. *Pending* — the hosted free plan rejects template changes until custom SMTP is set.
 
@@ -41,6 +41,10 @@ If any statement fails, the transaction rolls back and nothing is applied.
 1. Create the user in the dashboard (Authentication → Users), or invite them from Teams once an admin exists.
 2. Grant the role: `npm run admin:create -- <email>` against the project `.env.local` points at (you type the password), or insert a `roles` row (`role = 'admin'`) in the SQL editor.
 3. They sign in, set up an authenticator app at `/mfa`, and land on `/admin`.
+
+## Troubleshooting sign-in
+
+The server log names the Supabase Auth code (`Sign-in failed (configuration): <code>`). `email_provider_disabled` → re-enable the Email provider; `invalid_api_key` → check `SUPABASE_PUBLISHABLE_KEY`; an account that signs in but lands on "not set up yet" → the access token hook is off or the account has no role.
 
 ## Local development
 
