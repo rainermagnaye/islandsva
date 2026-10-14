@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/modal";
 import { STATUS_LABELS, type AccountStatus, type RegistrationStep, type StaffDetails, type UserSummary } from "../contract";
@@ -35,7 +36,7 @@ export function StaffProfileScreen({
 
   return (
     <div className="grid gap-4">
-      <header className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-card px-4 py-3">
+      <Card as="header" padding="sm" className="flex flex-wrap items-center gap-3">
         <Avatar name={name} />
         <div className="min-w-0">
           <h1 className="m-0 truncate type-h3">{name}</h1>
@@ -52,7 +53,7 @@ export function StaffProfileScreen({
           editing={editing}
           onEdit={() => setEditing((open) => !open)}
         />
-      </header>
+      </Card>
       <RegistrationStepper steps={steps} />
       {editing ? (
         <StaffProfileForm userId={user.id} email={user.email} details={details} onSaved={() => setEditing(false)} onCancel={() => setEditing(false)} />

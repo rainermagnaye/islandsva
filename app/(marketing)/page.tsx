@@ -6,6 +6,7 @@ import { Hero } from "@/components/marketing/hero";
 import { PackageCards } from "@/components/marketing/package-cards";
 import { Section } from "@/components/marketing/section";
 import { TestimonialGrid } from "@/components/marketing/testimonial-card";
+import { Card } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
 import { routes } from "@/content/routes";
@@ -44,13 +45,13 @@ export default function HomePage() {
       <Section id="how-it-works" align="center" eyebrow="How it works" title="From first call to first task in days" lead="We handle the hiring, matching and onboarding. You get an assistant who's ready to work.">
         <ol className="reveal-stagger m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map((step, i) => (
-            <li key={step.title} className="reveal grid content-start gap-3 rounded-lg border border-border bg-surface-card p-6 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:elevation-md">
+            <Card as="li" lift key={step.title} className="reveal grid content-start gap-3">
               <span className="grid size-11 place-items-center rounded-pill bg-action-primary font-display text-[1.25rem] font-bold text-on-action-primary">
                 {i + 1}
               </span>
               <h3 className="m-0 type-h3">{step.title}</h3>
               <p className="m-0 text-ink-muted">{step.description}</p>
-            </li>
+            </Card>
           ))}
         </ol>
       </Section>

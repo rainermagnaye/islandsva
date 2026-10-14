@@ -1,4 +1,6 @@
+import { cardSurface } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
+import { cx } from "@/lib/cx";
 
 type Faq = { question: string; answer: string };
 
@@ -15,7 +17,7 @@ export function FaqList({ items, headingLevel = 3 }: { items: readonly Faq[]; he
       {items.map((item) => (
         <details
           key={item.question}
-          className="group reveal rounded-lg border border-border bg-surface-card transition-[border-color,box-shadow] open:border-border-strong open:elevation-sm"
+          className={cx(cardSurface, "group reveal transition-[border-color,box-shadow] open:border-border-strong open:elevation-sm")}
         >
           <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 rounded-lg px-5 py-4 text-ink hover:text-action-secondary [&::-webkit-details-marker]:hidden">
             <Heading className="m-0 font-sans text-[1.0625rem] leading-6 font-semibold">{item.question}</Heading>

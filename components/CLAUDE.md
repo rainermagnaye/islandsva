@@ -6,7 +6,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 
 ## Folders
 
-- `ui/` — design-system primitives (Button, Form, TextField, Modal, Badge, Alert, EmptyState, StatCard, DataTable, Pagination, Breadcrumbs, …). No data fetching, no feature imports.
+- `ui/` — design-system primitives (Button, Form, TextField, FileField, Modal, Badge, Alert, EmptyState, Card, Panel, StatCard, DataTable, Pagination, Breadcrumbs, SearchField, FilterMenu, StepList, …). No data fetching, no feature imports.
 - `layout/` — site shell, nav, footer, logo, portal `Workspace`.
 - `marketing/` — public-page sections (Hero, Section, FAQ, testimonials, CTA band, package cards).
 
@@ -14,6 +14,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 
 - `design/tokens.json` → `npm run tokens` → `app/tokens.css` (generated — never edit it or hard-code hex).
 - Tailwind only with brand tokens: `bg-surface-card`, `text-ink`, `rounded-lg`, `type-*` text styles, `elevation-*` shadows; 4px spacing scale.
+- Sizes the design system uses inside its components without publishing a token are named once in `app/globals.css`: `type-button` (15/20 semibold), `type-menu` (15/20 medium), `type-body-md` (15/22), `type-stat` (32/38 display) and `border-control` (1.5px). New code uses these, not raw `text-[…]` sizes or `border-[…]` widths.
 - Alegreya for display text, h1 and h2; Figtree for everything else (`next/font`).
 - Theme follows the visitor's OS (`prefers-color-scheme`): token classes adapt; otherwise `dark:`. No toggle, no theme cookie.
 - Plain CSS in `app/globals.css` only where utilities can't express it (e.g. `DataTable`'s phone card layout with container queries).
@@ -21,6 +22,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 ## Components
 
 - Reuse `ui/` and `layout/`; add variants via props, not one-off styles — a new variant when a second screen needs it.
+- Surfaces: a bordered white/lagoon box is a `Card` (`cardSurface` when the element must be a `<form>` or link); a titled portal section is a `Panel` (`boxed` to sit on a Card).
 - Server Components by default; `'use client'` only on the smallest leaf that needs state, effects or browser APIs. Prefer platform features (`<details>`, `<dialog>`, popover, CSS) over libraries.
 - Forms use `<Form>` (`useActionState`: pending state, error summary as a danger `Alert`, focus on the first invalid field). Inputs have a visible label and are at least 44px tall.
 - Status is a `Badge`: icon or dot + word + tint, never colour alone.

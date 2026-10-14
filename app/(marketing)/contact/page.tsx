@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
+import { StepList } from "@/components/ui/step-list";
 import { site } from "@/content/site";
 import { ContactForm, ContactFormWithParams } from "@/features/leads/components/contact-form";
 
@@ -34,14 +35,7 @@ export default function ContactPage() {
         <aside className="grid content-start gap-8">
           <div className="grid gap-4">
             <h2 className="m-0 type-h3">What happens next</h2>
-            <ol className="m-0 grid list-none gap-4 p-0">
-              {nextSteps.map((step, i) => (
-                <li key={step} className="grid grid-cols-[auto_1fr] gap-3">
-                  <span className="grid size-8 place-items-center rounded-pill bg-status-info-bg type-label text-action-secondary">{i + 1}</span>
-                  <span className="text-ink-muted">{step}</span>
-                </li>
-              ))}
-            </ol>
+            <StepList size="sm" steps={nextSteps.map((body) => ({ body }))} />
           </div>
           <div className="grid gap-3 rounded-lg bg-surface-sunken p-6">
             <h2 className="m-0 type-h4">Prefer email?</h2>

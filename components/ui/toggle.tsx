@@ -45,7 +45,7 @@ export function Toggle({ label, description, checked, defaultChecked = false, on
         aria-describedby={description ? `${switchId}-desc` : undefined}
         disabled={disabled}
         onClick={toggle}
-        className="forced-border group relative h-7 w-12 flex-none cursor-pointer rounded-pill border-[1.5px] border-border-strong bg-surface-sunken p-0 transition-colors duration-150 aria-checked:border-action-secondary aria-checked:bg-action-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        className="forced-border group relative h-7 w-12 flex-none cursor-pointer rounded-pill border-control border-border-strong bg-surface-sunken p-0 transition-colors duration-150 aria-checked:border-action-secondary aria-checked:bg-action-secondary disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className="absolute top-[3px] left-[3px] size-[19px] rounded-full bg-border-strong transition-[translate,background-color] duration-200 ease-[cubic-bezier(.2,.8,.2,1)] group-aria-checked:translate-x-5 group-aria-checked:bg-on-action-secondary" />
       </button>

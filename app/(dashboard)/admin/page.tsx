@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
+import { Panel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { appRoutes } from "@/content/routes";
@@ -42,7 +43,7 @@ async function AdminHome() {
         <StatCard label="Total clients" value={clientCount} icon="briefcase" href={appRoutes.adminClients} />
       </section>
 
-      <Panel id="recent-leads" title="Latest leads" href={appRoutes.adminLeads} linkLabel="All leads">
+      <Panel title="Latest leads" action={<ViewAll href={appRoutes.adminLeads}>All leads</ViewAll>}>
         <LeadsTable
           leads={recentLeads.leads}
           caption="Latest leads"
@@ -50,25 +51,17 @@ async function AdminHome() {
         />
       </Panel>
 
-      <Panel id="recent-users" title="Latest accounts" href={appRoutes.adminUsers} linkLabel="Teams">
+      <Panel title="Latest accounts" action={<ViewAll href={appRoutes.adminUsers}>Teams</ViewAll>}>
         <UsersTable users={recentUsers} headingLevel={3} />
       </Panel>
     </Workspace>
   );
 }
 
-function Panel({ id, title, href, linkLabel, children }: { id: string; title: string; href: string; linkLabel: string; children: ReactNode }) {
+function ViewAll({ href, children }: { href: string; children: string }) {
   return (
-    <section aria-labelledby={id} className="grid gap-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={id} className="m-0 type-h3">
-          {title}
-        </h2>
-        <Link href={href} className="type-label">
-          {linkLabel}
-        </Link>
-      </div>
+    <Link href={href} className="type-label">
       {children}
-    </section>
+    </Link>
   );
 }

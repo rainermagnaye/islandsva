@@ -8,7 +8,7 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "ocean";
 type Size = "sm" | "md" | "lg";
 
 const base =
-  "forced-border inline-flex items-center justify-center gap-2 rounded-md border-[1.5px] font-sans font-semibold leading-5 no-underline transition-[background-color,border-color,color,transform] duration-150 select-none active:translate-y-px disabled:cursor-not-allowed disabled:border-transparent disabled:bg-disabled-fill disabled:text-disabled-ink aria-busy:cursor-progress";
+  "forced-border inline-flex items-center justify-center gap-2 rounded-md border-control font-sans font-semibold leading-5 no-underline transition-[background-color,border-color,color,transform] duration-150 select-none active:translate-y-px disabled:cursor-not-allowed disabled:border-transparent disabled:bg-disabled-fill disabled:text-disabled-ink aria-busy:cursor-progress";
 
 const variants: Record<Variant, string> = {
   primary: "border-transparent bg-action-primary text-on-action-primary hover:bg-action-primary-hover active:bg-action-primary-active",
@@ -20,7 +20,7 @@ const variants: Record<Variant, string> = {
 
 const sizes: Record<Size, string> = {
   sm: "min-h-9 px-3 text-[0.875rem]",
-  md: "min-h-11 px-5 text-[0.9375rem]",
+  md: "min-h-11 px-5 type-button",
   lg: "min-h-13 px-6 text-[1rem]",
 };
 
@@ -47,8 +47,11 @@ type LinkButtonProps = CommonProps & {
   href: string;
 };
 
-const classesFor = ({ variant = "primary", size = "md", block, className }: CommonProps) =>
+/** A button's look for an element that must stay something else — e.g. a `<summary>` (FilterMenu). */
+export const buttonClasses = ({ variant = "primary", size = "md", block, className }: Omit<CommonProps, "children">) =>
   cx(base, variants[variant], sizes[size], block && "w-full", className);
+
+const classesFor = buttonClasses;
 
 export function Button(props: ButtonProps | LinkButtonProps) {
   if (props.href !== undefined) {
@@ -77,7 +80,7 @@ export function Button(props: ButtonProps | LinkButtonProps) {
     <button
       {...rest}
       type={type}
-      className={classesFor({ variant, size, block, className, children })}
+      className={classesFor({ variant, size, block, className })}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
     >

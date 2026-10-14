@@ -24,7 +24,7 @@ export function Checkbox({ label, description, id, className, ...rest }: Checkbo
         type="checkbox"
         id={inputId}
         aria-describedby={description ? `${inputId}-desc` : undefined}
-        className="forced-border grid size-[22px] cursor-pointer appearance-none place-items-center rounded-sm border-[1.5px] border-border-strong bg-surface-card transition-colors duration-100 after:h-[7px] after:w-3 after:translate-x-px after:-translate-y-px after:-rotate-45 after:border-b-[2.5px] after:border-l-[2.5px] after:border-on-action-secondary after:opacity-0 after:content-[''] checked:border-action-secondary checked:bg-action-secondary checked:after:opacity-100 disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled-fill"
+        className="forced-border grid size-[22px] cursor-pointer appearance-none place-items-center rounded-sm border-control border-border-strong bg-surface-card transition-colors duration-100 after:h-[7px] after:w-3 after:translate-x-px after:-translate-y-px after:-rotate-45 after:border-b-[2.5px] after:border-l-[2.5px] after:border-on-action-secondary after:opacity-0 after:content-[''] checked:border-action-secondary checked:bg-action-secondary checked:after:opacity-100 disabled:cursor-not-allowed disabled:border-border disabled:bg-disabled-fill"
         {...rest}
       />
       <span className="grid gap-0.5">

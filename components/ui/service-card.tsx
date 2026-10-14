@@ -61,7 +61,7 @@ export function ServiceCard({
           {priceUnit && <small className="ml-1 type-body-sm font-sans font-normal text-ink-muted">{priceUnit}</small>}
         </p>
       )}
-      {features && features.length > 0 && <CheckList items={features} className="text-[0.9375rem]" />}
+      {features && features.length > 0 && <CheckList items={features} className="type-body-md" />}
       {ctaLabel && ctaHref && (
         <div className="mt-auto pt-2">
           <Button href={ctaHref} variant={featured ? "primary" : "ghost"} block>
