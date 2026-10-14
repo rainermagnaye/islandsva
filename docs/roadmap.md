@@ -14,7 +14,7 @@ What is not in the MVP is a rule for every change, so it lives in `CLAUDE.md` §
 
 ## Pending (parked, not blocking)
 
-- **Supabase:** disable sign-ups; production Site URL and redirect URLs; custom SMTP (Resend) and the two `supabase/templates/`, then remove the temporary hash-link invite flow (`CLAUDE.md` §6); regenerate `types/database.ts` (hand-written until then). Package pricing per term is decided in M4; `packages` has no seed rows until then.
+- **Supabase:** production settings, custom SMTP (Resend) and the two `supabase/templates/` — steps 1–5 in `docs/operations.md` — then remove the temporary hash-link invite flow (`CLAUDE.md` §6); regenerate `types/database.ts` (hand-written until then). Package pricing per term is decided in M4; `packages` has no seed rows until then.
 - **Repo and tooling:** make CI a required check — branch protection (paid plan) or the free CODEOWNERS + Actions guard; Prettier (editors already reformat on save — agree on it before reformatting lands in PRs); `--max-warnings=0`; pin Node 24 (`.nvmrc` + `engines`); Playwright E2E (`tests/e2e/`) for navigation, both themes, the contact form and sign-in.
 - **Launch:** see the checklist in `docs/operations.md`.
 - **Code:**
