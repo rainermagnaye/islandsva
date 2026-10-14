@@ -64,17 +64,15 @@ function toSummary(row: {
 // Writes below use the secret key (they bypass RLS): callers must have checked the admin role first.
 
 /**
- * Creates the auth user and sends the invite email. `redirectTo` is where the link opens (the password
- * form). A URL the project has not allowed comes back as `redirect` so the caller can send the link to
- * the site address instead.
+ * Creates the auth user and sends the invite email. No `redirectTo`: the invite template builds the link
+ * from the Site URL (supabase/templates/invite.html).
  */
-export async function inviteAuthUser(email: string, fullName: string, redirectTo?: string) {
+export async function inviteAuthUser(email: string, fullName: string) {
   const { data, error } = await createAdminClient().auth.admin.inviteUserByEmail(email, {
     data: { full_name: fullName },
-    redirectTo,
   });
   if (error) {
-    const reason = classifyInviteError(error, redirectTo !== undefined);
+    const reason = classifyInviteError(error);
     if (reason) return { ok: false as const, reason };
     throw new UpstreamError("supabase-auth", `Invite failed: ${error.message}`, { cause: error });
   }

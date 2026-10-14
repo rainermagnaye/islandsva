@@ -44,7 +44,7 @@ npx supabase migration new <name>      # new SQL file in supabase/migrations/
 ```
 app/                  routes only — thin pages and endpoints
   (marketing)/        static public site; page-only layout pieces in <page>/_components/
-  (auth)/             sign-in: login · forgot-password · set-password · mfa · accept-invite (temporary, §6)
+  (auth)/             sign-in: login · forgot-password · set-password · mfa
   (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only; sidebar:
                       overview · leads + lead page · clients · users = Teams + staff profile page)
   auth/confirm/       email-link landing (token hash → session)
@@ -118,7 +118,6 @@ vercel.json           function region sin1 (next to Supabase)
 - **Two-factor:** admins need TOTP (`aal2`), enforced by `requireRole` and again by RLS. `/mfa` sets up an authenticator app on first use, then asks for a code at each sign-in.
 - **Sign-in:** users go straight to their workspace (`homeFor(roles)` from the new token; admins via `/mfa`); `/dashboard` is only the fallback without a role; `?next=` goes through `safeNextPath` (same-site paths only). Credential errors share one message and "forgot password" always reports success (no account enumeration). Passwords 10–72 characters with letters and digits.
 - **Email links:** invite and reset use the `supabase/templates/` token-hash links to `/auth/confirm` — the one GET route outside `createHandler`, which accepts only `invite` / `recovery`, verifies server-side and redirects to fixed paths.
-  - **Temporary (until custom SMTP):** the hosted project still sends Supabase's default emails, whose links carry the session in the URL `#hash`. `/accept-invite` and `EmailLinkSession` (in the root layout, so on every page) read and clear the hash and post the tokens to `establishEmailSession`, which stores them with `setSession` (Supabase validates them). Remove all three, and `/accept-invite` from the redirect allow-list, once the token-hash emails are live (`docs/roadmap.md`).
 - **Content:** never invent testimonials, logos or business claims — real content or `TODO(content)`; placeholder data must be labelled, development-only and absent from production builds (`content/testimonials.ts`).
 
 ## 7. Code conventions
@@ -143,7 +142,7 @@ vercel.json           function region sin1 (next to Supabase)
 |---|---|
 | Lighthouse, public pages (all four) | ≥ 95 |
 | LCP · CLS · INP | < 2.0 s · < 0.05 · < 200 ms |
-| First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Now: public ~148, contact 155, sign-in ~158, `/admin` 158.9 — new client code there needs a saving elsewhere |
+| First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Now: public ~147, contact 154, sign-in ~157, `/admin` 158.1 — new client code there needs a saving elsewhere |
 
 - Keep client components minimal; prefer platform features (CSS, `<details>`, `<dialog>`, popover) over libraries. Justify any dependency over 30 KB. `next/font` (≤ 2 families); third-party scripts only on the pages that need them.
 - **Tests:** every `parseX` and pure rule (triage flow, registration steps, invite results, parsers, `currentPath`); `createHandler`; role rules and `safeNextPath`; every migration with RLS allowed and denied per role. A test for a security limit must fail when the limit is removed. Untested auth or permission branches block review.

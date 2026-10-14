@@ -1,7 +1,6 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { headers } from "next/headers";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
@@ -20,9 +19,7 @@ export async function inviteStaff(formData: FormData): Promise<SubmitResult<Invi
   if (!parsed.ok) return toSubmitResult(parsed);
 
   try {
-    const origin = await requestOrigin();
-    if (!origin) return { ok: false, message: "We couldn't send the invitation. Please try again in a moment." };
-    const result = await invite(parsed.value, admin.id, origin);
+    const result = await invite(parsed.value, admin.id);
     if (!result.ok) {
       if (result.reason === "rate") {
         return { ok: false, message: "Too many invitation emails were sent. Wait a while, then try again." };
@@ -117,14 +114,4 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
 
   refresh();
   return { ok: true };
-}
-
-/** The address this invite was sent from, so the email link opens this same app. */
-async function requestOrigin() {
-  const headerList = await headers();
-  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
-  if (!host || host.length > 255 || /[\s/@\\]/.test(host)) return null;
-  const forwarded = headerList.get("x-forwarded-proto");
-  const proto = forwarded === "http" || forwarded === "https" ? forwarded : host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
-  return `${proto}://${host}`;
 }

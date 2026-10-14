@@ -20,7 +20,6 @@ export const appRoutes = {
   setPassword: "/set-password",
   mfa: "/mfa",
   authConfirm: "/auth/confirm",
-  acceptInvite: "/accept-invite",
   dashboard: "/dashboard",
   client: "/client",
   va: "/va",

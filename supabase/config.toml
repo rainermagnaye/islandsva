@@ -9,7 +9,7 @@ major_version = 17
 
 [auth]
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/auth/confirm", "http://localhost:3000/accept-invite"]
+additional_redirect_urls = ["http://localhost:3000/auth/confirm"]
 jwt_expiry = 3600
 # Invite-only: admins invite staff, Closers invite clients (M3).
 enable_signup = false
