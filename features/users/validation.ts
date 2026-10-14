@@ -33,6 +33,13 @@ const staffIdSchema = z.strictObject({
 
 export const parseStaffId = (input: unknown) => parseWith(staffIdSchema, input, [] as const);
 
+/** YYYY-MM-DD that exists on the calendar — "2026-02-31" has the right shape but the database rejects it. */
+function isCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 const line = (max: number, label: string) =>
   z.string().trim().max(max, tooLong(label, max)).regex(NO_CONTROL_CHARS, tooLong(label, max));
 
@@ -44,7 +51,7 @@ const staffDetailsSchema = z.strictObject({
   dateOfBirth: z
     .string()
     .trim()
-    .refine((value) => value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value), "Enter a real date of birth.")
+    .refine((value) => value === "" || isCalendarDate(value), "Enter a real date of birth.")
     .refine((value) => {
       if (!value) return true;
       return value >= "1900-01-01" && value <= new Date().toISOString().slice(0, 10);
