@@ -51,6 +51,7 @@ features/<feature>/   one business area in one place (today: leads, auth, users,
   api-client.ts       [client] browser calls to /api/v1
   components/         feature UI (e.g. contact form)
 components/           shared UI: ui/ (design system) · layout/ (shell, nav, footer) · marketing/ (sections)
+hooks/                [client] shared browser hooks, `use-x.ts` (today: use-current-path)
 lib/                  shared infrastructure only
   api/                [server] createHandler, ApiError, ok/fail, Turnstile, IP hash
   auth/               roles.ts [shared] (role rules, homes, safeNextPath) · session.ts [server] (getSessionUser, requireUser, requireRole)
@@ -75,7 +76,7 @@ New features get a folder when their phase starts, never earlier.
 - **Features** import their own files relatively (`./dal`). Another feature is used only through its `service.ts`, types or components — never its `dal.ts`.
 - **Services** take typed values, never `Request` or headers; the route decides what runs in `after()`. Simple CRUD skips the service.
 - **`lib/`** holds only what every feature shares. **`types/`** only what a second layer or feature needs. **`content/`** never imports components; internal URLs come from `content/routes.ts`.
-- **`hooks/`** (created with the first one): only when a second client component needs the logic; browser behaviour only — no data fetching, no theme or screen-size hooks (use CSS).
+- **`hooks/`**: only when a second client component needs the logic; browser behaviour only — no data fetching, no theme or screen-size hooks (use CSS). Keep the rule a pure function beside the hook so it is unit-tested without a browser (`currentPath` / `useCurrentPath`). Logic one feature owns stays in that feature; a pending/error state for a form is `<Form>` (`useActionState`), not a new hook.
 - **`_components/`** is for one route's layout pieces; move to `components/` when a second route needs it.
 - **[server]** files start with `import "server-only"`.
 - **Server Actions vs Route Handlers:**
