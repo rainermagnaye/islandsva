@@ -30,6 +30,8 @@ export function inviteLinkOpen() {
 /**
  * Invite and reset links from Supabase's own mailer put the session in the URL hash, which a server
  * route never sees. When that hash is present, store the session and open the password form.
+ * TEMPORARY until custom SMTP sends the token-hash emails (CLAUDE.md §6) — then remove this, its mount in
+ * app/layout.tsx, /accept-invite and establishEmailSession.
  */
 export function EmailLinkSession() {
   const show = useSyncExternalStore(subscribeInviteLink, inviteLinkOpen, () => false);

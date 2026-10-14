@@ -128,6 +128,7 @@ function isSessionToken(value: string) {
 /**
  * Turns the tokens from an invite or reset link into a cookie session. The link's hash never reaches
  * the server, so the page reads it and posts the tokens here. Anything else is rejected.
+ * TEMPORARY until custom SMTP sends the token-hash emails to /auth/confirm (CLAUDE.md §6).
  */
 export async function establishEmailSession(accessToken: string, refreshToken: string) {
   if (!isSessionToken(accessToken) || !isSessionToken(refreshToken)) return { ok: false as const };

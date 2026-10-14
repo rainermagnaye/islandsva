@@ -37,7 +37,7 @@ npx supabase gen types typescript --project-id <ref> > types/database.ts   # aft
 ```
 app/                  routes only — thin pages and endpoints
   (marketing)/        static public site; page-only layout UI in <page>/_components/
-  (auth)/             sign-in screens: login · forgot-password · set-password · mfa
+  (auth)/             sign-in screens: login · forgot-password · set-password · mfa · accept-invite (temporary, §6)
   (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only, sidebar layout: overview · leads + lead page · clients · team)
   auth/confirm/       email-link landing (invite, reset): token hash → session
   api/v1/<resource>/  Route Handlers — the HTTP API
@@ -134,6 +134,7 @@ Source for UI: `design/islands-va-design-system-guide.pdf` (v1.2 team guide) and
 - **Users and roles:** Supabase Auth owns `auth.users`; `profiles` (same id) holds our side and `status` (`invited` → `active` on first sign-in → `inactive` when deactivated). Roles live in `roles` (one row per user per role, `app_role` enum = `ROLES` in `lib/auth/roles.ts`), written only by the server. The `custom_access_token_hook` copies them into `app_metadata.roles` (never `user_metadata`, which users can edit); inactive users get none. Role changes apply at the next token refresh (≤ 1 hour).
 - **Admins need two-factor sign-in (TOTP, `aal2`)** — enforced by `requireRole` and again by RLS ("Admins with 2FA read all…" policies).
 - **Email links** (invite, reset) use the `supabase/templates/` token-hash links to `/auth/confirm`, which accepts only `invite` / `recovery` and redirects to fixed paths (no open redirect). It is the one GET Route Handler outside `createHandler`. After sign-in the action redirects straight to the user's workspace (role from the new token; admins pass through `/mfa`); `/dashboard` is only the fallback for accounts without a role. Post-login `?next=` goes through `safeNextPath`.
+  - **Temporary (until custom SMTP):** the hosted project still sends Supabase's default emails, whose links put the session in the URL `#hash` (implicit flow) instead of a token hash. `/accept-invite` and `EmailLinkSession` (mounted in the root layout, so it runs on every page) read the hash, clear it, and post the tokens to the `establishEmailSession` action, which stores them with `setSession` (Supabase validates them). Remove all three, and `/accept-invite` from the redirect allow-list, once the `supabase/templates/` token-hash emails are live (§11).
 - Credential errors share one message (no account enumeration); "forgot password" always reports success.
 
 ## 7. Database
@@ -183,7 +184,7 @@ Source for UI: `design/islands-va-design-system-guide.pdf` (v1.2 team guide) and
 
 ## 11. Pending (parked, not blocking)
 
-- **Supabase setup (M2):** both migrations applied (2026-10-13) and first admin created; enable the custom access token hook in the dashboard (Authentication → Auth Hooks — `config.toml` only configures a local stack; without it nobody gets their role); disable sign-ups; set Site URL + `/auth/confirm` redirect URL, 24 h email link expiry and password rules; custom SMTP (Resend) and the two `supabase/templates/`; further admins via `npm run admin:create -- <email>`. Then regenerate `types/database.ts` (hand-written for the tables in use until then). Package pricing per term (1/6/12 months) is decided in M4; `packages` has no seed rows until then.
+- **Supabase setup (M2):** both migrations applied (2026-10-13) and first admin created; enable the custom access token hook in the dashboard (Authentication → Auth Hooks — `config.toml` only configures a local stack; without it nobody gets their role); disable sign-ups; set Site URL + `/auth/confirm` redirect URL, 24 h email link expiry and password rules; custom SMTP (Resend) and the two `supabase/templates/` — then remove the temporary hash-link invite flow (§6: `/accept-invite`, `EmailLinkSession`, `establishEmailSession`); further admins via `npm run admin:create -- <email>`. Then regenerate `types/database.ts` (hand-written for the tables in use until then). Package pricing per term (1/6/12 months) is decided in M4; `packages` has no seed rows until then.
 - **Repo & tooling:** CI running lint, typecheck, test, build and `npm run size`; branch protection (paid plan) or the free CODEOWNERS + Actions guard; Prettier; `--max-warnings=0`; pin Node 24 (`.nvmrc` + `engines`).
 - **Launch:** set keys in Vercel; create the Vercel project (region from `vercel.json`); Firewall rate limits on `/api/v1/leads` and sign-in POSTs (Supabase sees our server's IP, so its per-IP limits don't separate visitors).
 - **Code:** content accessors (`getPackages()`); rename `monthlyPrice` → `monthlyPriceCents`; `type-*` instead of arbitrary font sizes; resend/revoke invites and deactivate users (M7 user list).
