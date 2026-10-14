@@ -5,13 +5,18 @@ import type { Enums } from "@/types/database";
 /** A role as stored in `roles.role` (the `app_role` enum) and copied into the access token. */
 export type Role = Enums<"app_role">;
 
-/** Every role, highest precedence first — decides which home a multi-role user lands on. */
+/**
+ * Every role the app acts on, highest precedence first — decides which home a multi-role user lands on.
+ * `super_admin` (cross-tenant, in the database) is not here yet: until the app supports it, a Super Admin
+ * also holds `admin` and uses the app through that.
+ */
 export const ROLES = ["admin", "closer", "va", "client"] as const satisfies readonly Role[];
 
-export const ROLE_LABELS: Record<Role, string> = { admin: "Admin", closer: "Closer", va: "VA", client: "Client" };
+export const ROLE_LABELS: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", closer: "Closer", va: "VA", client: "Client" };
 
 /** Each role's workspace. The admin system is for admins only; Closers get their own workspace. */
 export const ROLE_HOME: Record<Role, AppRoutePath> = {
+  super_admin: appRoutes.admin,
   admin: appRoutes.admin,
   closer: appRoutes.closer,
   va: appRoutes.va,

@@ -19,6 +19,7 @@ Loaded when working in `supabase/`. Project-wide rules are in the root `CLAUDE.m
 
 ## Access model
 
+- **Tenants first.** Every rule below applies inside the caller's tenant only: each tenant-owned table has a restrictive `Own tenant only` policy (`tenant_id = private.tenant_id()`, or `private.is_super_admin()` = `super_admin` + `aal2`). `private.is_admin()` is true for Super Admins too, so "admins with 2FA" means *of this tenant*, or a Super Admin anywhere. `tenants`: users read their own; Super Admins all; writes server-only.
 - `profiles`, `roles`: users read their own; admins with 2FA read all. The token hook (`supabase_auth_admin`) reads both. Writes are server-only.
 - `clients`: a client reads their own record, a VA those actively assigned to them, a Closer those they created (and creates and edits them), an admin with 2FA all. Status, activation and the login link are server-only (column grants).
 - `leads`: admins with 2FA read them and change only the triage columns (`status`, `closer_id`, `converted_client_id`); inserts are server-only. `convert_lead()` (security invoker, row lock, one transaction; refusals `IVA01`–`IVA03`) turns one into a client. Status flow, also in the app (`nextStatuses()`): open leads move freely, closed ones only reopen, converted ones are final — enforced by the `leads_guard_status` trigger (`IVA04`).
@@ -30,7 +31,8 @@ Loaded when working in `supabase/`. Project-wide rules are in the root `CLAUDE.m
 - uuid ids; user references point at `profiles(id)` (= `auth.uid()`); snake_case, plural tables, `_at` timestamps.
 - Enums for statuses, one status column per thing (no `is_active` beside a status).
 - Users and clients are **deactivated, never deleted**: restrict foreign keys keep history resolvable (`deleteAuthUser` only rolls back a failed invite).
-- A column naming a user is role-checked by `private.enforce_role` (e.g. `clients.created_by` must be a Closer or admin, `va_id` a VA), and a role can't be removed while something depends on it (`guard_role_removal`).
+- A column naming a user is role-checked by `private.enforce_role` (e.g. `clients.created_by` must be a Closer or admin — a Super Admin counts as an admin — `va_id` a VA), and a role can't be removed while something depends on it (`guard_role_removal`). Who may grant a role is checked from `assigned_by` (`guard_role_grant`): only a Super Admin grants `admin` / `super_admin`; an admin grants roles in their own tenant; no `assigned_by` = a person at the database.
+- **A new tenant-owned table** gets: `tenant_id uuid not null`; the `<table>_assign_tenant` trigger (inherit from the parent row; extend `private.assign_tenant()`); composite foreign keys `(col, tenant_id) → parent (id, tenant_id)` so it can't point across tenants; the `Own tenant only` restrictive policy; and `tenant_id` in no `authenticated` insert or update grant.
 - Invariants as constraints (`CHECK`, unique, FKs), mirroring the limits in each feature's `contract.ts`.
 - Index foreign keys, RLS columns and list sort orders.
 - Money in cents with a currency (M4). Secrets such as invite tokens stored only as SHA-256 (M3).

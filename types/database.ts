@@ -1,6 +1,5 @@
 // Database types in the shape `supabase gen types typescript` produces, matching
-// supabase/migrations/*_initial_schema.sql. Hand-written until that migration is applied; then regenerate
-// and overwrite this file:
+// supabase/migrations/. Hand-written until it is regenerated from the live project:
 //   npx supabase gen types typescript --project-id <ref> > types/database.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -10,11 +9,20 @@ type Optional<T> = { [K in keyof T]?: T[K] };
 /** Insert shape: the listed columns are required, every other column is optional (it has a default). */
 type InsertOf<Row, Required extends keyof Row> = Pick<Row, Required> & Optional<Omit<Row, Required>>;
 
+type TenantRow = {
+  id: string;
+  name: string;
+  slug: string;
+  is_default: boolean;
+  created_at: string;
+};
+
 type ProfileRow = {
   id: string;
   email: string;
   full_name: string;
   status: Enum<"account_status">;
+  tenant_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -25,6 +33,7 @@ type RoleRow = {
   role: Enum<"app_role">;
   assigned_at: string;
   assigned_by: string | null;
+  tenant_id: string;
 };
 
 type ClientRow = {
@@ -38,6 +47,7 @@ type ClientRow = {
   created_by: string;
   activated_at: string | null;
   notes: string | null;
+  tenant_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -50,6 +60,7 @@ type AssignmentRow = {
   started_at: string;
   ended_at: string | null;
   assigned_by: string | null;
+  tenant_id: string;
   created_at: string;
 };
 
@@ -85,6 +96,7 @@ type StaffProfileRow = {
   registration_status: Enum<"staff_registration_status">;
   invitation_sent_at: string;
   registration_completed_at: string | null;
+  tenant_id: string;
   updated_at: string;
 };
 
@@ -101,6 +113,7 @@ type LeadRow = {
   ip_hash: string | null;
   user_agent: string | null;
   notified_at: string | null;
+  tenant_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -117,6 +130,12 @@ type ProfilesFk<Name extends string, Column extends string> = {
 export type Database = {
   public: {
     Tables: {
+      tenants: {
+        Row: TenantRow;
+        Insert: InsertOf<TenantRow, "name" | "slug">;
+        Update: Optional<TenantRow>;
+        Relationships: [];
+      };
       profiles: {
         Row: ProfileRow;
         Insert: InsertOf<ProfileRow, "id" | "email">;
@@ -179,7 +198,7 @@ export type Database = {
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";
-      app_role: "client" | "va" | "closer" | "admin";
+      app_role: "client" | "va" | "closer" | "admin" | "super_admin";
       client_status: "pending" | "active" | "inactive";
       assignment_status: "active" | "ended";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
