@@ -9,13 +9,14 @@ import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { EmailField, EnrollmentResult, MfaField, NewPasswordField, SignInField } from "./contract";
 import * as auth from "./dal";
+import { SIGN_IN_MESSAGES, signInFailure } from "./sign-in-result";
 import { parseEmail, parseMfaCode, parseNewPassword, parseSignIn } from "./validation";
 
 // Every export here is a public POST endpoint: each validates its input and, where it needs a session,
 // re-checks it — never trust that the caller came from our page.
 
-const UNAVAILABLE = "Sign-in is unavailable right now. Please try again in a few minutes.";
-const TOO_MANY = "Too many attempts. Wait a few minutes, then try again.";
+const UNAVAILABLE = SIGN_IN_MESSAGES.unavailable;
+const TOO_MANY = SIGN_IN_MESSAGES.rateLimited;
 
 // A symbol, not a string, so it can never collide with an Auth error code.
 const OUTAGE = Symbol("outage");
@@ -39,14 +40,11 @@ export async function signIn(formData: FormData): Promise<SubmitResult<SignInFie
   const result = await attempt(() => auth.signInWithPassword(email, password));
   if (result === OUTAGE) return { ok: false, message: UNAVAILABLE };
   const { code, claims } = result;
-  if (code === "over_request_rate_limit") return { ok: false, message: TOO_MANY };
-  // One message for every credential failure, so the form never reveals which emails have accounts.
-  if (code === "invalid_credentials") {
-    return { ok: false, message: "That email and password don't match. Check them or reset your password." };
-  }
   if (code) {
-    console.error("Sign-in failed", { code }); // e.g. misconfigured key: an operator problem, not a typo
-    return { ok: false, message: "We couldn't sign you in. Please try again." };
+    const failure = signInFailure(code);
+    // The code goes in the message text: some log sinks (the dev log file) drop object fields as "{}".
+    if (failure.report) console.error(`Sign-in failed (${failure.report}): ${code}`);
+    return { ok: false, message: failure.message };
   }
 
   // Straight to the user's workspace — an admin's page sends them through two-factor first. /dashboard is
