@@ -1,0 +1,43 @@
+# Database (Supabase Postgres)
+
+Loaded when working in `supabase/`. Project-wide rules are in the root `CLAUDE.md`; how a human applies a migration is in `docs/operations.md`.
+
+## Migrations
+
+- Live in `supabase/migrations/`, created with `npx supabase migration new <name>` (never hand-name them). Forward-only: a live migration is never edited — fix it with a new one.
+- Reviewed in a `db/` PR and applied by a human, as one transaction that also records itself in `supabase_migrations.schema_migrations`, after a rehearsal on PGlite (procedure: `docs/operations.md`). No unrecorded dashboard edits.
+- Applied so far: `initial_schema`, `admin_leads_access`, `staff_profiles`, `staff_profiles_hardening`.
+- `config.toml` configures only a local stack; hosted settings (auth hooks, SMTP, redirect URLs) are set in the dashboard.
+- After a schema change, `types/database.ts` must match (hand-written until it is regenerated — see `docs/roadmap.md`).
+
+## Grants and RLS
+
+- **Grants are explicit.** Default privileges are revoked, so a new table is reachable by no API role (not even `service_role`) until its migration grants exactly what each needs: `service_role` `select, insert, update, delete` (never `truncate`), `authenticated` only under RLS and often per column. `anon` gets nothing.
+- **RLS on every table.** Policies read roles from the signed token via `private.has_role()` / `private.is_admin()` (admin + `aal2`), never by querying `roles` per row; wrap them as `(select private.…())` so they run once per statement. Tables without policies are server-only.
+- Cross-table checks use `SECURITY DEFINER` helpers in `private` (no policy recursion); every `private` function sets `search_path = ''` and has execute revoked from `public`.
+- Functions callable through the API are `security invoker` unless there's a written reason; `revoke all … from public, anon, authenticated, service_role` then grant exactly who may call them.
+
+## Access model
+
+- `profiles`, `roles`: users read their own; admins with 2FA read all. The token hook (`supabase_auth_admin`) reads both. Writes are server-only.
+- `clients`: a client reads their own record, a VA those actively assigned to them, a Closer those they created (and creates and edits them), an admin with 2FA all. Status, activation and the login link are server-only (column grants).
+- `leads`: admins with 2FA read them and change only the triage columns (`status`, `closer_id`, `converted_client_id`); inserts are server-only. `convert_lead()` (security invoker, row lock, one transaction; refusals `IVA01`–`IVA03`) turns one into a client. Status flow, also in the app (`nextStatuses()`): open leads move freely, closed ones only reopen, converted ones are final — enforced by the `leads_guard_status` trigger (`IVA04`).
+- `staff_profiles`: staff (VA, Closer, admin) read and edit their own row, admins with 2FA everyone's; registration progress (`registration_status`, `invitation_sent_at`, `registration_completed_at`) and the résumé bytes are server-only.
+- `client_va_assignments`: one active assignment per client. A VA reads their own, a Closer those for clients they created, a client those for their own record; admins with 2FA read all and create and update them.
+
+## Conventions
+
+- uuid ids; user references point at `profiles(id)` (= `auth.uid()`); snake_case, plural tables, `_at` timestamps.
+- Enums for statuses, one status column per thing (no `is_active` beside a status).
+- Users and clients are **deactivated, never deleted**: restrict foreign keys keep history resolvable (`deleteAuthUser` only rolls back a failed invite).
+- A column naming a user is role-checked by `private.enforce_role` (e.g. `clients.created_by` must be a Closer or admin, `va_id` a VA), and a role can't be removed while something depends on it (`guard_role_removal`).
+- Invariants as constraints (`CHECK`, unique, FKs), mirroring the limits in each feature's `contract.ts`.
+- Index foreign keys, RLS columns and list sort orders.
+- Money in cents with a currency (M4). Secrets such as invite tokens stored only as SHA-256 (M3).
+- Custom errors use their own SQLSTATE (`IVA01`…) so the app can map them to messages.
+
+## Tests (`supabase/tests/database.test.ts`)
+
+- Every migration runs on PGlite against stand-ins for Supabase's roles and `auth` schema; `auth.jwt()` reads `request.jwt.claims`.
+- Every policy and grant is tested **allowed and denied** per role (`asUser`, `asServer`, `as("anon")`), including an admin without `aal2`.
+- A test for a security rule must fail when the rule is removed — check by temporarily dropping the migration or policy.

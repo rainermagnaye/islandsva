@@ -1,23 +1,9 @@
 ---
-description: Follow the Islands VA design system guide when creating or updating UI
+description: Follow the Islands VA design system when creating or updating UI
 globs: "{app,components,features}/**/*.{tsx,css},design/**"
 alwaysApply: false
 ---
 
 # UI design system
 
-When creating or updating UI, use `design/islands-va-design-system-guide.pdf` (v1.2) together with `design/tokens.json`. Read the relevant section of the guide before inventing layout, colour, type, or a new component.
-
-- Use token classes (`bg-surface-card`, `text-ink`, `type-*`). Never hard-code hex.
-- Sentence case. Verb-first buttons ("Request my team"). Voice is you / we / your VA.
-- One sunrise primary action per view. Orange is a fill, never text on a light background.
-- Alegreya for display, h1, and h2. Figtree for everything else.
-- Reuse `components/ui` and `components/layout`. Add a variant only when a second screen needs it.
-- Status is an icon, a word, and a colour together. Inputs have a visible label and are at least 44px tall.
-
-These product decisions stay as they are, even where the PDF differs:
-
-- Theme follows the OS. No theme toggle and no theme cookie.
-- The logo is the Sand & Sea mark plus the live wordmark in `components/layout/logo.tsx`.
-- Do not build the blog, comments, or newsletter. They are outside the MVP.
-- Architecture, auth, validation, and rendering follow `CLAUDE.md`. The PDF's Next.js chapter is not the implementation guide.
+The UI rules live in one place for every tool: follow @components/CLAUDE.md (tokens, components, voice, brand and the decisions that differ from the design-system PDF). Architecture, auth, validation and rendering follow @CLAUDE.md and the folder `CLAUDE.md` files.
