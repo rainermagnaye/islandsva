@@ -4,6 +4,7 @@ import { startTransition, useActionState, useEffect, useEffectEvent, useRef, typ
 import { cx } from "@/lib/cx";
 import type { SubmitResult } from "@/types/form";
 import { Alert } from "./alert";
+import { cardSurface } from "./card";
 import { IconBadge } from "./icon-badge";
 
 export type FormState<Field extends string = string> = {
@@ -92,7 +93,7 @@ export function Form<Field extends string = string>({
 /** Standard success panel for `<Form success={…}>`. */
 export function FormSuccess({ title, children, align = "start" }: { title: string; children?: ReactNode; align?: "start" | "center" }) {
   return (
-    <div className={cx("grid gap-4 rounded-lg border border-border bg-surface-card p-8", align === "center" ? "justify-items-center text-center" : "justify-items-start")}>
+    <div className={cx(cardSurface, "grid gap-4 p-8", align === "center" ? "justify-items-center text-center" : "justify-items-start")}>
       <IconBadge name="check" tone="success" />
       <h2 className="m-0 type-h3">{title}</h2>
       {children && <div className="text-ink-muted">{children}</div>}

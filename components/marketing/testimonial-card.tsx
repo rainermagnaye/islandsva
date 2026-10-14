@@ -27,7 +27,7 @@ export function TestimonialCard({ testimonial, featured }: { testimonial: Testim
         <p className={cx("m-0", featured ? "font-display text-[1.375rem] leading-[1.875rem] font-bold" : "text-[1.0625rem] leading-[1.6875rem]")}>{quote}</p>
       </blockquote>
       <figcaption>
-        <span className="block text-[0.9375rem] leading-5 font-semibold">{author}</span>
+        <span className="block type-button">{author}</span>
         {(role || company) && (
           <span className={cx("block type-body-sm", featured ? "text-ink-on-deep-muted" : "text-ink-muted")}>{[role, company].filter(Boolean).join(", ")}</span>
         )}

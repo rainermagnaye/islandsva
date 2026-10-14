@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Section } from "@/components/marketing/section";
+import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
+import { StepList } from "@/components/ui/step-list";
 
 export const metadata: Metadata = {
   title: "About",
@@ -14,6 +16,13 @@ const values = [
   { icon: "shield" as const, title: "Trust by default", body: "Clear access rules, accounts you control and honest updates — your business is safe in our hands." },
   { icon: "clock" as const, title: "Always on", body: "Day shift, night shift or both. Continuous support is the promise in our name." },
   { icon: "check" as const, title: "Quietly excellent", body: "The best assistance is the kind you stop noticing. Things simply get done." },
+];
+
+const vetting = [
+  { title: "Skills and English assessment", body: "Written and spoken English, tools and real-world task tests." },
+  { title: "Interviews and reference checks", body: "We meet every candidate and check their work history." },
+  { title: "Matching", body: "We pair each assistant with clients whose work fits their strengths." },
+  { title: "Ongoing support", body: "Regular check-ins with you and your VA, and help whenever it's needed." },
 ];
 
 // TODO(content): replace with the founders' story, team size and photos (real people, with consent).
@@ -42,32 +51,17 @@ export default function AboutPage() {
       <Section id="values" tone="sunken" eyebrow="What we value" title="How we work">
         <ul className="m-0 grid list-none gap-6 p-0 sm:grid-cols-2">
           {values.map((v) => (
-            <li key={v.title} className="reveal grid content-start gap-3 rounded-lg border border-border bg-surface-card p-6">
+            <Card as="li" key={v.title} className="reveal grid content-start gap-3">
               <Icon name={v.icon} size={28} className="text-action-secondary" />
               <h3 className="m-0 type-h3">{v.title}</h3>
               <p className="m-0 text-ink-muted">{v.body}</p>
-            </li>
+            </Card>
           ))}
         </ul>
       </Section>
 
       <Section id="vetting" eyebrow="Our assistants" title="Every VA is vetted and supported">
-        <ol className="m-0 grid max-w-(--container-prose) list-none gap-5 p-0">
-          {[
-            ["Skills and English assessment", "Written and spoken English, tools and real-world task tests."],
-            ["Interviews and reference checks", "We meet every candidate and check their work history."],
-            ["Matching", "We pair each assistant with clients whose work fits their strengths."],
-            ["Ongoing support", "Regular check-ins with you and your VA, and help whenever it's needed."],
-          ].map(([title, body], i) => (
-            <li key={title} className="reveal grid grid-cols-[auto_1fr] gap-4">
-              <span className="grid size-10 place-items-center rounded-pill bg-status-info-bg type-label text-action-secondary">{i + 1}</span>
-              <div className="grid gap-1">
-                <h3 className="m-0 type-h4">{title}</h3>
-                <p className="m-0 text-ink-muted">{body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <StepList steps={vetting} itemClassName="reveal" className="max-w-(--container-prose)" />
       </Section>
 
       <CtaBand />

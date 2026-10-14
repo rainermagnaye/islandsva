@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { cardSurface } from "@/components/ui/card";
 import { Form, FormSuccess } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
@@ -55,7 +56,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
           We&apos;ve received your message and will reply within one business day to set up your discovery call.
         </FormSuccess>
       }
-      className="rounded-lg border border-border bg-surface-card p-6 md:p-8"
+      className={`${cardSurface} p-6 md:p-8`}
     >
       {({ pending, fieldErrors }) => (
         <>

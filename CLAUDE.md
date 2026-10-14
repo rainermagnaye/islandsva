@@ -143,7 +143,7 @@ vercel.json           function region sin1 (next to Supabase)
 |---|---|
 | Lighthouse, public pages (all four) | ≥ 95 |
 | LCP · CLS · INP | < 2.0 s · < 0.05 · < 200 ms |
-| First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Now: public ~148, contact 155, sign-in ~158, `/admin` 158.9 — new client code there needs a saving elsewhere |
+| First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Now: public ~148, contact 155, sign-in ~158, `/admin` 159.1 — new client code there needs a saving elsewhere |
 
 - Keep client components minimal; prefer platform features (CSS, `<details>`, `<dialog>`, popover) over libraries. Justify any dependency over 30 KB. `next/font` (≤ 2 families); third-party scripts only on the pages that need them.
 - **Tests:** every `parseX` and pure rule (triage flow, registration steps, invite results, parsers, `currentPath`); `createHandler`; role rules and `safeNextPath`; every migration with RLS allowed and denied per role. A test for a security limit must fail when the limit is removed. Untested auth or permission branches block review.

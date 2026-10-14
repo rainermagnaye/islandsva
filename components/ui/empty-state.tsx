@@ -21,7 +21,7 @@ export function EmptyState({ title, description, action, secondaryAction, compac
   return (
     <div
       className={cx(
-        "grid justify-items-center gap-3 rounded-lg border-[1.5px] border-dashed border-border-strong bg-surface-card text-center",
+        "grid justify-items-center gap-3 rounded-lg border-control border-dashed border-border-strong bg-surface-card text-center",
         compact ? "px-4 py-6" : "px-6 py-10",
         className,
       )}

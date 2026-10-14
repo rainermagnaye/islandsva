@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Icon } from "./icon";
 
 export const controlClasses =
-  "forced-border w-full min-h-11 rounded-md border-[1.5px] border-border-strong bg-surface-card px-3 py-2.5 font-sans text-[1rem] leading-6 text-ink transition-[border-color,box-shadow] duration-100 placeholder:text-ink-muted placeholder:opacity-100 hover:border-ink-muted focus-visible:border-focus-ring focus-visible:outline-offset-1 aria-invalid:border-2 aria-invalid:border-status-danger disabled:cursor-not-allowed disabled:border-transparent disabled:bg-disabled-fill disabled:text-disabled-ink";
+  "forced-border w-full min-h-11 rounded-md border-control border-border-strong bg-surface-card px-3 py-2.5 type-body text-ink transition-[border-color,box-shadow] duration-100 placeholder:text-ink-muted placeholder:opacity-100 hover:border-ink-muted focus-visible:border-focus-ring focus-visible:outline-offset-1 aria-invalid:border-2 aria-invalid:border-status-danger disabled:cursor-not-allowed disabled:border-transparent disabled:bg-disabled-fill disabled:text-disabled-ink";
 
 type FieldProps = {
   id: string;

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/card";
+import { FileField } from "@/components/ui/file-field";
 import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
@@ -62,7 +64,7 @@ export function StaffProfileForm({
         <div className="grid gap-8">
           <input type="hidden" name="userId" value={userId} />
 
-          <Section title="Basic details">
+          <Panel title="Basic details">
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField label="Full name" name="fullName" required maxLength={USER_LIMITS.fullName} defaultValue={details.fullName} error={fieldErrors.fullName} />
               <TextField label="Date of birth" name="dateOfBirth" type="date" defaultValue={details.dateOfBirth} error={fieldErrors.dateOfBirth} />
@@ -70,14 +72,14 @@ export function StaffProfileForm({
               <TextField label="Nationality" name="nationality" maxLength={STAFF_LIMITS.nationality} defaultValue={details.nationality} error={fieldErrors.nationality} />
               <Select label="Marital status" name="maritalStatus" placeholder="Choose" defaultValue={details.maritalStatus} options={MARITAL_STATUSES.map((value) => ({ value, label: MARITAL_LABELS[value] }))} error={fieldErrors.maritalStatus} />
             </div>
-          </Section>
+          </Panel>
 
-          <Section title="Address">
+          <Panel title="Address">
             <Address prefix="current" legend="Current address" details={details} errors={fieldErrors} />
             <Address prefix="permanent" legend="Permanent address" details={details} errors={fieldErrors} />
-          </Section>
+          </Panel>
 
-          <Section title="Contact">
+          <Panel title="Contact">
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="grid gap-2">
                 <p className="m-0 type-label text-ink">Email address</p>
@@ -89,18 +91,18 @@ export function StaffProfileForm({
               <TextField label="Relationship" name="emergencyRelationship" maxLength={STAFF_LIMITS.relationship} defaultValue={details.emergencyRelationship} error={fieldErrors.emergencyRelationship} />
               <TextField label="Emergency phone" name="emergencyPhone" type="tel" maxLength={STAFF_LIMITS.phone} defaultValue={details.emergencyPhone} error={fieldErrors.emergencyPhone} />
             </div>
-          </Section>
+          </Panel>
 
-          <Section title="Education and skills">
+          <Panel title="Education and skills">
             <div className="grid gap-5">
               <TextField label="Highest educational attainment" name="highestEducation" maxLength={STAFF_LIMITS.education} defaultValue={details.highestEducation} error={fieldErrors.highestEducation} />
               <TextField label="Certifications and licenses" name="certifications" optional multiline maxLength={STAFF_LIMITS.certifications} defaultValue={details.certifications} error={fieldErrors.certifications} />
               <TextField label="Skills" name="skills" hint="Separate skills with commas." maxLength={STAFF_LIMITS.skills} defaultValue={details.skills} error={fieldErrors.skills} />
               <TextField label="Languages spoken" name="languages" maxLength={STAFF_LIMITS.languages} defaultValue={details.languages} error={fieldErrors.languages} />
             </div>
-          </Section>
+          </Panel>
 
-          <Section title="Work experience">
+          <Panel title="Work experience">
             <div className="grid gap-4">
               {employers.map((job, index) => (
                 <div key={index} className="grid gap-4 rounded-lg border border-border p-4 sm:grid-cols-3">
@@ -117,15 +119,17 @@ export function StaffProfileForm({
               <TextField label="Key responsibilities" name="keyResponsibilities" multiline maxLength={STAFF_LIMITS.responsibilities} defaultValue={details.keyResponsibilities} error={fieldErrors.keyResponsibilities} />
               <TextField label="Achievements" name="achievements" optional multiline maxLength={STAFF_LIMITS.achievements} defaultValue={details.achievements} error={fieldErrors.achievements} />
             </div>
-          </Section>
+          </Panel>
 
-          <Section title="Résumé">
-            <p className="m-0 type-body-sm text-ink-muted">
-              {details.resumeName ? `Current file: ${details.resumeName}. ` : ""}
-              Upload a PDF or DOCX, up to 2 MB. When the file has headings for education, skills or experience, those blank fields are filled in.
-            </p>
-            <input name="resume" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="block w-full text-ink file:mr-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-2 file:font-semibold file:text-ink" />
-          </Section>
+          <Panel title="Résumé">
+            <FileField
+              label={details.resumeName ? "Replace the résumé" : "Résumé file"}
+              name="resume"
+              optional
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              hint={`${details.resumeName ? `Current file: ${details.resumeName}. ` : ""}A PDF or DOCX, up to 2 MB. When the file has headings for education, skills or experience, those blank fields are filled in.`}
+            />
+          </Panel>
 
           <div className="flex flex-wrap gap-3">
             <Button type="submit" loading={pending}>
@@ -140,15 +144,6 @@ export function StaffProfileForm({
         </div>
       )}
     </Form>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="grid gap-4">
-      <h2 className="m-0 type-h3">{title}</h2>
-      {children}
-    </section>
   );
 }
 

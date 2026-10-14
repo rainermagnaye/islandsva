@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { Panel } from "@/components/ui/card";
 import { appRoutes } from "@/content/routes";
 import { isConvertible, nextStatuses } from "@/features/leads/contract";
 import { ConvertLeadButton } from "@/features/leads/components/convert-lead-button";
@@ -47,18 +48,12 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
       }
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
-        <section aria-labelledby="message-title" className="grid gap-4 rounded-lg border border-border bg-surface-card p-6">
-          <h2 id="message-title" className="m-0 type-h3">
-            Their message
-          </h2>
+        <Panel boxed title="Their message">
           <p className="m-0 whitespace-pre-wrap break-words text-ink">{lead.message}</p>
-        </section>
+        </Panel>
 
         <div className="grid gap-6">
-          <section aria-labelledby="details-title" className="grid gap-4 rounded-lg border border-border bg-surface-card p-6">
-            <h2 id="details-title" className="m-0 type-h3">
-              Details
-            </h2>
+          <Panel boxed title="Details">
             <dl className="m-0 grid gap-3 type-body-sm">
               <Detail term="Status">
                 <LeadStatusBadge status={lead.status} />
@@ -73,12 +68,9 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
               <Detail term="Received">{when.format(new Date(lead.createdAt))} UTC</Detail>
               {lead.updatedAt !== lead.createdAt && <Detail term="Last updated">{when.format(new Date(lead.updatedAt))} UTC</Detail>}
             </dl>
-          </section>
+          </Panel>
 
-          <section aria-labelledby="actions-title" className="grid gap-4 rounded-lg border border-border bg-surface-card p-6">
-            <h2 id="actions-title" className="m-0 type-h3">
-              Next step
-            </h2>
+          <Panel boxed title="Next step">
             {isConvertible(lead.status) && (
               <div className="grid justify-items-start gap-2">
                 <p className="m-0 type-body-sm text-ink-muted">Ready to work with them? Create their client record.</p>
@@ -93,7 +85,7 @@ async function AdminLead({ params }: Pick<PageProps<"/admin/leads/[id]">, "param
                 <Link href={appRoutes.adminClients}>Clients</Link>.
               </p>
             )}
-          </section>
+          </Panel>
         </div>
       </div>
     </Workspace>

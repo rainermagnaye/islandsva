@@ -48,7 +48,7 @@ export function Alert({ tone = "info", title, children, action, tabIndex, ref, c
           <span className="sr-only">{WORDS[tone]}: </span>
           {title}
         </p>
-        {children && <div className="text-[0.9375rem] leading-[1.375rem] [&_p]:m-0">{children}</div>}
+        {children && <div className="type-body-md [&_p]:m-0">{children}</div>}
         {action && <div className="mt-2 flex flex-wrap gap-2">{action}</div>}
       </div>
     </div>

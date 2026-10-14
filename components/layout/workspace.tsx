@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
 
 /** A portal page: optional breadcrumbs, its h1, an optional supporting line, then the content. */
@@ -46,9 +47,9 @@ export function WorkspaceSkeleton() {
 /** A card announcing what a workspace will hold once its milestone ships. */
 export function ComingSoon({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="grid max-w-[60ch] gap-2 rounded-lg border border-border bg-surface-card p-6">
+    <Card as="section" className="grid max-w-[60ch] gap-2">
       <h2 className="m-0 type-h3">{title}</h2>
       <p className="m-0 text-ink-muted">{children}</p>
-    </section>
+    </Card>
   );
 }

@@ -36,7 +36,7 @@ export async function Footer() {
           <div className="grid content-start justify-items-start gap-3">
             <Logo tone="night" />
             <p className="m-0 type-eyebrow text-brand-sunrise">{site.tagline}.</p>
-            <ul className="m-0 mt-2 grid list-none gap-2 p-0 text-[0.9375rem] text-ink-on-deep-muted">
+            <ul className="m-0 mt-2 grid list-none gap-2 p-0 type-body-md text-ink-on-deep-muted">
               {site.email && (
                 <li className="flex items-center gap-2">
                   <Icon name="mail" size={18} className="text-brand-lagoon" />
@@ -54,7 +54,7 @@ export async function Footer() {
           <div className="grid grid-cols-2 gap-x-6 gap-y-8 @min-[768px]:grid-cols-3">
             {site.footer.map((col) => (
               <nav key={col.title} aria-labelledby={`footer-${slug(col.title)}`}>
-                <h2 id={`footer-${slug(col.title)}`} className="m-0 mb-3 font-sans text-[0.9375rem] leading-5 font-semibold text-brand-sand">
+                <h2 id={`footer-${slug(col.title)}`} className="m-0 mb-3 type-button text-brand-sand">
                   {col.title}
                 </h2>
                 <ul className="m-0 grid list-none gap-0.5 p-0">

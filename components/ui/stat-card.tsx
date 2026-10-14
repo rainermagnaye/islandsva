@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cx } from "@/lib/cx";
 import type { IconName } from "@/types/icon";
+import { cardSurface } from "./card";
 import { Icon } from "./icon";
 
 const count = new Intl.NumberFormat("en-US");
@@ -32,14 +33,14 @@ export function StatCard({ label, value, unit, icon, caption, href }: StatCardPr
         )}
         <p className="m-0 flex-1 type-label text-ink-muted">{label}</p>
       </div>
-      <p className="m-0 font-display text-[2rem] leading-[2.375rem] font-bold text-ink tabular-nums">
+      <p className="m-0 type-stat text-ink">
         {count.format(value)}
-        {unit && <span className="font-sans text-[0.9375rem] leading-5 font-medium text-ink-muted"> {unit}</span>}
+        {unit && <span className="type-menu text-ink-muted"> {unit}</span>}
       </p>
       {caption && <p className="m-0 type-body-sm text-ink-muted">{caption}</p>}
     </>
   );
-  const card = "grid min-w-0 content-start gap-2 rounded-lg border border-border bg-surface-card p-5 transition-colors";
+  const card = cx(cardSurface, "grid min-w-0 content-start gap-2 p-5 transition-colors");
 
   return href ? (
     <Link href={href} aria-label={`${label}: ${count.format(value)}`} className={cx(card, "text-ink no-underline hover:border-border-strong hover:elevation-sm")}>

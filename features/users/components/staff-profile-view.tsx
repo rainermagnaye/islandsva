@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { GENDER_LABELS, MARITAL_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
 
@@ -28,32 +29,32 @@ export function StaffProfileView({ details, email }: { details: StaffDetails; em
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="grid gap-4">
-        <Card title="Basic details">
+        <DetailsCard title="Basic details">
           <Field label="Date of birth" value={shownDate(details.dateOfBirth)} />
           <Field label="Gender" value={details.gender ? GENDER_LABELS[details.gender] : "Not provided"} />
           <Field label="Nationality" value={shown(details.nationality)} />
           <Field label="Marital status" value={details.maritalStatus ? MARITAL_LABELS[details.maritalStatus] : "Not provided"} />
-        </Card>
-        <Card title="Address information">
+        </DetailsCard>
+        <DetailsCard title="Address information">
           <Field label="Current address" value={address(details.currentStreet, details.currentCity, details.currentProvince, details.currentPostalCode)} wide />
           <Field label="Permanent address" value={address(details.permanentStreet, details.permanentCity, details.permanentProvince, details.permanentPostalCode)} wide />
-        </Card>
-        <Card title="Education and skills">
+        </DetailsCard>
+        <DetailsCard title="Education and skills">
           <Field label="Highest education" value={shown(details.highestEducation)} />
           <Field label="Languages" value={shown(details.languages)} />
           <Field label="Skills" value={shown(details.skills)} />
           <Field label="Résumé" value={shown(details.resumeName)} />
           <Field label="Certifications" value={shown(details.certifications)} wide />
-        </Card>
+        </DetailsCard>
       </div>
       <div className="grid gap-4">
-        <Card title="Contact information">
+        <DetailsCard title="Contact information">
           <Field label="Email" value={email} />
           <Field label="Phone" value={shown(details.mobileNumber)} />
           <Field label="Alternate phone" value={shown(details.alternatePhone)} />
           <Field label="Emergency contact" value={emergency.length > 0 ? emergency.join(" · ") : "Not provided"} wide />
-        </Card>
-        <Card title="Work experience">
+        </DetailsCard>
+        <DetailsCard title="Work experience">
           {jobs.length === 0 ? (
             <Field label="Employers" value="Not provided" wide />
           ) : (
@@ -68,7 +69,7 @@ export function StaffProfileView({ details, email }: { details: StaffDetails; em
           )}
           <Field label="Key responsibilities" value={shown(details.keyResponsibilities)} wide />
           <Field label="Achievements" value={shown(details.achievements)} wide />
-        </Card>
+        </DetailsCard>
       </div>
     </div>
   );
@@ -76,7 +77,7 @@ export function StaffProfileView({ details, email }: { details: StaffDetails; em
 
 export function RegistrationStepper({ steps }: { steps: readonly RegistrationStep[] }) {
   return (
-    <section className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-surface-card px-4 py-3">
+    <Card as="section" padding="sm" className="flex flex-wrap items-center gap-x-4 gap-y-2">
       <h2 className="m-0 type-label">Registration</h2>
       <ol className="m-0 flex list-none flex-wrap gap-y-2 p-0" aria-label="Registration progress">
         {steps.map((step, index) => (
@@ -100,16 +101,17 @@ export function RegistrationStepper({ steps }: { steps: readonly RegistrationSte
           </li>
         ))}
       </ol>
-    </section>
+    </Card>
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
+/** A read-only group of profile fields: a title bar over a two-column list. */
+function DetailsCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-surface-card">
+    <Card as="section" padding="none">
       <h2 className="m-0 border-b border-border px-4 py-3 type-label">{title}</h2>
       <dl className="m-0 grid gap-x-6 gap-y-3 p-4 sm:grid-cols-2">{children}</dl>
-    </section>
+    </Card>
   );
 }
 
