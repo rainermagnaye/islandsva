@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { USER_LIMITS } from "./contract";
-import { parseInvite, parseStaffId } from "./validation";
+import { parseInvite, parseStaffDetails, parseStaffId } from "./validation";
 
 const valid = { email: " Vi@Islandsva.com ", fullName: " Vi Santos ", role: "va" };
 
@@ -39,5 +39,32 @@ describe("parseStaffId", () => {
   it("rejects anything that is not an id", () => {
     expect(parseStaffId({ userId: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
     expect(parseStaffId({ userId: "11111111-1111-4111-8111-111111111111", extra: true })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseStaffDetails — date of birth", () => {
+  const blank = {
+    fullName: "Vi Santos", dateOfBirth: "", gender: "", nationality: "", maritalStatus: "",
+    currentStreet: "", currentCity: "", currentProvince: "", currentPostalCode: "",
+    permanentStreet: "", permanentCity: "", permanentProvince: "", permanentPostalCode: "",
+    mobileNumber: "", alternatePhone: "", emergencyName: "", emergencyRelationship: "", emergencyPhone: "",
+    highestEducation: "", certifications: "", skills: "", languages: "", keyResponsibilities: "", achievements: "",
+  };
+  const withDate = (dateOfBirth: string) => parseStaffDetails({ ...blank, dateOfBirth });
+
+  it("accepts a real past date, a leap day, or no date", () => {
+    for (const date of ["1990-07-15", "2000-02-29", ""]) expect(withDate(date).ok).toBe(true);
+  });
+
+  it("rejects dates that look right but don't exist (the database would refuse them)", () => {
+    for (const date of ["2026-02-31", "1990-13-01", "2001-02-29", "1990-04-31"]) {
+      expect(withDate(date)).toMatchObject({ ok: false, fieldErrors: { dateOfBirth: "Enter a real date of birth." } });
+    }
+  });
+
+  it("rejects malformed values and dates outside 1900 to today", () => {
+    expect(withDate("15/07/1990")).toMatchObject({ ok: false, fieldErrors: { dateOfBirth: expect.any(String) } });
+    expect(withDate("1899-12-31")).toMatchObject({ ok: false, fieldErrors: { dateOfBirth: expect.any(String) } });
+    expect(withDate("2999-01-01")).toMatchObject({ ok: false, fieldErrors: { dateOfBirth: expect.any(String) } });
   });
 });

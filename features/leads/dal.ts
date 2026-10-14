@@ -123,7 +123,6 @@ export async function updateLeadStatus(id: string, to: LeadStatus, from: readonl
 
 /** Why a conversion was refused, from convert_lead()'s own error codes (see the migration). */
 const CONVERT_REFUSALS = { IVA01: "not_found", IVA02: "converted", IVA03: "closed" } as const;
-export type ConvertRefusal = (typeof CONVERT_REFUSALS)[keyof typeof CONVERT_REFUSALS];
 
 /** Creates a pending client from a lead and marks the lead converted, in one database transaction. */
 export async function convertLeadToClient(input: { leadId: string; companyName: string; contactName: string; contactPhone: string | null }) {

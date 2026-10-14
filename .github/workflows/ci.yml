@@ -1,0 +1,42 @@
+# The checks every PR must pass (CLAUDE.md §2): lint, typecheck, tests (incl. every migration and RLS
+# policy on PGlite), production build, and the first-load JS budget. No secrets are needed — env is
+# read per request, so the build never touches Supabase, Resend or Turnstile.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch cancels the run it replaces.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Route types (PageProps, LayoutProps) are generated, not committed.
+      - run: npx next typegen
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run size

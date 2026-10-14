@@ -5,7 +5,6 @@ import type { Enums } from "@/types/database";
 
 /** Roles an admin can invite directly. Clients are invited by a Closer during onboarding (M3). */
 export const STAFF_ROLES = ["va", "closer", "admin"] as const satisfies readonly Role[];
-export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const USER_LIMITS = { fullName: 120, email: 254 } as const;
 
@@ -71,25 +70,15 @@ export const MARITAL_LABELS: Record<MaritalStatus, string> = {
 
 export const REGISTRATION_STATUSES = ["pending", "in_progress", "completed"] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
-export const REGISTRATION_LABELS: Record<RegistrationStatus, string> = {
-  pending: "Pending",
-  in_progress: "In progress",
-  completed: "Completed",
-};
 
 export type StaffEmployer = { company: string; position: string; duration: string };
 
 /** The sections the progress tracker reports. Resume is an alternative to typing education and experience. */
 export const STAFF_SECTIONS = ["basic", "address", "contact", "education", "experience", "resume"] as const;
 export type StaffSection = (typeof STAFF_SECTIONS)[number];
-export const SECTION_LABELS: Record<StaffSection, string> = {
-  basic: "Basic details",
-  address: "Addresses",
-  contact: "Contacts",
-  education: "Education and skills",
-  experience: "Work experience",
-  resume: "Resume",
-};
+
+/** Inputs on the staff profile form that can show a field error (employers and the résumé report form-level). */
+export type StaffDetailField = Exclude<keyof StaffDetails, "employers" | "resumeName">;
 
 export type StaffDetails = {
   fullName: string;

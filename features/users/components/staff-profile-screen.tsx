@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -107,7 +106,6 @@ function ProfileMenu({
 }
 
 function DisableProfile({ userId, name, disabled, reason }: { userId: string; name: string; disabled: boolean; reason?: string }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
@@ -115,15 +113,17 @@ function DisableProfile({ userId, name, disabled, reason }: { userId: string; na
   async function confirm() {
     setPending(true);
     setError(undefined);
-    const result = await disableStaffMember(userId);
-    if (result.ok) {
-      setOpen(false);
+    try {
+      // The action re-renders the page itself (refresh()), so the badge shows "Deactivated" on success.
+      const result = await disableStaffMember(userId);
+      if (result.ok) setOpen(false);
+      else setError(result.message);
+    } catch {
+      // A dropped connection must not leave the button stuck on "Disabling".
+      setError("We couldn't disable that account. Check your connection and try again.");
+    } finally {
       setPending(false);
-      router.refresh();
-      return;
     }
-    setError(result.message);
-    setPending(false);
   }
 
   return (
