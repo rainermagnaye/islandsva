@@ -23,6 +23,14 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
   return data.map(toSummary);
 }
 
+/** How many accounts the signed-in admin can see. Head-only count: no rows are transferred. */
+export async function countUsers() {
+  const supabase = await createClient();
+  const { count, error } = await supabase.from("profiles").select("id", { count: "exact", head: true });
+  if (error) throw new UpstreamError("supabase", `Counting users failed: ${error.message}`, { cause: error });
+  return count ?? 0;
+}
+
 /** One profile, read as the signed-in admin so RLS applies. Unknown ids are null, not an error. */
 export async function getUser(id: string): Promise<UserSummary | null> {
   const supabase = await createClient();
@@ -133,9 +141,6 @@ export async function saveStaffProfile(userId: string, invitedAt: string, detail
   const completedAt = status === "completed" ? (existing?.registration_completed_at ?? new Date().toISOString()) : null;
   const blank = (value: string) => value.trim() || null;
 
-  const { error: nameError } = await admin.from("profiles").update({ full_name: details.fullName }).eq("id", userId);
-  if (nameError) throw new UpstreamError("supabase", `Updating name ${userId} failed: ${nameError.message}`, { cause: nameError });
-
   const row = {
     user_id: userId,
     date_of_birth: blank(details.dateOfBirth),
@@ -171,8 +176,14 @@ export async function saveStaffProfile(userId: string, invitedAt: string, detail
       : {}),
   };
 
+  // Profile first: it's the write that can fail (up to 2 MB of résumé, CHECK constraints). The name follows
+  // only once that succeeded, so a failed save changes nothing; both writes are idempotent, so a retry
+  // finishes the job. The name is written only when it actually changed.
   const { error } = await admin.from("staff_profiles").upsert(row, { onConflict: "user_id" });
   if (error) throw new UpstreamError("supabase", `Saving staff profile ${userId} failed: ${error.message}`, { cause: error });
+
+  const { error: nameError } = await admin.from("profiles").update({ full_name: details.fullName }).eq("id", userId).neq("full_name", details.fullName);
+  if (nameError) throw new UpstreamError("supabase", `Updating name ${userId} failed: ${nameError.message}`, { cause: nameError });
 }
 
 function detailsFrom(row: {

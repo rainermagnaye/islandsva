@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,7 +19,7 @@ const STATUSES = Object.keys(STATUS_LABELS) as AccountStatus[];
  * The team list in the sample layout: the title, a centered search, and Filter plus Create new on the
  * right. Create new opens the invite form. Search and status run on the list already loaded for this admin.
  */
-export function TeamBoard({ users }: { users: readonly UserSummary[] }) {
+export function TeamBoard({ users, total }: { users: readonly UserSummary[]; total: number }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<AccountStatus | undefined>();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -87,6 +88,12 @@ export function TeamBoard({ users }: { users: readonly UserSummary[] }) {
           </Button>
         </div>
       </div>
+
+      {total > users.length && (
+        <Alert tone="info" title={`Showing the newest ${users.length} of ${total} accounts.`}>
+          Search and the status filter cover these only.
+        </Alert>
+      )}
 
       {users.length === 0 ? (
         <UsersTable users={users} />
