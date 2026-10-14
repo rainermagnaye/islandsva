@@ -17,4 +17,4 @@ Architecture decisions and why they were made. Change one by PR, updating the ru
 | `features/` + shared `lib/` | Each business area in one place as the app grows | — |
 | Invite-only accounts; deactivate, never delete | B2B: staff are invited, Closers create clients; restrict foreign keys keep history resolvable | — |
 | Résumé bytes in Postgres (`bytea`, ≤ 2 MB), not Storage | One store and one access model while files are rare and small | When files grow in number or size, or need download links |
-| Documentation split: root `CLAUDE.md` (rules and map), folder `CLAUDE.md` files (area detail, loaded only there), `docs/` (runbooks, decisions, roadmap) | The root file loads into every AI session; area detail only matters in its area | — |
+| Documentation: root `CLAUDE.md` (everyday rules and map), `supabase/CLAUDE.md` and `components/CLAUDE.md` (database and UI, loaded only there), `docs/` (runbooks, decisions, roadmap) | Rules needed in most tasks stay always-loaded; the database and UI are separate workflows; runbooks and history aren't instructions. Fewer files, less drift | If another area grows its own workflow (e.g. payments in M4) |

@@ -4,16 +4,12 @@
 
 Rules for the team and AI agents; change them by PR. Next.js 16 differs from training data — read `node_modules/next/dist/docs/` before using a Next API.
 
-This file holds what applies everywhere. Area detail lives next to its code and loads only when you work there:
+This file holds everything needed for everyday coding. Two areas with their own workflow have their own guide, loaded automatically when you work there, and people-facing material lives in `docs/`:
 
-| Working in | Read |
+| Working on | Read |
 |---|---|
-| `app/` — routes, pages, rendering, Server Actions vs Route Handlers | `app/CLAUDE.md` |
-| `features/` — feature anatomy, data access, validation, errors, uploads | `features/CLAUDE.md` |
-| `features/auth/` — sessions, roles, two-factor, email links | `features/auth/CLAUDE.md` |
-| `lib/api/` — `createHandler`, API responses, public forms | `lib/api/CLAUDE.md` |
-| `components/` — design system, tokens, voice | `components/CLAUDE.md` |
-| `supabase/` — migrations, grants, RLS, access model, database tests | `supabase/CLAUDE.md` |
+| Database — migrations, grants, RLS, access model, database tests | `supabase/CLAUDE.md` |
+| UI — design system, tokens, components, voice and brand | `components/CLAUDE.md` |
 | Setup, applying migrations, launch · decisions · roadmap and pending work | `docs/operations.md` · `docs/decisions.md` · `docs/roadmap.md` |
 
 ## 1. Project
@@ -29,10 +25,10 @@ This file holds what applies everywhere. Area detail lives next to its code and 
 ```bash
 npm run dev          # http://localhost:3000 — one dev server per folder (a second exits)
 npm run lint         # ESLint
-npm run typecheck    # tsc --noEmit (run `npx next typegen` first in a fresh checkout)
+npm run typecheck    # tsc --noEmit (run `npx next typegen` first in a fresh checkout or after adding a route)
 npm test             # Vitest: validators, helpers, createHandler, roles, every migration + RLS policy (PGlite)
 npm run build        # every public route must stay ○ (static)
-npm run size         # after build: first-load JS per page vs the §6 budget (exit 1 if over)
+npm run size         # after build: first-load JS per page vs the §8 budget (exit 1 if over)
 npm run start        # serve the production build
 npm run tokens       # regenerate app/tokens.css from design/tokens.json
 npm run admin:create -- <email>        # make an account admin in the project .env.local points at
@@ -46,38 +42,86 @@ npx supabase migration new <name>      # new SQL file in supabase/migrations/
 ## 3. Architecture
 
 ```
-app/                  routes only — thin pages and endpoints ((marketing) · (auth) · (dashboard) · auth/confirm · api/v1)
-features/<feature>/   one business area: contract · validation · service · dal · actions · components (auth, leads, clients, users)
-components/           shared UI: ui/ (design system) · layout/ · marketing/
+app/                  routes only — thin pages and endpoints
+  (marketing)/        static public site; page-only layout pieces in <page>/_components/
+  (auth)/             sign-in: login · forgot-password · set-password · mfa · accept-invite (temporary, §6)
+  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only; sidebar:
+                      overview · leads + lead page · clients · users = Teams + staff profile page)
+  auth/confirm/       email-link landing (token hash → session)
+  api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
+features/<feature>/   one business area (today: auth, leads, clients, users)
+  contract.ts         [shared] payload/response types, labels, limits — no Zod, safe for client imports
+  validation.ts       [server] Zod schemas + parseX()
+  service.ts          [server] use cases — the business logic routes and actions call (simple CRUD skips it)
+  dal.ts              [server] queries for this feature's tables
+  actions.ts          [server] Server Actions ('use server'); only actions are exported
+  email.ts · api-client.ts · components/   outbound email [server] · browser calls to /api/v1 [client] · feature UI
+components/           shared UI: ui/ (design system) · layout/ (shell, nav, footer) · marketing/ (sections)
 hooks/                [client] shared browser hooks, `use-x.ts` (today: use-current-path)
-lib/                  shared infrastructure: api/ · auth/ (roles, session) · supabase/ (server, admin, proxy) · validation · env
-types/                shared types only (api, form, icon, database)
+lib/                  shared infrastructure only
+  api/                [server] createHandler, ApiError, ok/fail, Turnstile, IP hash
+  auth/               roles.ts [shared] (roles, homes, safeNextPath) · session.ts [server] (getSessionUser, requireUser, requireRole)
+  supabase/           [server] server.ts (visitor session, RLS) · admin.ts (secret key) · proxy.ts (session refresh) · config.ts
+  validation.ts       [server] parseWith, emailField, toSubmitResult — building blocks for every validation.ts
+  env · upstream-error · cx
+types/                shared types only (api, form, icon, turnstile, database)
 content/              typed static content; content/routes.ts is the only source of internal URLs
-supabase/             migrations/ · tests/ · templates/ · config.toml (local stack only)
+supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)
 design/ · scripts/    tokens, logo sources, design-system PDF · build-tokens, check-bundle, create-admin
 docs/                 runbooks, decisions, roadmap (for people; not loaded automatically)
-proxy.ts              session refresh + convenience redirects (never authorization)
+proxy.ts              session refresh + convenience redirects on auth/portal routes (never authorization)
+vercel.json           function region sin1 (next to Supabase)
 ```
 
 **Import direction:** `app → features → components · hooks · lib · types · content`. Request path: `route.ts` / `actions.ts` → `parseX` → `service.ts` → `dal.ts` → `lib/supabase`.
 
-- **Thin edges:** routes and actions parse, check access, call a service, respond. Pages read through a feature's `dal.ts` — never `fetch` our own API from the server.
-- **Boundaries:** a feature uses another only through its `service.ts`, types or components, never its `dal.ts`. `lib/` holds only what every feature shares; `types/` only what a second layer needs; `content/` never imports components. New features get a folder when their phase starts.
-- **`hooks/`:** only when a second client component needs the logic; browser behaviour only — no data fetching, theme or screen-size hooks. Keep the rule a pure, tested function beside the hook. Form pending/error state is `<Form>`, not a hook.
-- **Mutations:** Server Actions from our own pages; Route Handlers for webhooks, external callers and public forms (`app/CLAUDE.md`).
+- **Thin edges:** routes and actions check access, parse, call a service, respond — no queries or business rules inline; the same use case serves both. Services take typed values, never `Request` or headers; the caller decides what runs in `after()`.
+- **Pages** compose components and read data through a feature's `dal.ts` — never `fetch` our own API from the server.
+- **Boundaries:** a feature imports its own files relatively (`./dal`) and uses another only through its `service.ts`, types or components, never its `dal.ts`. `lib/` holds only what every feature shares; `types/` only what a second layer needs; `content/` never imports components. New features get a folder when their phase starts.
+- **`hooks/`:** only when a second client component needs the logic; browser behaviour only — no data fetching, theme or screen-size hooks. Keep the rule a pure, tested function beside the hook (`currentPath` / `useCurrentPath`). Logic one feature owns stays there; form pending/error state is `<Form>` (`useActionState`), not a hook.
+- **`_components/`** holds one route's pieces; move to `components/` when a second route needs one.
 - **[server]** files start with `import "server-only"`.
 
 **Fixed — don't introduce:** microservices, GraphQL or a separate backend; global state libraries (use Server Components for data, URL search params for shareable UI state); folder-per-file-type structure (`controllers/`, `models/`, `utils/`).
 
-## 4. Security (everywhere)
+## 4. Routes and rendering
 
-- **Every portal page and Server Action checks access first** with `requireRole([...])` / `requireUser()` (`lib/auth/session.ts`); data then runs under RLS as that user. `proxy.ts` and layouts are never the check. Wrong role → `404`; admins need two-factor sign-in (`aal2`).
-- **Every Server Action and Route Handler** validates all input with the feature's `parseX` and returns a minimal result — never raw errors, SQL, stack traces or secrets.
-- **Secrets** stay on the server: env only through `lib/env.ts`; the secret key only in `dal.ts`, after the caller is authorized; nothing secret in `NEXT_PUBLIC_` or `.env`. No Supabase client in the browser.
-- **No PII in URLs, logs or page titles.** Ids in URLs are random UUIDs. `404`, not `403`, for what the caller may not see.
-- **Content:** never invent testimonials, logos or business claims — real content or `TODO(content)`.
+- **Server Actions** for mutations from our own pages that should update the UI at once (portal forms, sign-in/out, admin actions): one round trip, `refresh()` / `updateTag`, `cookies()`, `redirect()`, work without JS. Mutations only — they run one at a time, so never fetch data with them.
+- **Route Handlers** for webhooks, cron, downloads, parallel reads (search, polling), external callers, and public anonymous forms that need a stable, rate-limitable URL (contact form → `POST /api/v1/leads`).
+- **Static public pages:** public and sign-in pages stay ○ — no `cookies()`, `headers()` or `searchParams` in Server Components outside `<Suspense>`.
+- **Streamed portal pages (◐):** `page.tsx` renders `<Suspense fallback={<WorkspaceSkeleton />}>` around an async component that calls `requireRole` first.
+- `usePathname` / `useSearchParams` on a route with an unknown dynamic param (e.g. `/admin/leads/[id]`) suspend: wrap the client component in `<Suspense>` with a fallback that doesn't suspend.
+- `createClient()` calls `connection()` first: partial prefetching renders an App Shell with cookies, and auth-js checks expiry with `Date.now()`.
+- Cache with `'use cache'` + `cacheLife` (e.g. the footer year); per-request dedupe with React `cache()` (e.g. counts shared by the sidebar badge and a page).
+- Titles of pages about a person stay generic ("Lead", "Staff") — names stay out of tab titles and history.
+- UI errors use `error.tsx` per route group and `global-error.tsx`: a calm message and a way forward, never the error itself.
 
-## 5. Code conventions
+## 5. Features: data, validation, errors
+
+- **Data access:** `dal.ts` reads and writes as the signed-in user (`createClient()`, publishable key + session), so RLS checks again after the page or action's own check. Unknown or malformed ids return `null` (→ `notFound()`), never a database error.
+- **The secret key** (`createAdminClient()` in `lib/supabase/admin.ts`, the only place it is read) bypasses RLS: only in `dal.ts`, only after the caller is authorized, always with a comment saying why. Typical uses: the anonymous contact form, writes the API mustn't reach (résumé bytes, registration progress), Auth admin calls.
+- **Validation:** Zod, server-side only. Each input gets a `z.strictObject` schema and a `parseX(input: unknown)` returning `{ ok: true, value } | { ok: false, fieldErrors }`, or `{ ok: false, formError }` when no field can fix it (unknown keys, not an object, tampered hidden input → `400`). Build on `lib/validation.ts`; example `features/leads/validation.ts`. Every route and Server Action validates this way — TypeScript types are not runtime checks. Limits live in `contract.ts` (shared with the form's `maxLength`) and are mirrored by database `CHECK` constraints.
+- **Errors:** low-level clients throw `UpstreamError` (no user-facing text). Actions catch it, log it with its `service` and return a "try again" `SubmitResult` (`types/form.ts`); routes let `createHandler` turn it into a `503`. Routes throw `ApiError` for expected failures. No `any`, no empty `catch`, no `@ts-ignore`.
+- **Untrusted files** (uploads such as résumés): cap the size before reading, cap decompressed output and extracted text, never throw out of a parser — a bad file is stored or rejected, not a crash (`features/users/resume-text.ts` and its zip-bomb test). The Server Action body limit is 3 MB (`next.config.ts`).
+
+## 6. Security and auth
+
+- **Access:** every portal page and Server Action calls `requireRole([...])` / `requireUser()` (`lib/auth/session.ts`) before reading or writing; data then runs under RLS as that user. `proxy.ts` and layouts are never the check (a layout may hide UI, but the page still checks). Wrong role → `notFound()`; an admin without two-factor → `/mfa`.
+- **Server Actions** are public POST endpoints: check auth inside each one, validate every argument with `parseX`, return a minimal `SubmitResult` — never raw errors, SQL or stack traces. Next.js checks `Origin`.
+- **Route Handlers** all use `createHandler` (`lib/api/handler.ts`): `application/json` content type → same-site `Origin` (CSRF) → body size (header and bytes) → JSON parse → handler, which validates with `parseX`, authorizes the resource and returns a minimal response. `ApiError` → its status via `fail()`; `UpstreamError` → logged `503` with the route's message; anything else → logged `500`. Every body is `ApiResponse<T>` (`types/api.ts`: `{ data }` or `{ error: { code, message, fieldErrors? } }`) built only with `ok()` / `fail()`, `data` typed by the feature's contract (`ok<LeadCreated>(…)`); all API responses are `no-store`.
+- **Public forms:** honeypot (`website` field: filled → a fake `201`, nothing stored) + Turnstile, rendered explicitly and verified server-side including the token's hostname — required in production, skipped in local dev without a secret, test keys refused on the live deployment; a Cloudflare outage is a `503`. Slow side effects (email) run in `after()`. Rate limiting is a Vercel Firewall rule per route (required before launch).
+- **Secrets:** env only through `lib/env.ts` (a missing key fails just that request); real values in `.env.local`, never in `.env` (`npm test` fails if one is) or `NEXT_PUBLIC_`; production keys in Vercel, Sensitive. No Supabase client in the browser.
+- **Privacy:** no PII in URLs, logs or page titles (ids in URLs are random UUIDs); IPs are HMAC-hashed before storage (`lib/api/ip-hash.ts`); `404`, not `403`, for what the caller may not see; the Privacy Policy must match what the site does.
+- **Headers** (`next.config.ts`): HSTS, nosniff, strict referrer, restrictive `Permissions-Policy`, no framing, and a static CSP without nonces (nonces would make every page dynamic); CSP and HSTS in production builds only.
+- **Sessions:** `@supabase/ssr` cookie sessions, server-side only. Verify with `getClaims()` (checks the signature); never trust `getSession()` on the server. `getSessionUser()` is cached per request. `proxy.ts` refreshes the session cookie on auth and portal routes.
+- **Accounts and roles:** invite-only, sign-up disabled (admins invite staff from Teams; Closers will invite clients in M3). Supabase Auth owns `auth.users`; `profiles` (same id) holds `status`: `invited` → `active` on first sign-in → `inactive` when deactivated. Roles live in `roles` (one row per user per role; `app_role` = `ROLES` in `lib/auth/roles.ts`, highest precedence first), written only by the server. The `custom_access_token_hook` copies them into `app_metadata.roles` (never `user_metadata`); inactive users get none; changes apply at the next token refresh (≤ 1 hour). The hook must be enabled in the Supabase dashboard — without it nobody gets a role.
+- **Two-factor:** admins need TOTP (`aal2`), enforced by `requireRole` and again by RLS. `/mfa` sets up an authenticator app on first use, then asks for a code at each sign-in.
+- **Sign-in:** users go straight to their workspace (`homeFor(roles)` from the new token; admins via `/mfa`); `/dashboard` is only the fallback without a role; `?next=` goes through `safeNextPath` (same-site paths only). Credential errors share one message and "forgot password" always reports success (no account enumeration). Passwords 10–72 characters with letters and digits.
+- **Email links:** invite and reset use the `supabase/templates/` token-hash links to `/auth/confirm` — the one GET route outside `createHandler`, which accepts only `invite` / `recovery`, verifies server-side and redirects to fixed paths.
+  - **Temporary (until custom SMTP):** the hosted project still sends Supabase's default emails, whose links carry the session in the URL `#hash`. `/accept-invite` and `EmailLinkSession` (in the root layout, so on every page) read and clear the hash and post the tokens to `establishEmailSession`, which stores them with `setSession` (Supabase validates them). Remove all three, and `/accept-invite` from the redirect allow-list, once the token-hash emails are live (`docs/roadmap.md`).
+- **Content:** never invent testimonials, logos or business claims — real content or `TODO(content)`; placeholder data must be labelled, development-only and absent from production builds (`content/testimonials.ts`).
+
+## 7. Code conventions
 
 | Item | Convention | Example |
 |---|---|---|
@@ -91,11 +135,9 @@ proxy.ts              session refresh + convenience redirects (never authorizati
 | Tests | `*.test.ts` beside source; E2E in `tests/e2e/` | `validation.test.ts` |
 
 - Server Components by default; `'use client'` only on the smallest leaf that needs it. ~200 lines per file. Named exports (default only where Next requires); `@/` imports; no barrel files.
-- Zod validation server-side only; limits in `contract.ts`, mirrored by database constraints (`features/CLAUDE.md`).
-- No `any`, no empty `catch`, no `@ts-ignore`.
 - **Comments** explain *why* — required on secret-key queries, caching choices and non-obvious security checks.
 
-## 6. Performance and testing
+## 8. Performance and testing
 
 | Budget | Target |
 |---|---|
@@ -104,16 +146,16 @@ proxy.ts              session refresh + convenience redirects (never authorizati
 | First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Now: public ~148, contact 155, sign-in ~158, `/admin` 158.9 — new client code there needs a saving elsewhere |
 
 - Keep client components minimal; prefer platform features (CSS, `<details>`, `<dialog>`, popover) over libraries. Justify any dependency over 30 KB. `next/font` (≤ 2 families); third-party scripts only on the pages that need them.
-- **Tests:** every `parseX` and pure rule; `createHandler`; role rules and `safeNextPath`; every migration with RLS allowed and denied per role. A test for a security limit must fail when the limit is removed. Untested auth or permission branches block review.
+- **Tests:** every `parseX` and pure rule (triage flow, registration steps, invite results, parsers, `currentPath`); `createHandler`; role rules and `safeNextPath`; every migration with RLS allowed and denied per role. A test for a security limit must fail when the limit is removed. Untested auth or permission branches block review.
 
-## 7. Workflow and documentation
+## 9. Workflow and documentation
 
 - `main` changes only by PR with approval (plus green CI once it exists). Branches `feat/` `fix/` `chore/` `refactor/` `db/`, short-lived; Conventional Commits (`feat(contact): add lead form`).
 - PRs under 400 lines, describing changes, trade-offs, testing and any env var, dependency or schema change. 1 approval; 2 for database, auth, security or payments.
-- **Where documentation lives:** this file = rules that apply everywhere and the map; a folder's `CLAUDE.md` = that area's rules (loaded only when working there); `docs/` = runbooks, decisions and roadmap for people. Each fact in exactly one place — link, don't copy. `README.md` only points here; no other READMEs or doc folders.
-- A PR that changes a convention, folder, script, env var or decision updates the nearest `CLAUDE.md` or `docs/` file in the same PR.
+- **Where documentation lives:** this file = everyday rules and the map; `supabase/CLAUDE.md` and `components/CLAUDE.md` = their area's rules (loaded only when working there); `docs/` = runbooks, decisions and roadmap for people. Each fact in exactly one place — link, don't copy. `README.md` only points here; no other READMEs, folder guides or doc folders without a PR that updates this rule.
+- A PR that changes a convention, folder, script, env var or decision updates the right file above in the same PR.
 
-## 8. Rules of engagement (AI agents)
+## 10. Rules of engagement (AI agents)
 
 - **Ask first:** no code changes without approval — propose the plan, trade-offs, dependencies and risks, then wait.
 - **Explicit approval each time:** migrations, deploys, security fixes, auth changes, major upgrades.
