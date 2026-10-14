@@ -18,7 +18,6 @@ What is not in the MVP is a rule for every change, so it lives in `CLAUDE.md` §
 - **Repo and tooling:** make CI a required check — branch protection (paid plan) or the free CODEOWNERS + Actions guard; Prettier (editors already reformat on save — agree on it before reformatting lands in PRs); `--max-warnings=0`; pin Node 24 (`.nvmrc` + `engines`); Playwright E2E (`tests/e2e/`) for navigation, both themes, the contact form and sign-in.
 - **Launch:** see the checklist in `docs/operations.md`.
 - **Code:**
-  - `leads (created_at desc)` index for the unfiltered leads list (migration).
   - Split the icon set to win back ~1.2 KB per page (`/admin` is at 158.9 of 160 KB).
   - Content accessors (`getPackages()`); rename `monthlyPrice` → `monthlyPriceCents`; `type-*` instead of arbitrary font sizes.
   - Resend and revoke invites.

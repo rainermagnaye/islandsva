@@ -389,6 +389,11 @@ describe("leads", () => {
     await expect(as("anon", {}, "insert into public.leads (full_name, email, message) values ('a', 'a@b.co', 'hi')")).rejects.toThrow(/permission denied/);
   });
 
+  it("the unfiltered list has a newest-first index", async () => {
+    const rows = await asServer<{ indexdef: string }>("select indexdef from pg_indexes where schemaname = 'public' and tablename = 'leads'");
+    expect(rows.map((r) => r.indexdef)).toContainEqual(expect.stringMatching(/\(created_at DESC\)$/));
+  });
+
   it("admins change only the triage columns", async () => {
     const [lead] = await insert({});
     expect(await asUser(asAdmin, "update public.leads set status = 'contacted' where id = $1 returning id", [lead.id])).toHaveLength(1);
