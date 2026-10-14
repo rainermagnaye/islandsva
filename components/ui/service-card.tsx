@@ -42,7 +42,7 @@ export function ServiceCard({
   return (
     <article
       className={cx(
-        "relative flex flex-col gap-4 rounded-lg border bg-surface-card p-6 text-ink transition-[box-shadow,border-color] duration-200 hover:elevation-md",
+        "relative flex flex-col gap-4 rounded-lg border bg-surface-card p-6 text-ink transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:elevation-md",
         featured ? "border-2 border-action-primary" : "border-border hover:border-border-strong",
         className,
       )}

@@ -42,9 +42,9 @@ export default function HomePage() {
       </Section>
 
       <Section id="how-it-works" align="center" eyebrow="How it works" title="From first call to first task in days" lead="We handle the hiring, matching and onboarding. You get an assistant who's ready to work.">
-        <ol className="m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="reveal-stagger m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map((step, i) => (
-            <li key={step.title} className="reveal grid content-start gap-3">
+            <li key={step.title} className="reveal grid content-start gap-3 rounded-lg border border-border bg-surface-card p-6 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:elevation-md">
               <span className="grid size-11 place-items-center rounded-pill bg-action-primary font-display text-[1.25rem] font-bold text-on-action-primary">
                 {i + 1}
               </span>
@@ -63,12 +63,12 @@ export default function HomePage() {
         title="Your business doesn't stop at 5 pm. Neither do we."
         lead="Choose daytime cover, overnight cover or both. With two assistants on shifts, your customers get answers while you sleep and you wake up to a clear inbox."
       >
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="reveal-stagger grid gap-6 md:grid-cols-2">
           {[
             { icon: "sun" as const, title: "Day shift", body: "Meetings scheduled, follow-ups sent and admin cleared during your working hours." },
             { icon: "moon" as const, title: "Night shift", body: "Customer replies, overnight orders and prep work done before you wake up." },
           ].map((shift) => (
-            <div key={shift.title} className="reveal grid content-start gap-3 rounded-lg border border-ink-on-deep-muted/25 p-6">
+            <div key={shift.title} className="reveal grid content-start gap-3 rounded-lg border border-ink-on-deep-muted/25 p-6 transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-brand-sunrise/50">
               <Icon name={shift.icon} size={32} className="text-brand-sunrise" />
               <h3 className="m-0 type-h3 text-brand-sand">{shift.title}</h3>
               <p className="m-0 text-ink-on-deep-muted">{shift.body}</p>

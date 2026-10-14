@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { USER_LIMITS } from "./contract";
-import { parseInvite } from "./validation";
+import { parseInvite, parseStaffId } from "./validation";
 
 const valid = { email: " Vi@Islandsva.com ", fullName: " Vi Santos ", role: "va" };
 
@@ -27,5 +27,17 @@ describe("parseInvite", () => {
 
   it("rejects unknown keys as a form-level error", () => {
     expect(parseInvite({ ...valid, grantedBy: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseStaffId", () => {
+  it("accepts a user id", () => {
+    const userId = "11111111-1111-4111-8111-111111111111";
+    expect(parseStaffId({ userId })).toEqual({ ok: true, value: { userId } });
+  });
+
+  it("rejects anything that is not an id", () => {
+    expect(parseStaffId({ userId: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseStaffId({ userId: "11111111-1111-4111-8111-111111111111", extra: true })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });

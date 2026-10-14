@@ -14,7 +14,7 @@ export function InviteStaffForm() {
       aria-label="Invite a team member"
       onSubmit={inviteStaff}
       success={
-        <FormSuccess title="Invitation sent">
+        <FormSuccess align="center" title="Invitation sent">
           They&apos;ll get an email with a link to choose a password. The link expires in 24 hours.
         </FormSuccess>
       }
@@ -22,7 +22,7 @@ export function InviteStaffForm() {
       {({ pending, fieldErrors }) => (
         <>
           <div className="grid gap-5 sm:grid-cols-2">
-            <TextField label="Full name" name="fullName" autoComplete="off" required maxLength={USER_LIMITS.fullName} error={fieldErrors.fullName} />
+            <TextField label="Full name" name="fullName" autoComplete="off" required maxLength={USER_LIMITS.fullName} error={fieldErrors.fullName} data-autofocus />
             <TextField label="Work email" name="email" type="email" autoComplete="off" required maxLength={USER_LIMITS.email} error={fieldErrors.email} />
           </div>
           <Select

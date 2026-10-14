@@ -19,8 +19,8 @@ type HeroProps = {
 
 /**
  * The design system's Hero: eyebrow pill with the sun dot, the promise in Alegreya 800, lead, primary and
- * ghost CTAs, a proof line, and the day-and-night illustration. Stacks below 880px of container width with
- * the copy first. Never put text over the illustration.
+ * ghost CTAs, a proof line, and the day-and-night illustration. The Sand & Sea mark stays in the navbar.
+ * Stacks below 880px of container width with the copy first. Never put text over the illustration.
  */
 export function Hero({ eyebrow, title, lead, primary, secondary, proof }: HeroProps) {
   return (

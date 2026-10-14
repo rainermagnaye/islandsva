@@ -1,4 +1,5 @@
 import { ViewTransition, type ReactNode } from "react";
+import { ScrollPop } from "@/components/marketing/scroll-pop";
 import { site } from "@/content/site";
 import { Footer } from "./footer";
 import { NavBar } from "./nav-bar";
@@ -7,6 +8,7 @@ import { NavBar } from "./nav-bar";
 export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <>
+      <ScrollPop />
       <NavBar links={site.nav} cta={site.cta} />
       {/* Crossfades page content on navigation (browser View Transitions; no-op where unsupported). */}
       <ViewTransition>

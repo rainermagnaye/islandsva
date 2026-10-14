@@ -47,6 +47,15 @@ export async function updatePassword(password: string): Promise<AuthOutcome> {
   return outcome((await supabase.auth.updateUser({ password })).error);
 }
 
+/**
+ * Stores the session from an invite or reset link. Those links are not PKCE: Supabase puts the tokens in
+ * the URL hash, which only the browser can read, and this writes them into the cookie.
+ */
+export async function setSession(accessToken: string, refreshToken: string): Promise<AuthOutcome> {
+  const supabase = await createClient();
+  return outcome((await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })).error);
+}
+
 /** Exchanges an emailed one-time token (invite or recovery) for a session cookie. */
 export async function verifyEmailLink(type: "invite" | "recovery", tokenHash: string): Promise<AuthOutcome> {
   const supabase = await createClient();

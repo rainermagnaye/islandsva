@@ -13,7 +13,7 @@ export const contentType = "image/png";
 async function logoDataUri() {
   "use cache";
   cacheLife("max");
-  const logo = await readFile(join(process.cwd(), "public/logo/lockup-night.png"));
+  const logo = await readFile(join(process.cwd(), "public/logo/sand-sea.png"));
   return `data:image/png;base64,${logo.toString("base64")}`;
 }
 
@@ -34,8 +34,19 @@ export default async function OpenGraphImage() {
           color: "#f5e8d3",
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse renders plain <img> */}
-        <img src={logoSrc} width={469} height={160} alt="" />
+        <div
+          style={{
+            display: "flex",
+            width: 420,
+            height: 138,
+            overflow: "hidden",
+            position: "relative",
+            background: "transparent",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse renders plain <img> */}
+          <img src={logoSrc} width={657} height={401} alt="" style={{ position: "absolute", left: -103, top: -132 }} />
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05 }}>Your business, handled while you sleep</div>
           <div style={{ fontSize: 32, color: "#b9d3cf" }}>{`Dedicated virtual assistants — ${site.tagline.toLowerCase()}`}</div>

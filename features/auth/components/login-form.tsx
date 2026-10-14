@@ -1,23 +1,36 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { TextField } from "@/components/ui/text-field";
-import { appRoutes } from "@/content/routes";
 import { signIn } from "../actions";
 import { LINK_ERRORS, PASSWORD_RULES, type LinkError, type SignInField } from "../contract";
 
 /** Reads ?next= (where to return after sign-in) and ?error= (a failed email link) from the URL. */
-export function LoginFormWithParams() {
+export function LoginFormWithParams({ forgotPasswordLink }: { forgotPasswordLink: ReactNode }) {
   const params = useSearchParams();
   const error = params.get("error");
-  return <LoginForm next={params.get("next") ?? undefined} linkError={error && error in LINK_ERRORS ? (error as LinkError) : undefined} />;
+  return (
+    <LoginForm
+      forgotPasswordLink={forgotPasswordLink}
+      next={params.get("next") ?? undefined}
+      linkError={error && error in LINK_ERRORS ? (error as LinkError) : undefined}
+    />
+  );
 }
 
-export function LoginForm({ next, linkError }: { next?: string; linkError?: LinkError }) {
+export function LoginForm({
+  next,
+  linkError,
+  forgotPasswordLink,
+}: {
+  next?: string;
+  linkError?: LinkError;
+  forgotPasswordLink: ReactNode;
+}) {
   return (
     <div className="grid gap-5">
       {linkError && (
@@ -45,9 +58,7 @@ export function LoginForm({ next, linkError }: { next?: string; linkError?: Link
               <Button type="submit" loading={pending}>
                 {pending ? "Signing in" : "Sign in"}
               </Button>
-              <Link href={appRoutes.forgotPassword} className="type-body-sm">
-                Forgot your password?
-              </Link>
+              {forgotPasswordLink}
             </div>
           </>
         )}

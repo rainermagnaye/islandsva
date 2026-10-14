@@ -9,7 +9,7 @@ major_version = 17
 
 [auth]
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/auth/confirm"]
+additional_redirect_urls = ["http://localhost:3000/auth/confirm", "http://localhost:3000/accept-invite"]
 jwt_expiry = 3600
 # Invite-only: admins invite staff, Closers invite clients (M3).
 enable_signup = false
@@ -27,6 +27,7 @@ max_frequency = "60s"
 otp_expiry = 86400
 
 # Both links use token hashes that land on /auth/confirm (server-side verification, no open redirect).
+# The hosted free plan rejects template changes until custom SMTP is set, so omit this block from `config push` until then.
 [auth.email.template.invite]
 subject = "You're invited to Islands VA"
 content_path = "./supabase/templates/invite.html"

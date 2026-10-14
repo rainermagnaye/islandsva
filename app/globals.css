@@ -65,14 +65,48 @@
   }
 }
 
-/* Sections fade up as they scroll into view — scroll-driven animation, skipped where unsupported. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .reveal {
-      animation: rise linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 60%;
-    }
+/*
+ * Scroll pop. Off-screen blocks stay tucked down until they enter, then spring
+ * into place (overshoot easing, same idea as the Vet Assist cards). `.pop-ready`
+ * is added by ScrollPop so the page stays visible without JS and for reduced motion.
+ * This is time-based on purpose: a view() timeline stays stuck at the start here.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html.pop-ready .reveal:not(.is-in) {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(40px) scale(0.96);
+  }
+
+  html.pop-ready .reveal.is-in:not(.pop-settled) {
+    animation: pop-up 0.85s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  html.pop-ready .reveal.pop-settled {
+    opacity: 1;
+    filter: none;
+    animation: none;
+  }
+
+  /* A row arrives one card at a time. */
+  .reveal-stagger > .reveal:nth-child(2) { animation-delay: 0.08s; }
+  .reveal-stagger > .reveal:nth-child(3) { animation-delay: 0.16s; }
+  .reveal-stagger > .reveal:nth-child(4) { animation-delay: 0.24s; }
+  .reveal-stagger > .reveal:nth-child(5) { animation-delay: 0.32s; }
+  .reveal-stagger > .reveal:nth-child(6) { animation-delay: 0.4s; }
+}
+
+@keyframes pop-up {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(40px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
   }
 }
 
@@ -95,13 +129,14 @@
   container-type: inline-size;
 }
 .data-table__scroll {
-  overflow-x: auto;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-card);
 }
 .data-table table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font: 400 0.875rem/1.25rem var(--font-sans);
@@ -123,6 +158,8 @@
   color: var(--ink-muted);
   font: 600 0.8125rem/1.125rem var(--font-sans);
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   border-bottom: 1px solid var(--border);
 }
@@ -133,6 +170,11 @@
   vertical-align: middle;
   border-bottom: 1px solid var(--border);
 }
+.data-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .data-table tbody th {
   font-weight: 600;
 }
@@ -141,6 +183,31 @@
 }
 .data-table tbody tr {
   transition: background-color 120ms ease;
+}
+/* Position the name cell, not the row. Relative positioning on a <tr> collapses the other columns. */
+.data-table tbody th:has(a.staff-row-link) {
+  position: relative;
+}
+.data-table a.staff-row-link {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-weight: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.data-table a.staff-row-link::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100cqi;
+}
+.data-table tbody tr:has(a.staff-row-link) {
+  cursor: pointer;
 }
 .data-table tbody tr:hover {
   background: var(--action-ghost-hover);
@@ -154,6 +221,15 @@
     overflow: visible;
     border: 0;
     background: transparent;
+  }
+  .data-table table {
+    table-layout: auto;
+  }
+  .data-table thead th,
+  .data-table td {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
   .data-table thead {
     position: absolute;
