@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/marketing/cta-band";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Section } from "@/components/marketing/section";
+import { pricingFaqs } from "@/content/faqs";
 import { PricingTable } from "./_components/pricing-table";
 
 export const metadata: Metadata = {
@@ -19,6 +21,9 @@ export default function PricingPage() {
       />
       <Section id="plans" title="Compare plans" className="pt-10 md:pt-12 lg:pt-16">
         <PricingTable />
+      </Section>
+      <Section id="faq" tone="sunken" eyebrow="Questions" title="Pricing questions" align="center">
+        <FaqSearch items={pricingFaqs} />
       </Section>
       <CtaBand title="Questions about pricing?" body="We'll walk you through what each package covers and help you pick the right term." />
     </>

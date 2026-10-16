@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/marketing/cta-band";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Section } from "@/components/marketing/section";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { StepList } from "@/components/ui/step-list";
+import { aboutFaqs } from "@/content/faqs";
 
 export const metadata: Metadata = {
   title: "About",
@@ -62,6 +64,10 @@ export default function AboutPage() {
 
       <Section id="vetting" eyebrow="Our assistants" title="Every VA is vetted and supported">
         <StepList steps={vetting} itemClassName="reveal" className="max-w-(--container-prose)" />
+      </Section>
+
+      <Section id="faq" tone="sunken" align="center" eyebrow="Questions" title="About working with us">
+        <FaqSearch items={aboutFaqs} />
       </Section>
 
       <CtaBand />

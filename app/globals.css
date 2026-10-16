@@ -150,6 +150,46 @@
   }
 }
 
+/* Two copies of the logo row. Sliding by half the width loops right to left without a jump. */
+@media (prefers-reduced-motion: no-preference) {
+  .brand-marquee {
+    animation: brand-marquee 45s linear infinite;
+  }
+
+  .brand-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  .brand-marquee-wrap {
+    mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  }
+}
+
+@keyframes brand-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* First section of each public page: sand shore, lagoon light, a low sunrise. Tokens only, so both themes follow. */
+.island-shore {
+  background-color: var(--surface-page);
+  background-image:
+    radial-gradient(36% 48% at 92% 0%, color-mix(in srgb, var(--brand-sunrise) 42%, transparent), transparent 68%),
+    radial-gradient(70% 80% at 100% -10%, color-mix(in srgb, var(--brand-lagoon) 38%, transparent), transparent 58%),
+    radial-gradient(46% 50% at -8% 108%, color-mix(in srgb, var(--brand-sunrise) 24%, transparent), transparent 62%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--brand-lagoon) 16%, var(--surface-page)) 0%,
+      color-mix(in srgb, var(--surface-sand) 78%, var(--surface-page)) 46%,
+      var(--surface-page) 100%
+    );
+}
+
 @keyframes rise {
   from {
     opacity: 0;

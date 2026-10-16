@@ -14,11 +14,14 @@ export function FaqList({
   items,
   headingLevel = 3,
   align = "center",
+  schemaItems,
 }: {
   items: readonly Faq[];
   headingLevel?: 3 | 4;
   /** center = the marketing band. start = the left edge of the page content, full width. */
   align?: "center" | "start";
+  /** Questions for the FAQPage schema when the visible list is a filtered subset. */
+  schemaItems?: readonly Faq[];
 }) {
   const Heading = `h${headingLevel}` as const;
   return (
@@ -40,13 +43,13 @@ export function FaqList({
           <p className="m-0 max-w-[68ch] px-5 pb-5 text-ink-muted">{item.answer}</p>
         </details>
       ))}
-      <FaqStructuredData items={items} />
+      <FaqStructuredData items={schemaItems ?? items} />
     </div>
   );
 }
 
 /** schema.org FAQPage JSON-LD. A data block, not a script: the CSP doesn't apply and nothing executes. */
-function FaqStructuredData({ items }: { items: readonly Faq[] }) {
+export function FaqStructuredData({ items }: { items: readonly Faq[] }) {
   const data = {
     "@context": "https://schema.org",
     "@type": "FAQPage",

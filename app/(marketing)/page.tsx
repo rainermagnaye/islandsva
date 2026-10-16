@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { FaqList } from "@/components/marketing/faq-list";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { FeatureList } from "@/components/marketing/feature-list";
 import { Hero } from "@/components/marketing/hero";
+import { IslandShore } from "@/components/marketing/island-shore";
+import { LogoStrip } from "@/components/marketing/logo-strip";
 import { PackageCards } from "@/components/marketing/package-cards";
 import { Section } from "@/components/marketing/section";
 import { TestimonialGrid } from "@/components/marketing/testimonial-card";
 import { Card } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
+import { brands } from "@/content/brands";
+import { homeFaqs } from "@/content/faqs";
 import { routes } from "@/content/routes";
-import { faqs, services, steps } from "@/content/services";
+import { services, steps } from "@/content/services";
 import { site } from "@/content/site";
 import { testimonials } from "@/content/testimonials";
 
@@ -19,17 +23,20 @@ const highlights = ["Vetted assistants from the Philippines", "Day, night or bot
 export default function HomePage() {
   return (
     <>
-      <Container>
-        <Hero
-          eyebrow={site.tagline}
-          title="Your business, handled while you sleep"
-          lead="A dedicated virtual assistant who learns how you work — then takes your inbox, calendar, customer replies and admin off your plate. Around the clock, if you need it."
-          primary={site.cta}
-          secondary={{ label: "See packages", href: routes.packages }}
-          proof={highlights.join(" · ")}
-        />
-        {/* TODO(content): a LogoStrip ("Trusted by teams at…") goes here once clients agree to be named. */}
-      </Container>
+      <IslandShore>
+        <Container className="pb-4">
+          <Hero
+            eyebrow={site.tagline}
+            title="Your business, handled while you sleep"
+            lead="A dedicated virtual assistant who learns how you work — then takes your inbox, calendar, customer replies and admin off your plate. Around the clock, if you need it."
+            primary={site.cta}
+            secondary={{ label: "See packages", href: routes.packages }}
+            proof={highlights.join(" · ")}
+          />
+        </Container>
+      </IslandShore>
+
+      <LogoStrip brands={brands} />
 
       <Section
         id="services"
@@ -92,7 +99,7 @@ export default function HomePage() {
       )}
 
       <Section id="faq" align="center" eyebrow="Questions" title="Good to know">
-        <FaqList items={faqs} />
+        <FaqSearch items={homeFaqs} />
       </Section>
 
       <CtaBand />

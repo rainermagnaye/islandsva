@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
-import { Alegreya, Figtree } from "next/font/google";
+import localFont from "next/font/local";
 import { site } from "@/content/site";
 import { EmailLinkSession } from "@/features/auth/components/email-link-session";
 import "./globals.css";
 
-const alegreya = Alegreya({
-  variable: "--font-alegreya",
-  subsets: ["latin"],
-  weight: ["700", "800"],
+// Same Alegreya and Figtree files the design system uses. Loaded from the project so a bad
+// Google Fonts response cannot stall the dev server.
+const alegreya = localFont({
+  src: "./fonts/alegreya-latin.woff2",
+  weight: "700 800",
   display: "swap",
+  variable: "--font-alegreya",
 });
 
-const figtree = Figtree({
-  variable: "--font-figtree",
-  subsets: ["latin"],
+const figtree = localFont({
+  src: "./fonts/figtree-latin.woff2",
+  weight: "300 900",
   display: "swap",
+  variable: "--font-figtree",
 });
 
 export const metadata: Metadata = {

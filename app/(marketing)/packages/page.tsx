@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { FaqList } from "@/components/marketing/faq-list";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Section } from "@/components/marketing/section";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Icon } from "@/components/ui/icon";
 import { IconBadge } from "@/components/ui/icon-badge";
 import { formatPrice, packages, startingPrice } from "@/content/packages";
 import { contactHref, routes } from "@/content/routes";
-import { faqs } from "@/content/services";
+import { packageFaqs } from "@/content/faqs";
 import { cx } from "@/lib/cx";
 
 export const metadata: Metadata = {
@@ -95,7 +95,7 @@ export default function PackagesPage() {
       </Section>
 
       <Section id="faq" tone="sunken" eyebrow="Questions" title="Before you choose">
-        <FaqList items={faqs} />
+        <FaqSearch items={packageFaqs} />
       </Section>
 
       <CtaBand title="Not sure which package fits?" body="Tell us about your week on a free discovery call and we'll recommend the right level of support." />
