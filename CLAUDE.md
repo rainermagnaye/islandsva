@@ -35,7 +35,7 @@ npm run admin:create -- <email>        # make an account admin in the project .e
 npx supabase migration new <name>      # new SQL file in supabase/migrations/
 ```
 
-`lint`, `typecheck`, `test` and `build` must pass before every push — run them one after another (the PGlite suite can starve in parallel). CI (`.github/workflows/ci.yml`) runs all five, plus `npm run size`, on every PR and push to `main`. No `format` script yet.
+`lint`, `typecheck`, `test` and `build` must pass before every push — run them one after another (the PGlite suite can starve in parallel). CI (`.github/workflows/ci.yml`) runs all five, plus `npm run size`, on every PR and push to `main`; a push to `staging` runs the same checks, then deploys staging (`deploy-staging.yml`, `docs/operations.md`). No `format` script yet.
 
 **Gotchas:** `next build` while `next dev` runs in the same folder leaves the dev server serving stale CSS — restart it, or build in a separate `git worktree`. Windows paths in `node_modules` can exceed 260 characters; delete such folders with `\\?\`-prefixed paths.
 
@@ -70,7 +70,7 @@ supabase/             migrations/ · tests/ · templates/ (auth emails) · confi
 design/ · scripts/    tokens, logo sources, design-system PDF · build-tokens, check-bundle, create-admin
 docs/                 runbooks, decisions, roadmap (for people; not loaded automatically)
 proxy.ts              session refresh + convenience redirects on auth/portal routes (never authorization)
-vercel.json           function region sin1 (next to Supabase)
+vercel.json           function region sin1 (next to Supabase); no Git deploys of `staging` (CI deploys it)
 ```
 
 **Import direction:** `app → features → components · hooks · lib · types · content`. Request path: `route.ts` / `actions.ts` → `parseX` → `service.ts` → `dal.ts` → `lib/supabase`.

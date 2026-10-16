@@ -7,6 +7,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # deploy-staging.yml runs these same checks before it deploys.
+  workflow_call:
 
 # A newer push to the same branch cancels the run it replaces.
 concurrency:

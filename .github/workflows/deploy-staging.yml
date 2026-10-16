@@ -1,0 +1,54 @@
+# Deploys the `staging` branch to Vercel, only after the full CI suite passes. Vercel's own Git deploys
+# are off for this branch (vercel.json), so a failing check never reaches the staging URL.
+# Staging is a Preview deployment (VERCEL_ENV=preview) using the project's Preview env vars, which point
+# at the staging Supabase project — never production keys. Setup: docs/operations.md → Staging.
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+
+# Deploys run one at a time; a newer push waits rather than racing an alias update.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://islandsva-staging.vercel.app
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Not secrets: they only name the team and project; VERCEL_TOKEN is what grants access.
+      VERCEL_ORG_ID: team_INia1ut7Q8MblB7gCYZb0haQ
+      VERCEL_PROJECT_ID: prj_ePCOBYzfzL5w6LuVvTertn0zW2AJ
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Pinned so a CLI release can't change how staging deploys.
+      - run: npx --yes vercel@64.3.1 pull --yes --environment=preview --token="$VERCEL_TOKEN"
+      - run: npx --yes vercel@64.3.1 build --token="$VERCEL_TOKEN"
+
+      - name: Deploy and point the staging URL at it
+        run: |
+          url=$(npx --yes vercel@64.3.1 deploy --prebuilt --token="$VERCEL_TOKEN")
+          npx --yes vercel@64.3.1 alias set "$url" islandsva-staging.vercel.app --token="$VERCEL_TOKEN" --scope islands-va
+          echo "Deployed $url → https://islandsva-staging.vercel.app" >> "$GITHUB_STEP_SUMMARY"
