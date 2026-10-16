@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Prose } from "@/components/marketing/prose";
+import { Section } from "@/components/marketing/section";
 import { Container } from "@/components/ui/container";
+import { termsFaqs } from "@/content/faqs";
 import { site } from "@/content/site";
 
 export const metadata: Metadata = {
@@ -44,6 +47,9 @@ export default function TermsPage() {
           <p>Questions about these terms? Get in touch through our contact page.</p>
         </Prose>
       </Container>
+      <Section id="faq" tone="sunken" align="center" eyebrow="Questions" title="Questions about these terms">
+        <FaqSearch items={termsFaqs} />
+      </Section>
     </>
   );
 }

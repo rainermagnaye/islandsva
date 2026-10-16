@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { getImageProps } from "next/image";
 import { CtaBand } from "@/components/marketing/cta-band";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { FeatureList } from "@/components/marketing/feature-list";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Section } from "@/components/marketing/section";
 import { Card } from "@/components/ui/card";
 import { brands, industries } from "@/content/brands";
+import { brandFaqs } from "@/content/faqs";
 
 export const metadata: Metadata = {
   title: "Brands",
@@ -23,12 +24,12 @@ export default function BrandsPage() {
 
       {brands.length > 0 && (
         <Section id="clients" title="Brands we support">
-          <ul className="m-0 grid list-none grid-cols-2 gap-6 p-0 sm:grid-cols-3 lg:grid-cols-5">
-            {brands.map((b) => (
-              <Card as="li" padding="none" key={b.id} className="reveal grid h-24 place-items-center p-4">
-                {/* getImageProps + <img> renders on the server: optimised srcSet, zero client JS (unlike <Image>). */}
-                {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text -- optimised via getImageProps, which also supplies alt */}
-                <img {...getImageProps({ src: b.logo, alt: b.name, width: 160, height: 64 }).props} className="h-12 w-auto object-contain" />
+          <ul className="reveal-stagger m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3">
+            {brands.map((brand) => (
+              <Card as="li" lift key={brand.id} className="reveal grid content-center justify-items-center gap-4 py-8 text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={brand.logo} alt="" className="h-16 w-auto max-w-full object-contain" />
+                <h3 className="m-0 type-h4">{brand.name}</h3>
               </Card>
             ))}
           </ul>
@@ -43,6 +44,9 @@ export default function BrandsPage() {
         lead="If your days are full of email, scheduling and follow-ups, an assistant can give you hours back every week."
       >
         <FeatureList items={industries} />
+      </Section>
+      <Section id="faq" align="center" eyebrow="Questions" title="Working with businesses like yours">
+        <FaqSearch items={brandFaqs} />
       </Section>
       <CtaBand />
     </>

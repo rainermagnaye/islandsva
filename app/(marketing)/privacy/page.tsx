@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Prose } from "@/components/marketing/prose";
+import { Section } from "@/components/marketing/section";
 import { Container } from "@/components/ui/container";
+import { privacyFaqs } from "@/content/faqs";
 import { site } from "@/content/site";
 
 export const metadata: Metadata = {
@@ -71,6 +74,9 @@ export default function PrivacyPage() {
           <p>We&apos;ll update this page if our practices change.</p>
         </Prose>
       </Container>
+      <Section id="faq" tone="sunken" align="center" eyebrow="Questions" title="Privacy questions">
+        <FaqSearch items={privacyFaqs} />
+      </Section>
     </>
   );
 }

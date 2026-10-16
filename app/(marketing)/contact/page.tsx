@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { FaqList } from "@/components/marketing/faq-list";
+import { FaqSearch } from "@/components/marketing/faq-search";
 import { PageHeader } from "@/components/marketing/page-header";
 import { Container } from "@/components/ui/container";
 import { Icon } from "@/components/ui/icon";
 import { StepList } from "@/components/ui/step-list";
-import { discoveryFaqs } from "@/content/services";
+import { contactFaqs } from "@/content/faqs";
 import { site } from "@/content/site";
 import { ContactForm, ContactFormWithParams } from "@/features/leads/components/contact-form";
 
@@ -62,7 +62,7 @@ export default function ContactPage() {
           <h2 id="discovery-faq-title" className="m-0 type-h3">
             Questions
           </h2>
-          <FaqList items={discoveryFaqs} align="start" />
+          <FaqSearch items={contactFaqs} align="start" />
         </section>
       </Container>
     </>
