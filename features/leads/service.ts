@@ -1,8 +1,8 @@
 import "server-only";
 import { LEAD_STATUSES, nextStatuses } from "./contract";
-import { convertLeadToClient, insertLead, markLeadNotified, updateLeadStatus } from "./dal";
+import { convertLeadNoted, convertLeadToClient, deleteLead, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, setLeadDisabled, updateLeadDetails, updateLeadStatus } from "./dal";
 import { sendLeadNotification } from "./email";
-import type { ConvertInput, LeadInput, LeadStatusInput } from "./validation";
+import type { ConvertInput, ConvertNotedInput, LeadEditInput, LeadInput, LeadStatusInput, LeadStepInput } from "./validation";
 
 /** Request metadata stored with a lead for abuse checks. Derived from the HTTP request by the route. */
 export type LeadSource = { ipHash: string | null; userAgent: string | null };
@@ -43,4 +43,31 @@ export async function convertLead(input: ConvertInput) {
 export async function setLeadStatus({ leadId, status }: LeadStatusInput) {
   const from = LEAD_STATUSES.filter((current) => nextStatuses(current).includes(status));
   return updateLeadStatus(leadId, status, from);
+}
+
+/** Timeline entry, and the status move when the kind is a pipeline step. */
+export async function logLeadStep(input: LeadStepInput) {
+  return recordLeadStep(input.leadId, input.kind, input.body);
+}
+
+/** A call summary or a note, with the optional file stored on the same timeline row. */
+export async function logLeadFile(kind: "call" | "note", leadId: string, body: string, file: { name: string; type: string; base64: string } | null) {
+  return recordLeadFile(kind, leadId, body, file);
+}
+
+/** Turns the lead into a client and keeps the closer's remarks on the timeline. */
+export async function convertLeadWithRemarks(input: ConvertNotedInput) {
+  return convertLeadNoted(input);
+}
+
+export async function editLead(input: LeadEditInput) {
+  return updateLeadDetails(input);
+}
+
+export async function pauseLead(leadId: string, disabled: boolean) {
+  return setLeadDisabled(leadId, disabled);
+}
+
+export async function removeLead(leadId: string) {
+  return deleteLead(leadId);
 }

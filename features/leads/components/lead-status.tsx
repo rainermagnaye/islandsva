@@ -9,7 +9,7 @@ const TONES: Record<LeadStatus, BadgeTone> = {
   contacted: "neutral",
   qualified: "warning",
   converted: "success",
-  closed: "neutral",
+  closed: "danger",
 };
 
 /** A lead's status as a pill: icon or dot, word and colour together, never colour alone. */

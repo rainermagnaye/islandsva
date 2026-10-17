@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
@@ -18,9 +19,10 @@ function shownDate(value: string) {
 }
 
 /** Read-only profile sections. Editing replaces each value with a field and keeps these cards. */
-export function StaffProfileView({ details, email, meta }: { details: StaffDetails; email: string; meta: StaffProfileMeta }) {
+export function StaffProfileView({ userId, details, resumeType, email, meta }: { userId: string; details: StaffDetails; resumeType: string | null; email: string; meta: StaffProfileMeta }) {
   const emergency = [details.emergencyName, details.emergencyRelationship, details.emergencyPhone].map((part) => part.trim()).filter(Boolean);
   const jobs = details.employers.filter((job) => job.company.trim() || job.position.trim() || job.duration.trim());
+  const people = details.references.filter((person) => person.name.trim() || person.phone.trim() || person.relationship.trim() || person.company.trim() || person.email.trim());
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -40,7 +42,14 @@ export function StaffProfileView({ details, email, meta }: { details: StaffDetai
           <Field label="Highest education" value={shown(details.highestEducation)} />
           <Field label="Languages" value={shown(details.languages)} />
           <Field label="Skills" value={shown(details.skills)} />
-          <Field label="Résumé" value={shown(details.resumeName)} />
+          <div className="min-w-0 sm:col-span-2">
+            <p className="m-0 type-caption text-ink-muted">Résumé</p>
+            {details.resumeName ? (
+              <AttachmentPreview href={`/admin/users/${userId}/resume`} name={details.resumeName} type={resumeType ?? "application/pdf"} />
+            ) : (
+              <p className="m-0 type-body-sm text-ink-muted">Not provided</p>
+            )}
+          </div>
           <Field label="Certifications" value={shown(details.certifications)} wide />
         </DetailsCard>
       </div>
@@ -67,6 +76,17 @@ export function StaffProfileView({ details, email, meta }: { details: StaffDetai
           <Field label="Key responsibilities" value={shown(details.keyResponsibilities)} wide />
           <Field label="Achievements" value={shown(details.achievements)} wide />
         </DetailsCard>
+        <DetailsCard title="References">
+          {(people.length > 0 ? people : [{ name: "", phone: "", relationship: "", company: "", email: "" }]).map((person, index) => (
+            <div key={index} className="contents">
+              <Field label="Name" value={shown(person.name)} />
+              <Field label="Email" value={shown(person.email)} />
+              <Field label="Number" value={shown(person.phone)} />
+              <Field label="Company" value={shown(person.company)} />
+              <Field label="Relationship" value={shown(person.relationship)} wide />
+            </div>
+          ))}
+        </DetailsCard>
       </div>
       <div className="lg:col-span-2">
         <DetailsCard title="System metadata">
@@ -82,9 +102,8 @@ export function StaffProfileView({ details, email, meta }: { details: StaffDetai
 
 export function RegistrationStepper({ steps }: { steps: readonly RegistrationStep[] }) {
   return (
-    <Card as="section" padding="sm" className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <h2 className="m-0 type-label">Registration</h2>
-      <ol className="m-0 flex list-none flex-wrap gap-y-2 p-0" aria-label="Registration progress">
+    <Card as="section" padding="sm" className="flex flex-wrap items-center justify-center">
+      <ol className="m-0 flex list-none flex-wrap justify-center gap-y-2 p-0" aria-label="Profile progress">
         {steps.map((step, index) => (
           <li key={step.id} className="flex min-w-0 items-center">
             <span

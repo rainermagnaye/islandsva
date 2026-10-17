@@ -10,6 +10,7 @@ import {
   type InviteField,
   type StaffDetails,
   type StaffEmployer,
+  type StaffReference,
 } from "./contract";
 
 const inviteSchema = z.strictObject({
@@ -128,6 +129,33 @@ export function parseEmployers(companies: string[], positions: string[], duratio
   return { ok: true, value: employers };
 }
 
-export function withEmployers(details: StaffDetailsInput, employers: StaffEmployer[], resumeName: string): StaffDetails {
-  return { ...details, employers, resumeName };
+/** Parallel reference fields from the form. Blank rows are dropped. */
+export function parseReferences(names: string[], phones: string[], relationships: string[], companies: string[], emails: string[]): { ok: true; value: StaffReference[] } | { ok: false; message: string } {
+  if (names.length > STAFF_LIMITS.references) return { ok: false, message: `Keep references to ${STAFF_LIMITS.references} people.` };
+  const references: StaffReference[] = [];
+  for (let i = 0; i < names.length; i += 1) {
+    const name = jobLine(STAFF_LIMITS.emergencyName).safeParse(names[i] ?? "");
+    const phone = jobLine(STAFF_LIMITS.phone).safeParse(phones[i] ?? "");
+    const relationship = jobLine(STAFF_LIMITS.relationship).safeParse(relationships[i] ?? "");
+    const company = jobLine(STAFF_LIMITS.employer).safeParse(companies[i] ?? "");
+    const email = parseReferenceEmail(emails[i] ?? "");
+    if (!name.success || !phone.success || !relationship.success || !company.success || !email.ok) {
+      return { ok: false, message: "Check the references. Each entry is too long, or the email doesn't look complete." };
+    }
+    if (!name.data && !phone.data && !relationship.data && !company.data && !email.value) continue;
+    references.push({ name: name.data, phone: phone.data, relationship: relationship.data, company: company.data, email: email.value });
+  }
+  return { ok: true, value: references };
+}
+
+function parseReferenceEmail(value: string): { ok: true; value: string } | { ok: false } {
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, value: "" };
+  const parsed = emailField(USER_LIMITS.email).safeParse(trimmed);
+  if (!parsed.success) return { ok: false };
+  return { ok: true, value: parsed.data };
+}
+
+export function withEmployers(details: StaffDetailsInput, employers: StaffEmployer[], references: StaffReference[], resumeName: string): StaffDetails {
+  return { ...details, employers, references, resumeName };
 }

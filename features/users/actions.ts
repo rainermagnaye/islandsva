@@ -10,7 +10,7 @@ import { STAFF_LIMITS, USER_LIMITS, type InviteField, type StaffDetailField } fr
 import { getStaffProfile, getUser, saveStaffProfile, updateStaffEmail } from "./dal";
 import { splitAddress } from "./profile-fields";
 import { deactivateStaff, inviteStaff as invite, removeStaff } from "./service";
-import { parseEmployers, parseInvite, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
+import { parseEmployers, parseInvite, parseReferences, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
 import { parseResumeText, resumeText } from "./resume-text";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
@@ -98,13 +98,20 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
   const emailValue = raw.email;
   const skillDraft = typeof raw.skillDraft === "string" ? raw.skillDraft.trim() : "";
   delete raw.userId;
+  const resumeTitle = raw.resumeName;
   delete raw.resume;
+  delete raw.resumeName;
   delete raw.avatar;
   delete raw.email;
   delete raw.skillDraft;
   delete raw.employerCompany;
   delete raw.employerPosition;
   delete raw.employerDuration;
+  delete raw.referenceName;
+  delete raw.referencePhone;
+  delete raw.referenceRelationship;
+  delete raw.referenceCompany;
+  delete raw.referenceEmail;
   for (const key of Object.keys(raw)) {
     if (key.startsWith("durationStart-") || key.startsWith("durationEnd-")) delete raw[key];
   }
@@ -124,6 +131,15 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
   );
   if (!jobs.ok) return { ok: false, message: jobs.message };
 
+  const people = parseReferences(
+    formData.getAll("referenceName").map((value) => String(value)),
+    formData.getAll("referencePhone").map((value) => String(value)),
+    formData.getAll("referenceRelationship").map((value) => String(value)),
+    formData.getAll("referenceCompany").map((value) => String(value)),
+    formData.getAll("referenceEmail").map((value) => String(value)),
+  );
+  if (!people.ok) return { ok: false, message: people.message };
+
   const email = emailField(USER_LIMITS.email).safeParse(emailValue);
   if (!email.success) return { ok: false, message: FIELD_ERRORS, fieldErrors: { email: "Enter an email address like name@company.com." } };
 
@@ -139,7 +155,10 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
     if (file.size > STAFF_LIMITS.resumeBytes) return { ok: false, message: "Keep the résumé under 2 MB." };
     const bytes = new Uint8Array(await file.arrayBuffer());
     const extracted = parseResumeText(resumeText(bytes, type));
-    resumeName = file.name.slice(0, STAFF_LIMITS.resumeName);
+    const typed = typeof resumeTitle === "string" ? resumeTitle : "";
+    const extension = file.name.toLowerCase().endsWith(".docx") ? ".docx" : ".pdf";
+    const stem = (typed || file.name).trim().replace(/[^\w.\- ()]+/g, "").replace(/\.[^.]+$/, "").trim() || "resume";
+    resumeName = `${stem}${extension}`.slice(0, STAFF_LIMITS.resumeName);
     resume = { name: resumeName, type, bytes };
     (Object.keys(extracted) as (keyof typeof extracted)[]).forEach((key) => {
       if (!parsed.value[key] && extracted[key]) parsed.value[key] = extracted[key];
@@ -155,7 +174,7 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
   }
 
   try {
-    await saveStaffProfile(user.id, user.createdAt, withEmployers(parsed.value, jobs.value, resumeName), resume, avatar);
+    await saveStaffProfile(user.id, user.createdAt, withEmployers(parsed.value, jobs.value, people.value, resumeName), resume, avatar);
     if (email.data !== user.email) {
       const updated = await updateStaffEmail(user.id, email.data);
       if (!updated.ok) return { ok: false, message: FIELD_ERRORS, fieldErrors: { email: "That email already has an account." } };

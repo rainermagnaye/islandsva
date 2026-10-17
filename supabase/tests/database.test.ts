@@ -390,10 +390,10 @@ describe("leads", () => {
     await expect(as("anon", {}, "select id from public.leads")).rejects.toThrow(/permission denied/);
   });
 
-  it("nobody inserts or deletes leads through the API (the contact form uses the server key)", async () => {
+  it("nobody inserts leads through the API, and anon cannot delete them", async () => {
     await expect(asUser(asAdmin, "insert into public.leads (full_name, email, message) values ('a', 'a@b.co', 'hi')")).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "delete from public.leads")).rejects.toThrow(/permission denied/);
     await expect(as("anon", {}, "insert into public.leads (full_name, email, message) values ('a', 'a@b.co', 'hi')")).rejects.toThrow(/permission denied/);
+    await expect(as("anon", {}, "delete from public.leads")).rejects.toThrow(/permission denied/);
   });
 
   it("the unfiltered list has a newest-first index", async () => {
@@ -401,10 +401,11 @@ describe("leads", () => {
     expect(rows.map((r) => r.indexdef)).toContainEqual(expect.stringMatching(/\(created_at DESC\)$/));
   });
 
-  it("admins change only the triage columns", async () => {
+  it("admins can correct contact details, and still cannot touch spam metadata", async () => {
     const [lead] = await insert({});
-    expect(await asUser(asAdmin, "update public.leads set status = 'contacted' where id = $1 returning id", [lead.id])).toHaveLength(1);
-    await expect(asUser(asAdmin, "update public.leads set email = 'x@y.co' where id = $1", [lead.id])).rejects.toThrow(/permission denied/);
+    expect(await asUser(asAdmin, "update public.leads set status = 'contacted', full_name = 'Ana', profile = '{\"job_title\":\"Founder\"}'::jsonb where id = $1 returning id", [lead.id])).toHaveLength(1);
+    await expect(asUser(asAdmin, "update public.leads set profile = '[]'::jsonb where id = $1", [lead.id])).rejects.toThrow(/check constraint|profile/);
+    await expect(asUser(asAdmin, "update public.leads set ip_hash = $2 where id = $1", [lead.id, "b".repeat(64)])).rejects.toThrow(/permission denied/);
     expect(await asUser(asCloser, "update public.leads set status = 'closed' where id = $1 returning id", [lead.id])).toHaveLength(0);
   });
 
@@ -489,6 +490,64 @@ describe("leads", () => {
     });
   });
 
+  describe("timeline", () => {
+    const step = (id: string, kind: string, body = "Spoke with them.") =>
+      asUser(asAdmin, "select public.record_lead_step($1, $2::public.lead_event_kind, $3)", [id, kind, body]);
+
+    it("stores a small call attachment and refuses one over 2 MB", async () => {
+      const [lead] = await insert({ email: "attach@x.co" });
+      await asUser(asAdmin, "select public.record_lead_call($1, 'Left a voicemail.', 'call.mp3', 'audio/mpeg', $2)", [lead.id, Buffer.from("hi").toString("base64")]);
+      expect(await asServer("select attachment_name, octet_length(attachment_bytes) as size from public.lead_events where lead_id = $1", [lead.id])).toEqual([
+        { attachment_name: "call.mp3", size: 2 },
+      ]);
+      const [another] = await insert({ email: "attach-big@x.co" });
+      const tooBig = Buffer.alloc(2_097_153).toString("base64");
+      await expect(asUser(asAdmin, "select public.record_lead_call($1, 'Long recording.', 'call.mp3', 'audio/mpeg', $2)", [another.id, tooBig])).rejects.toThrow(/attachment is too large/);
+    });
+
+    it("stores a note attachment without moving the lead", async () => {
+      const [lead] = await insert({ email: "note-file@x.co", status: "qualified" });
+      await asUser(asAdmin, "select public.record_lead_note($1, 'Follow up Friday.', 'Friday note.pdf', 'application/pdf', $2)", [lead.id, Buffer.from("%PDF").toString("base64")]);
+      expect(await asServer("select status from public.leads where id = $1", [lead.id])).toEqual([{ status: "qualified" }]);
+      expect(await asServer("select kind, attachment_name from public.lead_events where lead_id = $1", [lead.id])).toEqual([{ kind: "note", attachment_name: "Friday note.pdf" }]);
+    });
+
+    it("records a call and moves a new lead to contacted", async () => {
+      const [lead] = await insert({});
+      await step(lead.id, "call");
+      expect(await asServer("select status from public.leads where id = $1", [lead.id])).toEqual([{ status: "contacted" }]);
+      expect(await asUser(asAdmin, "select kind, body, author_id from public.lead_events where lead_id = $1", [lead.id])).toEqual([
+        { kind: "call", body: "Spoke with them.", author_id: ADMIN },
+      ]);
+    });
+
+    it("refuses a step that does not match the status, and a closer or an admin without two-factor", async () => {
+      const [lead] = await insert({});
+      await expect(step(lead.id, "qualification")).rejects.toMatchObject({ code: "IVA04" });
+      for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser]) {
+        await expect(asUser(claims, "select public.record_lead_step($1, 'call', 'hi')", [lead.id])).rejects.toThrow(/admins with two-factor sign-in only/);
+      }
+      expect(await asUser(asCloser, "select id from public.lead_events")).toEqual([]);
+      await expect(as("anon", {}, "select id from public.lead_events")).rejects.toThrow(/permission denied/);
+    });
+
+    it("junks an open lead and keeps the remark", async () => {
+      const [lead] = await insert({ status: "qualified" });
+      await step(lead.id, "junk", "Customer cancelled.");
+      expect(await asServer("select status from public.leads where id = $1", [lead.id])).toEqual([{ status: "closed" }]);
+      expect(await asServer("select kind from public.lead_events where lead_id = $1", [lead.id])).toEqual([{ kind: "junk" }]);
+    });
+
+    it("lets an admin delete a new lead with no timeline, and refuses one that has history", async () => {
+      const [fresh] = await insert({ email: "fresh-delete@x.co" });
+      expect(await asUser(asAdmin, "delete from public.leads where id = $1 returning id", [fresh.id])).toHaveLength(1);
+      const [worked] = await insert({ email: "worked-delete@x.co" });
+      await step(worked.id, "note", "Left a voicemail.");
+      await expect(asUser(asAdmin, "delete from public.leads where id = $1", [worked.id])).rejects.toMatchObject({ code: "IVA05" });
+      expect(await asUser(asCloser, "delete from public.leads where id = $1 returning id", [worked.id])).toHaveLength(0);
+    });
+  });
+
   it.each([
     ["a malformed email", { email: "not-an-email" }],
     ["an upper-case email", { email: "Ana@X.co" }],
@@ -507,6 +566,16 @@ describe("staff profiles", () => {
     expect(await asUser(asVa, `select nationality from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ nationality: "Filipino" }]);
     await asUser(asAdmin, `update public.staff_profiles set current_city = 'Cebu' where user_id = '${VA}'`);
     expect(await asUser(asAdmin, `select current_city from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ current_city: "Cebu" }]);
+  });
+
+  it("stores up to three references and refuses a fourth", async () => {
+    const people = JSON.stringify([{ name: "Ana Cruz", phone: "0917", relationship: "Manager", company: "North", email: "ana@x.co" }]);
+    await asUser(asVa, `update public.staff_profiles set job_references = $1::jsonb where user_id = '${VA}'`, [people]);
+    expect(await asUser(asVa, `select job_references from public.staff_profiles where user_id = '${VA}'`)).toEqual([
+      { job_references: [{ name: "Ana Cruz", phone: "0917", relationship: "Manager", company: "North", email: "ana@x.co" }] },
+    ]);
+    const four = JSON.stringify([1, 2, 3, 4].map(() => ({ name: "A", company: "", phone: "", email: "" })));
+    await expect(asServer(`update public.staff_profiles set job_references = $1::jsonb where user_id = '${VA}'`, [four])).rejects.toThrow(/check constraint/);
   });
 
   it("hides a profile from other people, from an admin without two-factor sign-in, and from anon", async () => {

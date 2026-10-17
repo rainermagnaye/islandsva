@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
-import { parseAdminLead, parseConvert, parseLead, parseLeadStatus } from "./validation";
+import { parseAdminLead, parseConvert, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
 
 const valid = {
   name: "  Ana Cruz ",
@@ -136,5 +136,45 @@ describe("parseLeadStatus", () => {
     expect(parseLeadStatus({ leadId, status: "won" })).toMatchObject({ ok: false, formError: expect.any(String) });
     expect(parseLeadStatus({ leadId: "1", status: "closed" })).toMatchObject({ ok: false, formError: expect.any(String) });
     expect(parseLeadStatus({ leadId, status: "closed", extra: "x" })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseLeadEdit", () => {
+  const leadId = "8f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+
+  it("keeps a chosen dropdown and trims the extra text", () => {
+    const core = {
+      name: valid.name,
+      email: valid.email,
+      company: valid.company,
+      industry: valid.industry,
+      country: valid.country,
+      package: valid.package,
+      message: valid.message,
+    };
+    expect(parseLeadEdit({ ...core, leadId, jobTitle: " Founder ", source: "Referral", budget: "Nope" })).toMatchObject({
+      ok: false,
+      fieldErrors: { budget: "Choose an option from the list." },
+    });
+    expect(parseLeadEdit({ ...core, leadId, jobTitle: " Founder ", source: "Referral" })).toMatchObject({
+      ok: true,
+      value: { leadId, profile: { jobTitle: "Founder", source: "Referral", phone: "" } },
+    });
+  });
+});
+
+describe("parseLeadStep", () => {
+  const leadId = "8f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+
+  it("trims a call summary", () => {
+    expect(parseLeadStep({ leadId, kind: "call", body: "  Left a voicemail. " })).toEqual({
+      ok: true,
+      value: { leadId, kind: "call", body: "Left a voicemail." },
+    });
+  });
+
+  it("rejects an empty remark and a kind the button cannot send", () => {
+    expect(parseLeadStep({ leadId, kind: "note", body: "  " })).toMatchObject({ ok: false, fieldErrors: { body: expect.any(String) } });
+    expect(parseLeadStep({ leadId, kind: "conversion", body: "Done" })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });

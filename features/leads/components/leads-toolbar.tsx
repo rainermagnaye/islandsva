@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FilterMenu } from "@/components/ui/filter-menu";
+import { IconBadge } from "@/components/ui/icon-badge";
 import { Modal } from "@/components/ui/modal";
 import { appRoutes } from "@/content/routes";
 import { LEAD_VIEWS, type LeadView } from "../contract";
@@ -15,6 +16,7 @@ const STATUS_OPTIONS = (Object.keys(LEAD_VIEWS) as LeadView[]).map((value) => ({
 export function LeadsToolbar({ status, query }: { status?: LeadView; query?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [added, setAdded] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
   function filterBy(next: LeadView | undefined) {
@@ -31,6 +33,7 @@ export function LeadsToolbar({ status, query }: { status?: LeadView; query?: str
       <Button
         iconLeft="plus"
         onClick={() => {
+          setAdded(false);
           setFormKey((key) => key + 1);
           setOpen(true);
         }}
@@ -40,10 +43,28 @@ export function LeadsToolbar({ status, query }: { status?: LeadView; query?: str
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Create a lead"
-        description="For someone who didn't use the discovery form. They'll show up in the list as New."
+        align={added ? "center" : "start"}
+        icon={added ? <IconBadge name="check" tone="success" size="xl" /> : undefined}
+        title={added ? "Lead added" : "Create a lead"}
+        description={added ? "You've successfully added a new lead to the list." : undefined}
+        footer={
+          added ? (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setAdded(false);
+                  setFormKey((key) => key + 1);
+                }}
+              >
+                Add another
+              </Button>
+              <Button onClick={() => setOpen(false)}>Done</Button>
+            </>
+          ) : undefined
+        }
       >
-        {open ? <CreateLeadForm key={formKey} /> : null}
+        {open && !added ? <CreateLeadForm key={formKey} onAdded={() => setAdded(true)} /> : null}
       </Modal>
     </div>
   );

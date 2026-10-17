@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { compactControlClasses } from "@/components/ui/field";
-import { FileField } from "@/components/ui/file-field";
+import { AttachmentField } from "@/components/ui/attachment-field";
+import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
@@ -18,6 +19,7 @@ import {
   type StaffDetailField,
   type StaffDetails,
   type StaffEmployer,
+  type StaffReference,
 } from "../contract";
 import {
   COUNTRIES,
@@ -48,6 +50,7 @@ export function StaffProfileForm({
   userId,
   email,
   details,
+  resumeType,
   meta,
   profilePic,
   onSaved,
@@ -56,6 +59,7 @@ export function StaffProfileForm({
   userId: string;
   email: string;
   details: StaffDetails;
+  resumeType: string | null;
   meta: StaffProfileMeta;
   profilePic: File | null;
   onSaved?: () => void;
@@ -67,6 +71,9 @@ export function StaffProfileForm({
   }, [profilePic]);
   const [employers, setEmployers] = useState<StaffEmployer[]>(
     details.employers.length > 0 ? details.employers : [{ company: "", position: "", duration: "" }],
+  );
+  const [references, setReferences] = useState<StaffReference[]>(
+    details.references.length > 0 ? details.references : [{ name: "", phone: "", relationship: "", company: "", email: "" }],
   );
 
   async function submit(formData: FormData): Promise<SubmitResult<StaffDetailField | "email">> {
@@ -111,15 +118,19 @@ export function StaffProfileForm({
                 <Select compact label="Highest education" name="highestEducation" placeholder="Choose highest education" defaultValue={details.highestEducation} options={withCurrent(EDUCATION_LEVELS, details.highestEducation)} error={fieldErrors.highestEducation} />
                 <LanguageField defaultValue={details.languages} error={fieldErrors.languages} />
                 <SkillField defaultValue={details.skills} error={fieldErrors.skills} />
-                <ReadOnly label="Résumé" value={details.resumeName || "Not provided"} />
-                <div className="sm:col-span-2">
-                  <FileField
+                <div className="sm:col-span-2 grid gap-3">
+                  {details.resumeName ? (
+                    <AttachmentPreview href={`/admin/users/${userId}/resume`} name={details.resumeName} type={resumeType ?? "application/pdf"} />
+                  ) : (
+                    <ReadOnly label="Résumé" value="Not provided" />
+                  )}
+                  <AttachmentField
                     compact
+                    fileName="resume"
+                    nameField="resumeName"
                     label={details.resumeName ? "Replace the résumé" : "Résumé file"}
-                    name="resume"
-                    optional
                     accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    hint="A PDF or DOCX, up to 2 MB."
+                    hint="A PDF or DOCX, up to 2 MB. Click the name to rename it."
                   />
                 </div>
                 <Wide>
@@ -153,6 +164,18 @@ export function StaffProfileForm({
                 <Wide>
                   <TextField compact label="Achievements" name="achievements" optional multiline placeholder="Enter achievements" maxLength={STAFF_LIMITS.achievements} defaultValue={details.achievements} error={fieldErrors.achievements} />
                 </Wide>
+              </Section>
+              <Section title="References">
+                {references.map((person, index) => (
+                  <ReferenceFields key={index} index={index} person={person} />
+                ))}
+                {references.length < STAFF_LIMITS.references && (
+                  <div className="sm:col-span-2">
+                    <Button type="button" variant="ghost" size="sm" iconLeft="plus" onClick={() => setReferences((rows) => [...rows, { name: "", phone: "", relationship: "", company: "", email: "" }])}>
+                      Add reference
+                    </Button>
+                  </div>
+                )}
               </Section>
             </div>
             <div className="lg:col-span-2">
@@ -216,6 +239,20 @@ function EmployerFields({ index, job }: { index: number; job: StaffEmployer }) {
       <TextField compact id={`employer-start-${index}`} label="Duration start" name={`durationStart-${index}`} type="date" value={start} onChange={(event) => setStart(event.target.value)} />
       <TextField compact id={`employer-end-${index}`} label="Duration end" name={`durationEnd-${index}`} type="date" value={end} onChange={(event) => setEnd(event.target.value)} />
       <input type="hidden" name="employerDuration" value={joinDuration(start, end, job.duration)} />
+    </div>
+  );
+}
+
+function ReferenceFields({ index, person }: { index: number; person: StaffReference }) {
+  return (
+    <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+      <TextField compact id={`reference-name-${index}`} label="Name" name="referenceName" placeholder="Enter name" maxLength={STAFF_LIMITS.emergencyName} defaultValue={person.name} />
+      <TextField compact id={`reference-email-${index}`} label="Email" name="referenceEmail" type="email" placeholder="Enter email address" maxLength={USER_LIMITS.email} defaultValue={person.email} />
+      <TextField compact id={`reference-phone-${index}`} label="Number" name="referencePhone" type="tel" placeholder="Enter number" maxLength={STAFF_LIMITS.phone} defaultValue={person.phone} />
+      <TextField compact id={`reference-company-${index}`} label="Company" name="referenceCompany" placeholder="Enter company" maxLength={STAFF_LIMITS.employer} defaultValue={person.company} />
+      <Wide>
+        <TextField compact id={`reference-relationship-${index}`} label="Relationship" name="referenceRelationship" placeholder="Enter relationship" maxLength={STAFF_LIMITS.relationship} defaultValue={person.relationship} />
+      </Wide>
     </div>
   );
 }

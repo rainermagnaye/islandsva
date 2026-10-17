@@ -5,6 +5,8 @@ import { Icon } from "./icon";
 const sizes = {
   md: { box: "size-12", icon: 24 },
   lg: { box: "size-16", icon: 32 },
+  /** The mark above a centered modal result. */
+  xl: { box: "size-24", icon: 48 },
 } as const;
 
 const tones = {
@@ -14,7 +16,7 @@ const tones = {
 
 type IconBadgeProps = {
   name: IconName;
-  /** md = cards and lists; lg = full-page status panels. */
+  /** md = cards and lists; lg = full-page status panels; xl = a centered modal result. */
   size?: keyof typeof sizes;
   tone?: keyof typeof tones;
   className?: string;
