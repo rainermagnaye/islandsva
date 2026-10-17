@@ -1,7 +1,7 @@
 # Deploys the `staging` branch to Vercel, only after the full CI suite passes. Vercel's own Git deploys
 # are off for this branch (vercel.json), so a failing check never reaches the staging URL.
-# Staging is a Preview deployment (VERCEL_ENV=preview) using the project's Preview env vars, which point
-# at the staging Supabase project — never production keys. Setup: docs/operations.md → Staging.
+# Staging is a Preview deployment (VERCEL_ENV=preview) using the project's Preview env vars. Until a separate
+# staging Supabase project exists they point at the one shared project. Setup: docs/operations.md → Staging.
 name: Deploy staging
 
 on:
