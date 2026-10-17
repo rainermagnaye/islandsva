@@ -120,7 +120,7 @@ vercel.json           function region sin1 (next to Supabase); no Git deploys of
 - **Sign-in:** users go straight to their workspace (`homeFor(roles)` from the new token; admins via `/mfa`); `/dashboard` is only the fallback without a role; `?next=` goes through `safeNextPath` (same-site paths only). Credential errors share one message and "forgot password" always reports success (no account enumeration). Passwords 10–72 characters with letters and digits.
 - **Email links:** invite and reset use the `supabase/templates/` token-hash links to `/auth/confirm` — the one GET route outside `createHandler`, which accepts only `invite` / `recovery`, verifies server-side and redirects to fixed paths.
   - **Temporary (until custom SMTP):** the hosted project still sends Supabase's default emails, whose links carry the session in the URL `#hash`. `/accept-invite` and `EmailLinkSession` (in the root layout, so on every page) read and clear the hash and post the tokens to `establishEmailSession`, which stores them with `setSession` (Supabase validates them). Remove all three, and `/accept-invite` from the redirect allow-list, once the token-hash emails are live (`docs/roadmap.md`).
-- **Content:** never invent testimonials, logos or business claims — real content or `TODO(content)`; placeholder data must be labelled, development-only and absent from production builds (`content/testimonials.ts`).
+- **Content:** never invent testimonials, logos or business claims — real content or `TODO(content)`; placeholder quotes stay labelled with a Sample badge until real ones replace them (`content/testimonials.ts`).
 
 ## 7. Code conventions
 
