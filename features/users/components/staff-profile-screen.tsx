@@ -25,6 +25,7 @@ export function StaffProfileScreen({
   user,
   actorId,
   details,
+  resumeType,
   steps,
   meta,
   hasHistory,
@@ -32,6 +33,7 @@ export function StaffProfileScreen({
   user: UserSummary;
   actorId: string;
   details: StaffDetails;
+  resumeType: string | null;
   steps: RegistrationStep[];
   meta: StaffProfileMeta;
   hasHistory: boolean;
@@ -77,10 +79,7 @@ export function StaffProfileScreen({
             </label>
           )}
         </div>
-        <div className="min-w-0">
-          <h1 className="m-0 truncate type-h3">{name}</h1>
-          <p className="m-0 truncate type-body-sm text-ink-muted">{user.email}</p>
-        </div>
+        <h1 className="m-0 min-w-0 truncate type-h3">{name}</h1>
         <Badge tone={ACCOUNT_TONES[user.status]} size="sm" dot={user.status === "inactive"}>
           {STATUS_LABELS[user.status]}
         </Badge>
@@ -100,13 +99,14 @@ export function StaffProfileScreen({
           userId={user.id}
           email={user.email}
           details={details}
+          resumeType={resumeType}
           meta={meta}
           profilePic={profilePic}
           onSaved={() => stopEditing(true)}
           onCancel={() => stopEditing(false)}
         />
       ) : (
-        <StaffProfileView details={details} email={user.email} meta={meta} />
+        <StaffProfileView userId={user.id} details={details} resumeType={resumeType} email={user.email} meta={meta} />
       )}
     </div>
   );

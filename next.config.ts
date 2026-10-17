@@ -12,7 +12,8 @@ const csp = [
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self'",
-  "frame-src https://challenges.cloudflare.com",
+  // blob: is the file preview modal. The file URL itself stays unframeable (X-Frame-Options: DENY).
+  "frame-src blob: https://challenges.cloudflare.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

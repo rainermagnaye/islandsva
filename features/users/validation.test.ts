@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { USER_LIMITS } from "./contract";
-import { parseInvite, parseStaffDetails, parseStaffId } from "./validation";
+import { parseInvite, parseReferences, parseStaffDetails, parseStaffId } from "./validation";
 
 const valid = { email: " Vi@Islandsva.com ", fullName: " Vi Santos ", role: "va" };
 
@@ -39,6 +39,20 @@ describe("parseStaffId", () => {
   it("rejects anything that is not an id", () => {
     expect(parseStaffId({ userId: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
     expect(parseStaffId({ userId: "11111111-1111-4111-8111-111111111111", extra: true })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseReferences", () => {
+  it("keeps a filled person and drops a blank row", () => {
+    expect(parseReferences([" Ana Cruz ", ""], ["0917", ""], [" Manager ", ""], ["North", ""], [" Ana@X.co ", ""])).toEqual({
+      ok: true,
+      value: [{ name: "Ana Cruz", phone: "0917", relationship: "Manager", company: "North", email: "ana@x.co" }],
+    });
+  });
+
+  it("refuses a fourth person and an incomplete email", () => {
+    expect(parseReferences(["a", "b", "c", "d"], ["", "", "", ""], ["", "", "", ""], ["", "", "", ""], ["", "", "", ""]).ok).toBe(false);
+    expect(parseReferences(["Ana"], [""], [""], [""], ["not-an-email"]).ok).toBe(false);
   });
 });
 

@@ -47,6 +47,7 @@ export const STAFF_LIMITS = {
   achievements: 2000,
   employer: 120,
   employers: 8,
+  references: 3,
   resumeName: 200,
   resumeBytes: 2_097_152,
   avatarBytes: 524_288,
@@ -88,12 +89,14 @@ export const REGISTRATION_STATUS_LABELS: Record<RegistrationStatus, string> = {
 
 export type StaffEmployer = { company: string; position: string; duration: string };
 
-/** The sections the progress tracker reports. Resume is an alternative to typing education and experience. */
+export type StaffReference = { name: string; phone: string; relationship: string; company: string; email: string };
+
+/** The sections the progress tracker reports. A résumé can stand in for typed skills, not for experience. */
 export const STAFF_SECTIONS = ["basic", "address", "contact", "education", "experience", "resume"] as const;
 export type StaffSection = (typeof STAFF_SECTIONS)[number];
 
-/** Inputs on the staff profile form that can show a field error (employers and the résumé report form-level). */
-export type StaffDetailField = Exclude<keyof StaffDetails, "employers" | "resumeName">;
+/** Inputs on the staff profile form that can show a field error (lists and the résumé report form-level). */
+export type StaffDetailField = Exclude<keyof StaffDetails, "employers" | "references" | "resumeName">;
 
 export type StaffDetails = {
   fullName: string;
@@ -119,6 +122,7 @@ export type StaffDetails = {
   skills: string;
   languages: string;
   employers: StaffEmployer[];
+  references: StaffReference[];
   keyResponsibilities: string;
   achievements: string;
   resumeName: string;
@@ -149,6 +153,7 @@ export function emptyStaffDetails(fullName = ""): StaffDetails {
     skills: "",
     languages: "",
     employers: [],
+    references: [],
     keyResponsibilities: "",
     achievements: "",
     resumeName: "",
@@ -160,6 +165,9 @@ const filled = (value: string) => value.trim().length > 0;
 /** Which sections have the details they need. Email is always present, so it is not a section by itself. */
 export function staffSections(details: StaffDetails): Record<StaffSection, boolean> {
   const employer = details.employers.some((job) => filled(job.company) && filled(job.position));
+  const reference = details.references.some(
+    (person) => filled(person.name) && filled(person.email) && filled(person.phone) && filled(person.company) && filled(person.relationship),
+  );
   return {
     basic: filled(details.fullName) && filled(details.dateOfBirth) && details.gender !== "" && filled(details.nationality) && details.maritalStatus !== "",
     address:
@@ -173,7 +181,7 @@ export function staffSections(details: StaffDetails): Record<StaffSection, boole
       filled(details.permanentPostalCode),
     contact: filled(details.mobileNumber) && filled(details.emergencyName) && filled(details.emergencyRelationship) && filled(details.emergencyPhone),
     education: filled(details.highestEducation) && filled(details.skills) && filled(details.languages),
-    experience: employer && filled(details.keyResponsibilities),
+    experience: employer && filled(details.keyResponsibilities) && reference,
     resume: filled(details.resumeName),
   };
 }
@@ -183,15 +191,16 @@ export const REGISTRATION_STEPS = [
   { id: "basic", label: "Basic details" },
   { id: "address", label: "Address" },
   { id: "contact", label: "Contacts" },
-  { id: "skills", label: "Skills/Resume" },
+  { id: "skills", label: "Skills" },
+  { id: "experience", label: "Experiences" },
   { id: "completed", label: "Completed" },
 ] as const;
 
 export type RegistrationStep = { id: (typeof REGISTRATION_STEPS)[number]["id"]; label: string; done: boolean; current: boolean };
 
-/** Invitation is always done. Skills/Resume is done from typed skills or an uploaded résumé. */
+/** Invitation is always done. Skills is typed skills or a résumé. Experiences also needs a reference. */
 export function registrationSteps(sections: Record<StaffSection, boolean>): RegistrationStep[] {
-  const reached = [true, sections.basic, sections.address, sections.contact, sections.education || sections.resume];
+  const reached = [true, sections.basic, sections.address, sections.contact, sections.education || sections.resume, sections.experience];
   const flags = [...reached, reached.every(Boolean)];
   const open = flags.findIndex((done) => !done);
   const current = open === -1 ? flags.length - 1 : open;
@@ -203,9 +212,9 @@ export function registrationSteps(sections: Record<StaffSection, boolean>): Regi
   }));
 }
 
-/** Pending until a section is saved, completed once the person is described by hand or by a resume. */
+/** Pending until a section is saved. Complete only when skills and experiences, including a reference, are in. */
 export function registrationStatus(sections: Record<StaffSection, boolean>): RegistrationStatus {
-  const described = sections.basic && sections.address && sections.contact && ((sections.education && sections.experience) || sections.resume);
+  const described = sections.basic && sections.address && sections.contact && (sections.education || sections.resume) && sections.experience;
   if (described) return "completed";
   if (STAFF_SECTIONS.some((section) => sections[section])) return "in_progress";
   return "pending";

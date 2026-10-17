@@ -18,12 +18,14 @@ describe("staff registration progress", () => {
 
   it("walks the stepper from the invitation to the first open step", () => {
     const steps = registrationSteps(staffSections(emptyStaffDetails("Ada")));
-    expect(steps.map((step) => step.id)).toEqual(["invitation", "basic", "address", "contact", "skills", "completed"]);
+    expect(steps.map((step) => step.id)).toEqual(["invitation", "basic", "address", "contact", "skills", "experience", "completed"]);
+    expect(steps.map((step) => step.label)).toContain("Skills");
+    expect(steps.map((step) => step.label)).toContain("Experiences");
     expect(steps.find((step) => step.current)?.id).toBe("basic");
     expect(steps[0]).toMatchObject({ done: true, current: false });
   });
 
-  it("marks every step done once skills or a résumé complete the profile", () => {
+  it("keeps experiences open until the work history includes a reference", () => {
     const details = emptyStaffDetails("Ada");
     details.dateOfBirth = "1990-01-01";
     details.gender = "female";
@@ -42,9 +44,17 @@ describe("staff registration progress", () => {
     details.emergencyRelationship = "Sister";
     details.emergencyPhone = "09170000001";
     details.resumeName = "ada.pdf";
-    const sections = staffSections(details);
-    expect(registrationStatus(sections)).toBe("completed");
-    const steps = registrationSteps(sections);
+    const open = staffSections(details);
+    expect(registrationStatus(open)).toBe("in_progress");
+    expect(registrationSteps(open).find((step) => step.current)?.id).toBe("experience");
+
+    details.employers = [{ company: "North", position: "VA", duration: "" }];
+    details.keyResponsibilities = "Inbox and calendar";
+    details.references = [{ name: "Ana Cruz", email: "ana@x.co", phone: "0917", company: "North", relationship: "Manager" }];
+    const done = staffSections(details);
+    expect(done.experience).toBe(true);
+    expect(registrationStatus(done)).toBe("completed");
+    const steps = registrationSteps(done);
     expect(steps.every((step) => step.done)).toBe(true);
     expect(steps.find((step) => step.current)?.id).toBe("completed");
   });

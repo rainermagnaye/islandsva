@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Form, FormSuccess } from "@/components/ui/form";
+import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { COUNTRIES } from "@/content/countries";
@@ -10,16 +10,15 @@ import { addLead } from "../actions";
 import { INDUSTRIES, LEAD_LIMITS, type LeadField } from "../contract";
 
 /** The discovery-call fields, filled in by an admin. The lead is stored as New. */
-export function CreateLeadForm() {
+export function CreateLeadForm({ onAdded }: { onAdded: () => void }) {
   return (
     <Form<LeadField>
       aria-label="Create a lead"
-      onSubmit={addLead}
-      success={
-        <FormSuccess title="Lead added">
-          They&apos;re in the list as New, with the same details as a discovery call.
-        </FormSuccess>
-      }
+      onSubmit={async (formData) => {
+        const result = await addLead(formData);
+        if (result.ok) onAdded();
+        return result;
+      }}
     >
       {({ pending, fieldErrors }) => (
         <>

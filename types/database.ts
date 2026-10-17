@@ -88,6 +88,7 @@ type StaffProfileRow = {
   skills: string | null;
   languages: string | null;
   employers: Json;
+  job_references: Json;
   key_responsibilities: string | null;
   achievements: string | null;
   resume_name: string | null;
@@ -118,8 +119,23 @@ type LeadRow = {
   user_agent: string | null;
   notified_at: string | null;
   tenant_id: string;
+  disabled_at: string | null;
+  profile: Json;
   created_at: string;
   updated_at: string;
+};
+
+type LeadEventRow = {
+  id: string;
+  lead_id: string;
+  author_id: string;
+  kind: Enum<"lead_event_kind">;
+  body: string;
+  attachment_name: string | null;
+  attachment_type: string | null;
+  attachment_bytes: string | null;
+  tenant_id: string;
+  created_at: string;
 };
 
 /** A foreign key to profiles(id). */
@@ -194,11 +210,30 @@ export type Database = {
         Update: Optional<LeadRow>;
         Relationships: [];
       };
+      lead_events: {
+        Row: LeadEventRow;
+        Insert: InsertOf<LeadEventRow, "lead_id" | "author_id" | "kind" | "body">;
+        Update: Optional<LeadEventRow>;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
       custom_access_token_hook: { Args: { event: Json }; Returns: Json };
       convert_lead: { Args: { lead_id: string; company_name: string; contact_name: string; contact_phone?: string | null }; Returns: string };
+      convert_lead_noted: {
+        Args: { lead_id: string; company_name: string; contact_name: string; contact_phone?: string | null; remarks: string };
+        Returns: string;
+      };
+      record_lead_step: { Args: { lead_id: string; kind: Enum<"lead_event_kind">; body: string }; Returns: undefined };
+      record_lead_call: {
+        Args: { lead_id: string; body: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
+      record_lead_note: {
+        Args: { lead_id: string; body: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";
@@ -206,6 +241,7 @@ export type Database = {
       client_status: "pending" | "active" | "inactive";
       assignment_status: "active" | "ended";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
+      lead_event_kind: "call" | "qualification" | "conversion" | "junk" | "note" | "remark";
       staff_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
       staff_marital_status: "single" | "married" | "widowed" | "divorced" | "separated" | "prefer_not_to_say";
       staff_registration_status: "pending" | "in_progress" | "completed";

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import type { Json } from "@/types/database";
-import { registrationStatus, staffSections, type RegistrationStatus, type StaffDetails, type StaffEmployer, type StaffSection, type UserSummary } from "./contract";
+import { registrationStatus, staffSections, type RegistrationStatus, type StaffDetails, type StaffEmployer, type StaffReference, type StaffSection, type UserSummary } from "./contract";
 import { classifyInviteError } from "./invite-result";
 
 /**
@@ -110,10 +110,11 @@ export async function deleteAuthUser(userId: string) {
 }
 
 const PROFILE_COLUMNS =
-  "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_city, current_province, current_postal_code, permanent_street, permanent_city, permanent_province, permanent_postal_code, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, key_responsibilities, achievements, resume_name, registration_status, invitation_sent_at, registration_completed_at";
+  "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_city, current_province, current_postal_code, permanent_street, permanent_city, permanent_province, permanent_postal_code, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, job_references, key_responsibilities, achievements, resume_name, resume_type, registration_status, invitation_sent_at, registration_completed_at";
 
 export type StaffProfileRecord = {
   details: StaffDetails;
+  resumeType: string | null;
   registrationStatus: RegistrationStatus;
   invitationSentAt: string;
   registrationCompletedAt: string | null;
@@ -129,6 +130,7 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
   const details = detailsFrom(data);
   return {
     details,
+    resumeType: data.resume_type,
     registrationStatus: data.registration_status,
     invitationSentAt: data.invitation_sent_at,
     registrationCompletedAt: data.registration_completed_at,
@@ -155,6 +157,13 @@ export async function staffHasHistory(userId: string) {
  * The picture bytes are not granted to the API (same as a résumé), so this read uses the secret key
  * after the caller has checked the admin role.
  */
+export async function getStaffResume(userId: string): Promise<{ name: string; type: string; bytes: Uint8Array } | null> {
+  const { data, error } = await createAdminClient().from("staff_profiles").select("resume_name, resume_type, resume_bytes").eq("user_id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading résumé ${userId} failed: ${error.message}`, { cause: error });
+  if (!data?.resume_name || !data.resume_type || !data.resume_bytes) return null;
+  return { name: data.resume_name, type: data.resume_type, bytes: decodeBytea(data.resume_bytes) };
+}
+
 export async function getStaffAvatar(userId: string): Promise<{ type: string; bytes: Uint8Array } | null> {
   const { data, error } = await createAdminClient().from("staff_profiles").select("avatar_type, avatar_bytes").eq("user_id", userId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading profile picture ${userId} failed: ${error.message}`, { cause: error });
@@ -220,6 +229,7 @@ export async function saveStaffProfile(
     skills: blank(details.skills),
     languages: blank(details.languages),
     employers: details.employers,
+    job_references: details.references,
     key_responsibilities: blank(details.keyResponsibilities),
     achievements: blank(details.achievements),
     resume_name: blank(details.resumeName),
@@ -267,6 +277,7 @@ function detailsFrom(row: {
   skills: string | null;
   languages: string | null;
   employers: Json;
+  job_references: Json;
   key_responsibilities: string | null;
   achievements: string | null;
   resume_name: string | null;
@@ -295,10 +306,26 @@ function detailsFrom(row: {
     skills: row.skills ?? "",
     languages: row.languages ?? "",
     employers: employersFrom(row.employers),
+    references: referencesFrom(row.job_references),
     keyResponsibilities: row.key_responsibilities ?? "",
     achievements: row.achievements ?? "",
     resumeName: row.resume_name ?? "",
   };
+}
+
+function referencesFrom(value: Json): StaffReference[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, Json | undefined>;
+    return [{
+      name: String(row.name ?? ""),
+      phone: String(row.phone ?? ""),
+      relationship: String(row.relationship ?? ""),
+      company: String(row.company ?? ""),
+      email: String(row.email ?? ""),
+    }];
+  });
 }
 
 function employersFrom(value: Json): StaffEmployer[] {

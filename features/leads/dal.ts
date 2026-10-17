@@ -3,8 +3,8 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
-import type { LeadDetail, LeadPage, LeadStatus, LeadSummary } from "./contract";
-import type { LeadInput } from "./validation";
+import { leadProfileFrom, leadProfileToJson, type LeadDetail, type LeadEvent, type LeadEventKind, type LeadPage, type LeadStatus, type LeadSummary } from "./contract";
+import type { ConvertNotedInput, LeadEditInput, LeadInput } from "./validation";
 
 type NewLead = LeadInput & { ipHash: string | null; userAgent: string | null };
 
@@ -117,7 +117,7 @@ export async function listLeads({
 export async function getLead(id: string): Promise<LeadDetail | null> {
   if (!UUID.test(id)) return null;
   const supabase = await createClient();
-  const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, industry, country, message, updated_at`).eq("id", id).maybeSingle();
+  const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, industry, country, message, updated_at, disabled_at, profile`).eq("id", id).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading lead ${id} failed: ${error.message}`, { cause: error });
   if (!data) return null;
   const names = await closerNames(data.closer_id ? [data.closer_id] : []);
@@ -127,7 +127,27 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     country: data.country,
     message: data.message,
     updatedAt: data.updated_at,
+    disabledAt: data.disabled_at,
+    profile: leadProfileFrom(data.profile),
   };
+}
+
+/** Timeline rows, newest first, with the author's name when this admin can read the profile. */
+export async function listLeadEvents(leadId: string): Promise<LeadEvent[]> {
+  if (!UUID.test(leadId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("lead_events").select("id, kind, body, author_id, created_at, attachment_name, attachment_type").eq("lead_id", leadId).order("created_at", { ascending: false });
+  if (error) throw new UpstreamError("supabase", `Reading the timeline for ${leadId} failed: ${error.message}`, { cause: error });
+  const names = await closerNames(data.map((row) => row.author_id));
+  return data.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    body: row.body,
+    authorName: names.get(row.author_id) ?? "Team member",
+    createdAt: row.created_at,
+    attachmentName: row.attachment_name,
+    attachmentType: row.attachment_type,
+  }));
 }
 
 /**
@@ -188,4 +208,117 @@ export async function convertLeadToClient(input: { leadId: string; companyName: 
     throw new UpstreamError("supabase", `Converting lead ${input.leadId} failed: ${error.message}`, { cause: error });
   }
   return { ok: true as const, clientId: data };
+}
+
+const STEP_REFUSALS = { IVA01: "not_found", IVA04: "unavailable" } as const;
+
+/** Writes a timeline row and, for a pipeline step, moves the status. One database transaction. */
+export async function recordLeadStep(leadId: string, kind: LeadEventKind, body: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("record_lead_step", { lead_id: leadId, kind, body });
+  if (error) {
+    const refusal = STEP_REFUSALS[error.code as keyof typeof STEP_REFUSALS];
+    if (refusal) return { ok: false as const, reason: refusal };
+    throw new UpstreamError("supabase", `Recording a lead step failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const };
+}
+
+/** Call summary or note, plus an optional file. A call moves the lead to contacted; a note leaves the status. */
+export async function recordLeadFile(kind: "call" | "note", leadId: string, body: string, file: { name: string; type: string; base64: string } | null) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc(kind === "call" ? "record_lead_call" : "record_lead_note", {
+    lead_id: leadId,
+    body,
+    attachment_name: file?.name ?? null,
+    attachment_type: file?.type ?? null,
+    attachment_base64: file?.base64 ?? null,
+  });
+  if (error) {
+    const refusal = STEP_REFUSALS[error.code as keyof typeof STEP_REFUSALS];
+    if (refusal) return { ok: false as const, reason: refusal };
+    throw new UpstreamError("supabase", `Recording a call failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const };
+}
+
+/** The file on one timeline row, for an admin who can already read that lead. */
+export async function getLeadAttachment(leadId: string, eventId: string) {
+  if (!UUID.test(leadId) || !UUID.test(eventId)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("lead_events")
+    .select("attachment_name, attachment_type, attachment_bytes")
+    .eq("id", eventId)
+    .eq("lead_id", leadId)
+    .maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading an attachment failed: ${error.message}`, { cause: error });
+  if (!data?.attachment_name || !data.attachment_type || !data.attachment_bytes) return null;
+  return { name: data.attachment_name, type: data.attachment_type, bytes: decodeBytea(data.attachment_bytes) };
+}
+
+function decodeBytea(value: string) {
+  const hex = value.startsWith("\\x") ? value.slice(2) : /^[0-9a-fA-F]+$/.test(value) ? value : "";
+  if (hex && hex.length % 2 === 0) return Uint8Array.from(Buffer.from(hex, "hex"));
+  return Uint8Array.from(Buffer.from(value, "base64"));
+}
+
+/** Converts the lead and stores the conversion remark together. */
+export async function convertLeadNoted(input: ConvertNotedInput) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("convert_lead_noted", {
+    lead_id: input.leadId,
+    company_name: input.companyName,
+    contact_name: input.contactName,
+    contact_phone: input.contactPhone,
+    remarks: input.remarks,
+  });
+  if (error) {
+    const refusal = CONVERT_REFUSALS[error.code as keyof typeof CONVERT_REFUSALS];
+    if (refusal) return { ok: false as const, reason: refusal };
+    if (error.code === "IVA04") return { ok: false as const, reason: "unavailable" as const };
+    throw new UpstreamError("supabase", `Converting lead ${input.leadId} failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const, clientId: data };
+}
+
+/** Saves the details an admin is allowed to correct. Spam metadata stays as submitted. */
+export async function updateLeadDetails(input: LeadEditInput) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("leads")
+    .update({
+      full_name: input.name,
+      email: input.email,
+      company_name: input.company,
+      industry: input.industry,
+      country: input.country,
+      message: input.message,
+      package_code: input.packageSlug,
+      profile: leadProfileToJson(input.profile),
+    })
+    .eq("id", input.leadId)
+    .select("id");
+  if (error) throw new UpstreamError("supabase", `Updating lead ${input.leadId} failed: ${error.message}`, { cause: error });
+  return data.length > 0;
+}
+
+export async function setLeadDisabled(leadId: string, disabled: boolean) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("leads")
+    .update({ disabled_at: disabled ? new Date().toISOString() : null })
+    .eq("id", leadId)
+    .select("id");
+  if (error) throw new UpstreamError("supabase", `Updating lead ${leadId} failed: ${error.message}`, { cause: error });
+  return data.length > 0;
+}
+
+/** Deletes a lead that is still new and has no timeline. The database refuses anything with history. */
+export async function deleteLead(leadId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("leads").delete().eq("id", leadId).select("id");
+  if (error?.code === "IVA05") return { ok: false as const, reason: "history" as const };
+  if (error) throw new UpstreamError("supabase", `Deleting lead ${leadId} failed: ${error.message}`, { cause: error });
+  return data.length > 0 ? { ok: true as const } : { ok: false as const, reason: "not_found" as const };
 }
