@@ -2,20 +2,19 @@
 
 # Islands VA — Engineering Guide
 
-Rules for the team and AI agents; change them by PR. Next.js 16 differs from training data — read `node_modules/next/dist/docs/` before using a Next API.
-
-This file holds everything needed for everyday coding. Two areas with their own workflow have their own guide, loaded automatically when you work there, and people-facing material lives in `docs/`:
+Rules for the team and AI agents; change them by PR. This file holds everyday rules and the map; each fact lives in exactly one of these places — link, don't copy:
 
 | Working on | Read |
 |---|---|
-| Database — migrations, grants, RLS, access model, database tests | `supabase/CLAUDE.md` |
-| UI — design system, tokens, components, voice and brand | `components/CLAUDE.md` |
-| Setup, applying migrations, launch · decisions · roadmap and pending work | `docs/operations.md` · `docs/decisions.md` · `docs/roadmap.md` |
+| Database — migrations, grants, RLS, access model, database tests | `supabase/CLAUDE.md` (loaded when working there) |
+| UI — design system, tokens, components, voice and brand | `components/CLAUDE.md` (loaded when working there) |
+| Setup, applying migrations, launch · decisions · roadmap and pending work | `docs/operations.md` · `docs/decisions.md` · `docs/roadmap.md` (for people; not loaded) |
+| Subagent roles | `.claude/agents/` (§10) |
 
 ## 1. Project
 
 - **Product:** B2B virtual-assistant staffing platform — public site, client/VA portal, agency back office. Scope: `Island-VA-MVP.docx`.
-- **Stack:** Next.js 16 App Router (React 19, TS strict, Tailwind v4, `cacheComponents`, `partialPrefetching`) · Supabase (Singapore) · Vercel · Resend · Cloudflare Turnstile. Runtime deps: `next`, `react`, `react-dom`, and server-only `zod`, `@supabase/ssr`, `@supabase/supabase-js` (none reach the browser).
+- **Stack:** Next.js 16 App Router (React 19, TS strict, Tailwind v4, `cacheComponents`, `partialPrefetching`) · Supabase (Singapore) · Vercel · Resend · Cloudflare Turnstile. Runtime deps stay minimal; `zod` and the Supabase packages are server-only and never reach the browser.
 - **Priorities:** secure → correct → maintainable → performant.
 - **Phase:** M2 — auth, role dashboards, admin system (`docs/roadmap.md`). **Build only the current phase.** Not in the MVP: blog, chatbot, client rating, VA mailer, salary deductions, Staff module, native apps, i18n.
 - **Domain:** roles Client, VA, Closer (also called lead gen), Admin, plus Super Admin across tenants (a user can hold several). *Tenant* = an agency using the platform; today there is one ("Islands VA"), and every user and record belongs to exactly one. *Lead* = contact-form submission. *Client* = a company record, `pending` until activated; it gets a login only when invited. *Staff* = VA, Closer or Admin. Accounts are invite-only, and deactivated, never deleted.
@@ -35,7 +34,7 @@ npm run admin:create -- <email>        # make an account admin in the project .e
 npx supabase migration new <name>      # new SQL file in supabase/migrations/
 ```
 
-`lint`, `typecheck`, `test` and `build` must pass before every push — run them one after another (the PGlite suite can starve in parallel). CI (`.github/workflows/ci.yml`) runs all five, plus `npm run size`, on every PR and push to `main`; a push to `staging` runs the same checks, then deploys staging (`deploy-staging.yml`, `docs/operations.md`). No `format` script yet.
+`lint`, `typecheck`, `test` and `build` must pass before every push — run them one after another (the PGlite suite can starve in parallel). CI (`ci.yml`) runs them plus `size` on every PR and push to `main`; a push to `staging` runs the same checks, then deploys it (`docs/operations.md`).
 
 **Gotchas:** `next build` while `next dev` runs in the same folder leaves the dev server serving stale CSS — restart it, or build in a separate `git worktree`. Windows paths in `node_modules` can exceed 260 characters; delete such folders with `\\?\`-prefixed paths.
 
@@ -45,8 +44,7 @@ npx supabase migration new <name>      # new SQL file in supabase/migrations/
 app/                  routes only — thin pages and endpoints
   (marketing)/        static public site; page-only layout pieces in <page>/_components/
   (auth)/             sign-in: login · forgot-password · set-password · mfa · accept-invite (temporary, §6)
-  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only; sidebar:
-                      overview · leads + lead page · clients · users = Teams + staff profile page)
+  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only)
   auth/confirm/       email-link landing (token hash → session)
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
 features/<feature>/   one business area (today: auth, leads, clients, users)
@@ -68,8 +66,7 @@ types/                shared types only (api, form, icon, turnstile, database)
 content/              typed static content; content/routes.ts is the only source of internal URLs
 supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)
 design/ · scripts/    tokens, logo sources, design-system PDF · build-tokens, check-bundle, create-admin
-docs/                 runbooks, decisions, roadmap (for people; not loaded automatically)
-.claude/              launch.json (preview servers) · agents/ (subagent roles, §10)
+docs/ · .claude/      runbooks, decisions, roadmap · launch.json (preview servers), agents/ (§10)
 proxy.ts              session refresh + convenience redirects on auth/portal routes (never authorization)
 vercel.json           function region sin1 (next to Supabase); no Git deploys of `staging` (CI deploys it)
 ```
@@ -114,13 +111,13 @@ vercel.json           function region sin1 (next to Supabase); no Git deploys of
 - **Secrets:** env only through `lib/env.ts` (a missing key fails just that request); real values in `.env.local`, never in `.env` (`npm test` fails if one is) or `NEXT_PUBLIC_`; production keys in Vercel, Sensitive. No Supabase client in the browser.
 - **Privacy:** no PII in URLs, logs or page titles (ids in URLs are random UUIDs); IPs are HMAC-hashed before storage (`lib/api/ip-hash.ts`); `404`, not `403`, for what the caller may not see; the Privacy Policy must match what the site does.
 - **Headers** (`next.config.ts`): HSTS, nosniff, strict referrer, restrictive `Permissions-Policy`, no framing, and a static CSP without nonces (nonces would make every page dynamic); CSP and HSTS in production builds only.
-- **Sessions:** `@supabase/ssr` cookie sessions, server-side only. Verify with `getClaims()` (checks the signature); never trust `getSession()` on the server. `getSessionUser()` is cached per request. `proxy.ts` refreshes the session cookie on auth and portal routes.
+- **Sessions:** `@supabase/ssr` cookie sessions, server-side only. Verify with `getClaims()` (checks the signature); never trust `getSession()` on the server. `getSessionUser()` is cached per request.
 - **Accounts and roles:** invite-only, sign-up disabled (admins invite staff from Teams; Closers will invite clients in M3). Supabase Auth owns `auth.users`; `profiles` (same id) holds `status`: `invited` → `active` on first sign-in → `inactive` when deactivated. Roles live in `roles` (one row per user per role; `app_role` = `ROLES` in `lib/auth/roles.ts`, highest precedence first), written only by the server. The `custom_access_token_hook` copies them, and the user's `tenant_id`, into `app_metadata` (never `user_metadata`); inactive users get no roles; changes apply at the next token refresh (≤ 1 hour). The hook must be enabled in the Supabase dashboard — without it nobody gets a role. Only a Super Admin grants `admin` or `super_admin`; an admin grants roles only inside their tenant (enforced by the database from `roles.assigned_by`).
 - **Tenants:** RLS keeps every user inside their own tenant; a Super Admin with two-factor sees all. The app doesn't act on `super_admin` yet — a Super Admin also holds `admin` (`docs/roadmap.md`). Database rules: `supabase/CLAUDE.md`.
 - **Two-factor:** admins and Super Admins need TOTP (`aal2`), enforced by `requireRole` and again by RLS. `/mfa` sets up an authenticator app on first use, then asks for a code at each sign-in.
 - **Sign-in:** users go straight to their workspace (`homeFor(roles)` from the new token; admins via `/mfa`); `/dashboard` is only the fallback without a role; `?next=` goes through `safeNextPath` (same-site paths only). Credential errors share one message and "forgot password" always reports success (no account enumeration). Passwords 10–72 characters with letters and digits.
 - **Email links:** invite and reset use the `supabase/templates/` token-hash links to `/auth/confirm` — the one GET route outside `createHandler`, which accepts only `invite` / `recovery`, verifies server-side and redirects to fixed paths.
-  - **Temporary (until custom SMTP):** the hosted project still sends Supabase's default emails, whose links carry the session in the URL `#hash`. `/accept-invite` and `EmailLinkSession` (in the root layout, so on every page) read and clear the hash and post the tokens to `establishEmailSession`, which stores them with `setSession` (Supabase validates them). Remove all three, and `/accept-invite` from the redirect allow-list, once the token-hash emails are live (`docs/roadmap.md`).
+  - **Temporary (until custom SMTP):** Supabase's default emails carry the session in the URL `#hash`. `/accept-invite` and `EmailLinkSession` (root layout, every page) read and clear it and post the tokens to `establishEmailSession`, which calls `setSession` (Supabase validates them). Remove all three, and `/accept-invite` from the redirect allow-list, once token-hash emails are live.
 - **Content:** never invent testimonials, logos or business claims — real content or `TODO(content)`; placeholder quotes stay labelled with a Sample badge until real ones replace them (`content/testimonials.ts`).
 
 ## 7. Code conventions
@@ -145,7 +142,7 @@ vercel.json           function region sin1 (next to Supabase); no Git deploys of
 |---|---|
 | Lighthouse, public pages (all four) | ≥ 95 |
 | LCP · CLS · INP | < 2.0 s · < 0.05 · < 200 ms |
-| First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Now: public ~148, contact 155, sign-in ~158, `/admin` 159.1 — new client code there needs a saving elsewhere |
+| First-load JS | ≤ 160 KB gzipped per page (`npm run size`). Sign-in and `/admin` are near the limit — new client code there needs a saving elsewhere |
 
 - Keep client components minimal; prefer platform features (CSS, `<details>`, `<dialog>`, popover) over libraries. Justify any dependency over 30 KB. `next/font` (≤ 2 families); third-party scripts only on the pages that need them.
 - **Tests:** every `parseX` and pure rule (triage flow, registration steps, invite results, parsers, `currentPath`); `createHandler`; role rules and `safeNextPath`; every migration with RLS allowed and denied per role. A test for a security limit must fail when the limit is removed. Untested auth or permission branches block review.
@@ -154,13 +151,12 @@ vercel.json           function region sin1 (next to Supabase); no Git deploys of
 
 - `main` changes only by PR with approval and green CI; fill in the PR template (`.github/pull_request_template.md`). Branches `feat/` `fix/` `chore/` `refactor/` `db/`, short-lived; Conventional Commits (`feat(contact): add lead form`).
 - PRs under 400 lines, describing changes, trade-offs, testing and any env var, dependency or schema change. 1 approval; 2 for database, auth, security or payments.
-- **Where documentation lives:** this file = everyday rules and the map; `supabase/CLAUDE.md` and `components/CLAUDE.md` = their area's rules (loaded only when working there); `docs/` = runbooks, decisions and roadmap for people. Each fact in exactly one place — link, don't copy. `README.md` only points here; no other READMEs, folder guides or doc folders without a PR that updates this rule.
-- A PR that changes a convention, folder, script, env var or decision updates the right file above in the same PR.
+- **Documentation** lives only where the table at the top says; `README.md` only points here. No other READMEs, folder guides or doc folders without a PR that updates this rule. A PR that changes a convention, folder, script, env var or decision updates the right file in the same PR.
 
 ## 10. Rules of engagement (AI agents)
 
 - **Ask first:** no code changes without approval — propose the plan, trade-offs, dependencies and risks, then wait.
 - **Explicit approval each time:** migrations, deploys, security fixes, auth changes, major upgrades.
 - **Humans only:** merging PRs, pushing to `main`, touching production data, committing secrets.
-- Don't commit unless asked. When unsure about a Next.js 16 API, read the bundled docs.
-- **Subagents** (`.claude/agents/`): `software-architect` designs (read-only), `software-developer` implements approved plans, `devops-security-engineer` reviews security and owns CI, config and runbooks. They follow these rules, define only their role (rules stay here), get no MCP tools, and stop at any approval gate above so the main session asks the user.
+- Don't commit unless asked. Next.js 16 differs from training data — read `node_modules/next/dist/docs/` before using a Next API (`AGENTS.md`).
+- **Subagents** (`.claude/agents/`): `software-architect` designs (read-only), `software-developer` implements approved plans, `devops-security-engineer` reviews security and owns CI, config and runbooks. They define only their role (rules stay here), get no MCP tools, and stop at any approval gate above so the main session asks the user.
