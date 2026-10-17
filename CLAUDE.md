@@ -69,6 +69,7 @@ content/              typed static content; content/routes.ts is the only source
 supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)
 design/ · scripts/    tokens, logo sources, design-system PDF · build-tokens, check-bundle, create-admin
 docs/                 runbooks, decisions, roadmap (for people; not loaded automatically)
+.claude/              launch.json (preview servers) · agents/ (subagent roles, §10)
 proxy.ts              session refresh + convenience redirects on auth/portal routes (never authorization)
 vercel.json           function region sin1 (next to Supabase); no Git deploys of `staging` (CI deploys it)
 ```
@@ -162,3 +163,4 @@ vercel.json           function region sin1 (next to Supabase); no Git deploys of
 - **Explicit approval each time:** migrations, deploys, security fixes, auth changes, major upgrades.
 - **Humans only:** merging PRs, pushing to `main`, touching production data, committing secrets.
 - Don't commit unless asked. When unsure about a Next.js 16 API, read the bundled docs.
+- **Subagents** (`.claude/agents/`): `software-architect` designs (read-only), `software-developer` implements approved plans, `devops-security-engineer` reviews security and owns CI, config and runbooks. They follow these rules, define only their role (rules stay here), get no MCP tools, and stop at any approval gate above so the main session asks the user.
