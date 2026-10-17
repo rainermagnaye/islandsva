@@ -34,7 +34,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 - Sentence case; verb-first buttons ("Request my team", never "Submit"); "you / we / your VA".
 - One sunrise (primary) button per view; the CTA band uses ocean because the nav already shows the sunrise one. Orange is a fill, never text on a light background.
 - Logo: the Sand & Sea mark plus the live wordmark (`layout/logo.tsx`).
-- Never copy showcase content (logos, quotes, prices, phone numbers); never invent testimonials, logos or business claims — real content or `TODO(content)`. Placeholder data must be labelled, development-only and absent from production builds (`content/testimonials.ts`).
+- Never copy showcase content (logos, quotes, prices, phone numbers); never invent testimonials, logos or business claims — real content or `TODO(content)`. Placeholder quotes stay labelled with a Sample badge until real ones replace them (`content/testimonials.ts`).
 
 ## Synced with the design system
 

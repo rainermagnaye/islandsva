@@ -4,17 +4,16 @@ export type Testimonial = {
   author: string;
   role?: string;
   company?: string;
-  /** Placeholder for layout work — shown with a "Sample" badge, never in production. */
+  /** Placeholder — the card shows a "Sample" badge until a real quote replaces it. */
   sample?: true;
 };
 
-// Real client quotes only, with the client's permission. Sections that use this stay hidden while it's empty.
+// Real client quotes only, with the client's permission.
 // Example: { id: "maria-acme", quote: "…", author: "Maria Santos", role: "Founder", company: "Acme Co." }
 const realTestimonials: Testimonial[] = [];
 
-// TODO(content): replace with real quotes. These exist only so the testimonial grid can be designed and
-// reviewed in development. They are never published: production builds and any build with a real quote
-// ignore them, and each card shows a "Sample" badge.
+// TODO(content): replace with real quotes. Shown, with a Sample badge, until then — including on the
+// deployed site — so the page is not an empty state. A real quote replaces this whole list.
 const sampleTestimonials: Testimonial[] = [
   {
     id: "sample-1",
@@ -42,5 +41,4 @@ const sampleTestimonials: Testimonial[] = [
   },
 ];
 
-export const testimonials: Testimonial[] =
-  realTestimonials.length > 0 || process.env.NODE_ENV === "production" ? realTestimonials : sampleTestimonials;
+export const testimonials: Testimonial[] = realTestimonials.length > 0 ? realTestimonials : sampleTestimonials;
