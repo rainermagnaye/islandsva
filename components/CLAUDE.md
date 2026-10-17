@@ -38,4 +38,4 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 
 ## Synced with the design system
 
-Last synced 2026-10-13: tokens, icons, portal components and the landing page. Intentional differences: no theme toggle, a tab row instead of a drawer for short phone menus, no Toast until an action needs one; no blog, comments or newsletter (outside the MVP).
+Last synced 2026-10-13: tokens, icons, portal components and the landing page; tokens again 2026-10-17 (the `shift-*` colours). Calendar, DatePicker, TimeSlotPicker and ScheduleCalendar (design system 2026-10-14) wait for M5 demo booking. Intentional differences: no theme toggle, a tab row instead of a drawer for short phone menus, no Toast until an action needs one; no blog, comments or newsletter (outside the MVP).
