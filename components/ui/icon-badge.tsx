@@ -12,6 +12,7 @@ const sizes = {
 const tones = {
   info: "bg-status-info-bg text-action-secondary",
   success: "bg-status-success-bg text-status-success",
+  danger: "bg-status-danger-bg text-status-danger",
 } as const;
 
 type IconBadgeProps = {

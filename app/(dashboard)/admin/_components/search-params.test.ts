@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterFrom, listHref, pageFrom } from "./search-params";
+import { disabledFrom, filterFrom, listHref, pageFrom } from "./search-params";
 
 const OPTIONS = { new: "New", closed: "Closed" } as const;
 
@@ -19,5 +19,11 @@ describe("admin list search params", () => {
     expect(listHref("/admin/leads", {})).toBe("/admin/leads");
     expect(listHref("/admin/leads", { page: 1 })).toBe("/admin/leads");
     expect(listHref("/admin/leads", { status: "new", page: 2 })).toBe("/admin/leads?status=new&page=2");
+    expect(listHref("/admin/leads", { disabled: true, status: "new" })).toBe("/admin/leads?disabled=1");
+  });
+
+  it("reads only ?disabled=1 as the disabled list", () => {
+    expect(disabledFrom("1")).toBe(true);
+    for (const bad of [undefined, "", "0", "true", "disabled"]) expect(disabledFrom(bad)).toBe(false);
   });
 });

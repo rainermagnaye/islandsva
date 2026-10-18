@@ -90,21 +90,24 @@ export async function listLeads({
   page = 1,
   status,
   search,
+  disabled = false,
   pageSize = PAGE_SIZE,
-}: { page?: number; status?: LeadStatus; search?: string; pageSize?: number } = {}): Promise<LeadPage> {
+}: { page?: number; status?: LeadStatus; search?: string; disabled?: boolean; pageSize?: number } = {}): Promise<LeadPage> {
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
   let query = supabase.from("leads").select(SUMMARY_COLUMNS, { count: "exact" });
-  if (status) query = query.eq("status", status);
+  if (status && !disabled) query = query.eq("status", status);
   if (search) {
     const pattern = `%${search}%`;
     query = query.or(`full_name.ilike."${pattern}",email.ilike."${pattern}"`);
   }
-  const { data, error, count } = await query.order("created_at", { ascending: false }).range(from, from + pageSize - 1);
+  const { data, error, count } = await (disabled ? query.not("disabled_at", "is", null) : query.is("disabled_at", null))
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
 
   // PostgREST answers a page past the end with "range not satisfiable" instead of an empty list.
   if (error?.code === "PGRST103") {
-    const total = await countLeadsWith(status, search);
+    const total = await countLeadsWith(status, search, disabled);
     return { leads: [], total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
   }
   if (error) throw new UpstreamError("supabase", `Listing leads failed: ${error.message}`, { cause: error });
@@ -154,15 +157,15 @@ export async function listLeadEvents(leadId: string): Promise<LeadEvent[]> {
  * Head-only count (no rows transferred), of every lead or of one status. Cached per request: the sidebar
  * badge and the overview both count new leads on the same render.
  */
-const countLeadsWith = cache(async (status?: LeadStatus, search?: string) => {
+const countLeadsWith = cache(async (status?: LeadStatus, search?: string, disabled = false) => {
   const supabase = await createClient();
   let query = supabase.from("leads").select("id", { count: "exact", head: true });
-  if (status) query = query.eq("status", status);
+  if (status && !disabled) query = query.eq("status", status);
   if (search) {
     const pattern = `%${search}%`;
     query = query.or(`full_name.ilike."${pattern}",email.ilike."${pattern}"`);
   }
-  const { count, error } = await query;
+  const { count, error } = await (disabled ? query.not("disabled_at", "is", null) : query.is("disabled_at", null));
   if (error) throw new UpstreamError("supabase", `Counting leads failed: ${error.message}`, { cause: error });
   return count ?? 0;
 });
@@ -263,8 +266,8 @@ function decodeBytea(value: string) {
   return Uint8Array.from(Buffer.from(value, "base64"));
 }
 
-/** Converts the lead and stores the conversion remark together. */
-export async function convertLeadNoted(input: ConvertNotedInput) {
+/** Converts the lead, stores the confirmed package on the client, and writes the remark. */
+export async function convertLeadNoted(input: ConvertNotedInput & { monthlyCents: number }) {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("convert_lead_noted", {
     lead_id: input.leadId,
@@ -272,6 +275,12 @@ export async function convertLeadNoted(input: ConvertNotedInput) {
     contact_name: input.contactName,
     contact_phone: input.contactPhone,
     remarks: input.remarks,
+    package_code: input.packageSlug,
+    hours_per_week: input.hoursPerWeek,
+    term_months: input.termMonths,
+    monthly_cents: input.monthlyCents,
+    starts_on: input.startsOn,
+    timezone: input.timezone,
   });
   if (error) {
     const refusal = CONVERT_REFUSALS[error.code as keyof typeof CONVERT_REFUSALS];

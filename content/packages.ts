@@ -9,6 +9,8 @@ export type Package = {
   name: string;
   icon: IconName;
   tagline: string;
+  /** Hours the package includes. `hoursPerWeek` is the same number, written out. */
+  weeklyHours: 20 | 40 | 80;
   hoursPerWeek: string;
   bestFor: string;
   features: string[];
@@ -32,6 +34,7 @@ export const packages: Package[] = [
     name: "Essentials",
     icon: "inbox",
     tagline: "Your inbox and calendar, handled every weekday.",
+    weeklyHours: 20,
     hoursPerWeek: "20 hours a week",
     bestFor: "Founders and solo professionals getting their first assistant.",
     features: [
@@ -50,6 +53,7 @@ export const packages: Package[] = [
     name: "Executive",
     icon: "briefcase",
     tagline: "A full-time VA who runs your day before it starts.",
+    weeklyHours: 40,
     hoursPerWeek: "40 hours a week",
     bestFor: "Busy leaders and small teams who need a right hand.",
     features: [
@@ -69,6 +73,7 @@ export const packages: Package[] = [
     name: "Day and night",
     icon: "clock",
     tagline: "Two VAs in shifts, so nothing waits until morning.",
+    weeklyHours: 80,
     hoursPerWeek: "80 hours a week",
     bestFor: "Businesses with customers or teams across time zones.",
     features: [

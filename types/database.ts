@@ -47,6 +47,16 @@ type ClientRow = {
   created_by: string;
   activated_at: string | null;
   notes: string | null;
+  package_code: string | null;
+  hours_per_week: number | null;
+  term_months: number | null;
+  monthly_cents: number | null;
+  currency: string;
+  starts_on: string | null;
+  timezone: string | null;
+  business: Json;
+  registration_email_sent_at: string | null;
+  disabled_at: string | null;
   tenant_id: string;
   created_at: string;
   updated_at: string;
@@ -125,6 +135,18 @@ type LeadRow = {
   updated_at: string;
 };
 
+type ClientNoteRow = {
+  id: string;
+  client_id: string;
+  author_id: string;
+  body: string;
+  attachment_name: string | null;
+  attachment_type: string | null;
+  attachment_bytes: string | null;
+  tenant_id: string;
+  created_at: string;
+};
+
 type LeadEventRow = {
   id: string;
   lead_id: string;
@@ -174,6 +196,12 @@ export type Database = {
         Update: Optional<ClientRow>;
         Relationships: [ProfilesFk<"clients_user_id_fkey", "user_id">, ProfilesFk<"clients_created_by_fkey", "created_by">];
       };
+      client_notes: {
+        Row: ClientNoteRow;
+        Insert: InsertOf<ClientNoteRow, "client_id" | "author_id" | "body">;
+        Update: Optional<ClientNoteRow>;
+        Relationships: [];
+      };
       client_va_assignments: {
         Row: AssignmentRow;
         Insert: InsertOf<AssignmentRow, "client_id" | "va_id">;
@@ -222,12 +250,28 @@ export type Database = {
       custom_access_token_hook: { Args: { event: Json }; Returns: Json };
       convert_lead: { Args: { lead_id: string; company_name: string; contact_name: string; contact_phone?: string | null }; Returns: string };
       convert_lead_noted: {
-        Args: { lead_id: string; company_name: string; contact_name: string; contact_phone?: string | null; remarks: string };
+        Args: {
+          lead_id: string;
+          company_name: string;
+          contact_name: string;
+          contact_phone?: string | null;
+          remarks: string;
+          package_code: string;
+          hours_per_week: number;
+          term_months: number;
+          monthly_cents: number;
+          starts_on: string;
+          timezone: string;
+        };
         Returns: string;
       };
       record_lead_step: { Args: { lead_id: string; kind: Enum<"lead_event_kind">; body: string }; Returns: undefined };
       record_lead_call: {
         Args: { lead_id: string; body: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
+      record_client_note: {
+        Args: { client_id: string; body: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
         Returns: string;
       };
       record_lead_note: {

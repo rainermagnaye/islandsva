@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
-import { parseAdminLead, parseConvert, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
+import { parseAdminLead, parseConvert, parseConvertNoted, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
 
 const valid = {
   name: "  Ana Cruz ",
@@ -176,5 +176,59 @@ describe("parseLeadStep", () => {
   it("rejects an empty remark and a kind the button cannot send", () => {
     expect(parseLeadStep({ leadId, kind: "note", body: "  " })).toMatchObject({ ok: false, fieldErrors: { body: expect.any(String) } });
     expect(parseLeadStep({ leadId, kind: "conversion", body: "Done" })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseConvertNoted", () => {
+  const leadId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
+  const day = (offset: number) => {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset)).toISOString().slice(0, 10);
+  };
+  const noted = {
+    leadId,
+    companyName: "Cruz Co",
+    contactName: "Ana Cruz",
+    contactPhone: "",
+    remarks: " Agreed on the call. ",
+    package: "executive",
+    hoursPerWeek: "40",
+    termMonths: "6",
+    startsOn: day(7),
+    timezone: "America/New_York",
+  };
+
+  it("keeps the confirmed package and drops the price, which the server fills in", () => {
+    expect(parseConvertNoted(noted)).toEqual({
+      ok: true,
+      value: {
+        leadId,
+        companyName: "Cruz Co",
+        contactName: "Ana Cruz",
+        contactPhone: null,
+        remarks: "Agreed on the call.",
+        packageSlug: "executive",
+        hoursPerWeek: 40,
+        termMonths: 6,
+        startsOn: noted.startsOn,
+        timezone: "America/New_York",
+      },
+    });
+  });
+
+  it("rejects hours that belong to a different package, a far start date and a missing package", () => {
+    expect(parseConvertNoted({ ...noted, hoursPerWeek: "20" })).toMatchObject({
+      ok: false,
+      fieldErrors: { hoursPerWeek: "Choose the hours that come with this package." },
+    });
+    expect(parseConvertNoted({ ...noted, startsOn: day(400) })).toMatchObject({
+      ok: false,
+      fieldErrors: { startsOn: expect.any(String) },
+    });
+    expect(parseConvertNoted({ ...noted, package: "" })).toMatchObject({ ok: false, fieldErrors: { package: "Choose a package." } });
+  });
+
+  it("treats a submitted price as a tampered form", () => {
+    expect(parseConvertNoted({ ...noted, monthlyCents: "1" })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });
