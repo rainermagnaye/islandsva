@@ -44,7 +44,7 @@ npx supabase migration new <name>      # new SQL file in supabase/migrations/
 app/                  routes only — thin pages and endpoints
   (marketing)/        static public site; page-only layout pieces in <page>/_components/
   (auth)/             sign-in: login · forgot-password · set-password · mfa · accept-invite (temporary, §6)
-  (dashboard)/        portal: dashboard (fallback) · client · va · closer · admin (admins only)
+  (workspace)/        portal: dashboard (fallback) · client · va · closer · admin (admins only)
   auth/confirm/       email-link landing (token hash → session)
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
 features/<feature>/   one business area (today: auth, leads, clients, users)
