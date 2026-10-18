@@ -10,18 +10,25 @@ import { appRoutes } from "@/content/routes";
 import { LEAD_VIEWS, type LeadView } from "../contract";
 import { CreateLeadForm } from "./create-lead-form";
 
-const STATUS_OPTIONS = (Object.keys(LEAD_VIEWS) as LeadView[]).map((value) => ({ value, label: LEAD_VIEWS[value] }));
+type LeadFilter = LeadView | "disabled";
+
+const STATUS_OPTIONS: { value: LeadFilter; label: string }[] = [
+  ...(Object.keys(LEAD_VIEWS) as LeadView[]).map((value) => ({ value, label: LEAD_VIEWS[value] })),
+  { value: "disabled", label: "Disabled" },
+];
 
 /** Filter and Create Lead, in the same places as the team list. Both keep the current search. */
-export function LeadsToolbar({ status, query }: { status?: LeadView; query?: string }) {
+export function LeadsToolbar({ status, disabled, query }: { status?: LeadView; disabled?: boolean; query?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [added, setAdded] = useState(false);
   const [formKey, setFormKey] = useState(0);
+  const value: LeadFilter | undefined = disabled ? "disabled" : status;
 
-  function filterBy(next: LeadView | undefined) {
+  function filterBy(next: LeadFilter | undefined) {
     const params = new URLSearchParams();
-    if (next) params.set("status", next);
+    if (next === "disabled") params.set("disabled", "1");
+    else if (next) params.set("status", next);
     if (query) params.set("q", query);
     const search = params.toString();
     router.push(search ? `${appRoutes.adminLeads}?${search}` : appRoutes.adminLeads);
@@ -29,7 +36,7 @@ export function LeadsToolbar({ status, query }: { status?: LeadView; query?: str
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <FilterMenu options={STATUS_OPTIONS} value={status} onChange={filterBy} allLabel="All Leads" />
+      <FilterMenu options={STATUS_OPTIONS} value={value} onChange={filterBy} allLabel="All Leads" />
       <Button
         iconLeft="plus"
         onClick={() => {

@@ -127,7 +127,11 @@ export async function convertLeadNoted(formData: FormData): Promise<SubmitResult
 
   try {
     const result = await convertLeadWithRemarks(parsed.value);
-    if (!result.ok) return { ok: false, message: result.reason === "unavailable" ? STEP_REFUSED.unavailable : REFUSED[result.reason] };
+    if (!result.ok) {
+      if (result.reason === "unavailable") return { ok: false, message: STEP_REFUSED.unavailable };
+      if (result.reason === "package") return { ok: false, message: "Choose a package from the list." };
+      return { ok: false, message: REFUSED[result.reason] };
+    }
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Lead conversion failed", { service: error.service, error });

@@ -260,3 +260,18 @@ export type LeadStatusField = "status";
 export const CONVERT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
 
 export type ConvertField = "companyName" | "contactName" | "contactPhone";
+
+/** Time zones a converted package can run in. The same list is the clients.timezone check. */
+export const PACKAGE_TIMEZONES = [
+  { value: "America/Los_Angeles", label: "Pacific — Los Angeles" },
+  { value: "America/Denver", label: "Mountain — Denver" },
+  { value: "America/Chicago", label: "Central — Chicago" },
+  { value: "America/New_York", label: "Eastern — New York" },
+  { value: "Europe/London", label: "United Kingdom — London" },
+  { value: "Europe/Paris", label: "Central Europe — Paris" },
+  { value: "Asia/Dubai", label: "Gulf — Dubai" },
+  { value: "Asia/Singapore", label: "Singapore" },
+  { value: "Asia/Manila", label: "Philippines — Manila" },
+  { value: "Australia/Sydney", label: "Australia — Sydney" },
+  { value: "Pacific/Auckland", label: "New Zealand — Auckland" },
+] as const;

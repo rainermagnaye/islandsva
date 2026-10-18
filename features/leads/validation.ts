@@ -8,6 +8,7 @@ import {
   CONTACT_METHODS,
   CONTACT_TIMES,
   CONVERT_LIMITS,
+  PACKAGE_TIMEZONES,
   HIRING_TIMELINES,
   INDUSTRIES,
   LEAD_EVENT_LIMIT,
@@ -287,24 +288,95 @@ export function parseLeadEdit(input: unknown) {
   return { ok: true as const, value: { leadId: id.data, ...lead.value, profile: profile.value } };
 }
 
-export type ConvertNotedInput = ConvertInput & { remarks: string };
-export type ConvertNotedField = ConvertField | "remarks";
+const DAY = 86_400_000;
+const TIMEZONE_VALUES: readonly string[] = PACKAGE_TIMEZONES.map((zone) => zone.value);
 
-/** Convert, plus the remark that lands on the timeline. */
+const packageSetupSchema = z.strictObject({
+  package: z
+    .string({ error: "Choose a package." })
+    .trim()
+    .refine((slug) => PACKAGE_SLUGS.has(slug), "Choose a package."),
+  hoursPerWeek: z.enum(["20", "40", "80"], { error: "Choose the hours for this package." }),
+  termMonths: z.enum(["1", "6", "12"], { error: "Choose how long they'll commit." }),
+  startsOn: z.string({ error: "Choose a start date." }).regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a start date."),
+  timezone: z
+    .string({ error: "Choose their time zone." })
+    .refine((zone) => TIMEZONE_VALUES.includes(zone), "Choose their time zone."),
+});
+
+const SETUP_FIELDS = ["package", "hoursPerWeek", "termMonths", "startsOn", "timezone"] as const;
+
+export type ConvertNotedInput = ConvertInput & {
+  remarks: string;
+  packageSlug: string;
+  hoursPerWeek: 20 | 40 | 80;
+  termMonths: 1 | 6 | 12;
+  startsOn: string;
+  timezone: string;
+};
+export type ConvertNotedField = ConvertField | "remarks" | (typeof SETUP_FIELDS)[number];
+
+/** UTC midnight for a calendar day, or null when it isn't a real date. */
+function utcDay(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date.getTime();
+}
+
+function todayUtc() {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+/**
+ * Convert, the package they're confirming, and the remark that lands on the timeline.
+ * The monthly price is not an input — the server reads it from the package catalogue.
+ */
 export function parseConvertNoted(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false as const, formError: FORM_ERROR };
   const record = input as Record<string, unknown>;
-  const { remarks, ...rest } = record;
+  const { remarks, package: packageSlug, hoursPerWeek, termMonths, startsOn, timezone, ...rest } = record;
   const converted = parseConvert(rest);
+  const setup = parseWith(packageSetupSchema, { package: packageSlug, hoursPerWeek, termMonths, startsOn, timezone }, SETUP_FIELDS);
   const note = remark.safeParse(remarks);
-  if (!converted.ok) {
-    if ("fieldErrors" in converted && !note.success) {
-      return { ok: false as const, fieldErrors: { ...converted.fieldErrors, remarks: note.error.issues[0]?.message ?? "Enter a few words." } };
+
+  const fieldErrors: Partial<Record<ConvertNotedField, string>> = {};
+  if (!converted.ok && "fieldErrors" in converted) Object.assign(fieldErrors, converted.fieldErrors);
+  if (!setup.ok && "fieldErrors" in setup) Object.assign(fieldErrors, setup.fieldErrors);
+  if (!note.success) fieldErrors.remarks = note.error.issues[0]?.message ?? "Enter a few words.";
+  if (!converted.ok && "formError" in converted) return converted;
+  if (!setup.ok && "formError" in setup) return setup;
+
+  if (setup.ok) {
+    const pkg = packages.find((item) => item.slug === setup.value.package);
+    if (!pkg || String(pkg.weeklyHours) !== setup.value.hoursPerWeek) {
+      fieldErrors.hoursPerWeek = "Choose the hours that come with this package.";
     }
-    return converted;
+    const start = utcDay(setup.value.startsOn);
+    const today = todayUtc();
+    if (start === null || start < today - DAY || start > today + 366 * DAY) {
+      fieldErrors.startsOn = "Choose a start date from today through the next year.";
+    }
   }
-  if (!note.success) return { ok: false as const, fieldErrors: { remarks: note.error.issues[0]?.message ?? "Enter a few words." } };
-  return { ok: true as const, value: { ...converted.value, remarks: note.data } };
+
+  if (!converted.ok || !setup.ok || !note.success || fieldErrors.hoursPerWeek || fieldErrors.startsOn) {
+    return { ok: false as const, fieldErrors };
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      ...converted.value,
+      remarks: note.data,
+      packageSlug: setup.value.package,
+      hoursPerWeek: Number(setup.value.hoursPerWeek) as 20 | 40 | 80,
+      termMonths: Number(setup.value.termMonths) as 1 | 6 | 12,
+      startsOn: setup.value.startsOn,
+      timezone: setup.value.timezone,
+    },
+  };
 }
 
 const idSchema = z.strictObject({ leadId: z.uuid({ error: FORM_ERROR }) });

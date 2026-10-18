@@ -1,6 +1,9 @@
 import "server-only";
+import { packages } from "@/content/packages";
+import { businessFromEnquiry } from "@/features/clients/contract";
+import { openClientRegistration } from "@/features/clients/service";
 import { LEAD_STATUSES, nextStatuses } from "./contract";
-import { convertLeadNoted, convertLeadToClient, deleteLead, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, setLeadDisabled, updateLeadDetails, updateLeadStatus } from "./dal";
+import { convertLeadNoted, convertLeadToClient, deleteLead, getLead, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, setLeadDisabled, updateLeadDetails, updateLeadStatus } from "./dal";
 import { sendLeadNotification } from "./email";
 import type { ConvertInput, ConvertNotedInput, LeadEditInput, LeadInput, LeadStatusInput, LeadStepInput } from "./validation";
 
@@ -55,9 +58,34 @@ export async function logLeadFile(kind: "call" | "note", leadId: string, body: s
   return recordLeadFile(kind, leadId, body, file);
 }
 
-/** Turns the lead into a client and keeps the closer's remarks on the timeline. */
+/**
+ * Turns the lead into a client, stores the package they confirmed, and keeps the remarks on the timeline.
+ * The monthly price comes from the catalogue, not from the form.
+ */
 export async function convertLeadWithRemarks(input: ConvertNotedInput) {
-  return convertLeadNoted(input);
+  const pkg = packages.find((item) => item.slug === input.packageSlug && item.weeklyHours === input.hoursPerWeek);
+  if (!pkg) return { ok: false as const, reason: "package" as const };
+  const result = await convertLeadNoted({ ...input, monthlyCents: pkg.monthlyPrice[input.termMonths] });
+  if (!result.ok) return result;
+
+  // The client row already exists. Copying the lead's details must not undo the conversion.
+  try {
+    const lead = await getLead(input.leadId);
+    await openClientRegistration(result.clientId, businessFromEnquiry({
+      industry: lead?.industry ?? null,
+      country: lead?.country ?? null,
+      message: lead?.message ?? "",
+      jobTitle: lead?.profile.jobTitle ?? "",
+      street: lead?.profile.street ?? "",
+      city: lead?.profile.city ?? "",
+      state: lead?.profile.state ?? "",
+      zip: lead?.profile.zip ?? "",
+      staffCount: lead?.profile.staffCount ?? "",
+    }));
+  } catch (error) {
+    console.error("Client registration setup failed", { clientId: result.clientId, error });
+  }
+  return result;
 }
 
 export async function editLead(input: LeadEditInput) {

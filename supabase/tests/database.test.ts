@@ -264,6 +264,39 @@ describe("clients: who can write", () => {
   it("an admin with 2FA edits any client", async () => {
     expect(await asUser(asAdmin, "update public.clients set notes = 'ok' where id = $1 returning id", [clientC])).toHaveLength(1);
   });
+
+  it("a Closer records a package on their own client, and a half-filled package is refused", async () => {
+    const filled =
+      "update public.clients set package_code = 'essentials', hours_per_week = 20, term_months = 1, monthly_cents = 90000, starts_on = '2026-11-01', timezone = 'America/New_York' where id = $1 returning id";
+    expect(await asUser(asCloser, filled, [clientB])).toHaveLength(1);
+    expect(await asUser(asCloser, filled, [clientC])).toHaveLength(0);
+    expect(await asUser(asVa, filled, [clientA])).toHaveLength(0);
+    await expect(as("anon", {}, "update public.clients set timezone = 'America/New_York' where id = $1", [clientB])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "update public.clients set hours_per_week = 80 where id = $1", [clientB])).rejects.toThrow(/clients_package_hours/);
+    await asServer(
+      "update public.clients set package_code = null, hours_per_week = null, term_months = null, monthly_cents = null, starts_on = null, timezone = null where id = $1",
+      [clientB],
+    );
+  });
+
+  it("an admin or the owning closer can disable a client, and a VA cannot", async () => {
+    expect(await asUser(asAdmin, "update public.clients set disabled_at = now() where id = $1 returning id", [clientC])).toHaveLength(1);
+    expect(await asUser(asCloser, "update public.clients set disabled_at = now() where id = $1 returning id", [clientB])).toHaveLength(1);
+    expect(await asUser(asCloser, "update public.clients set disabled_at = now() where id = $1 returning id", [clientC])).toHaveLength(0);
+    expect(await asUser(asVa, "update public.clients set disabled_at = now() where id = $1 returning id", [clientA])).toHaveLength(0);
+    await expect(as("anon", {}, "update public.clients set disabled_at = now() where id = $1", [clientA])).rejects.toThrow(/permission denied/);
+    await asServer("update public.clients set disabled_at = null where id in ($1, $2)", [clientB, clientC]);
+  });
+
+  it("stores business details and when the registration email went out", async () => {
+    expect(
+      await asUser(asAdmin, "update public.clients set business = '{\"city\":\"Austin\"}'::jsonb, registration_email_sent_at = now() where id = $1 returning id", [clientC]),
+    ).toHaveLength(1);
+    await expect(asUser(asAdmin, "update public.clients set business = '[]'::jsonb where id = $1", [clientC])).rejects.toThrow(/clients_business_object/);
+    await expect(asUser(asAdmin, "update public.clients set business = jsonb_build_object('about', repeat('a', 5000)) where id = $1", [clientC])).rejects.toThrow(/clients_business_object/);
+    expect(await asUser(asVa, "update public.clients set business = '{}'::jsonb where id = $1 returning id", [clientC])).toHaveLength(0);
+    await asServer("update public.clients set business = '{}'::jsonb, registration_email_sent_at = null where id = $1", [clientC]);
+  });
 });
 
 describe("VA assignments", () => {
@@ -481,6 +514,37 @@ describe("leads", () => {
       expect(stored.status).toBe("new");
     });
 
+    it("stores the confirmed package on the new client", async () => {
+      const [lead] = await insert({ email: "package@x.co", status: "qualified" });
+      const [{ id: clientId }] = await asUser<{ id: string }>(
+        asAdmin,
+        "select public.convert_lead_noted($1::uuid, 'Cruz Co', 'Ana Cruz', null::text, 'Agreed on the call.', 'executive', 40::smallint, 6::smallint, 152000, '2026-11-02'::date, 'America/New_York') as id",
+        [lead.id],
+      );
+      const [client] = await asServer(
+        "select package_code, hours_per_week, term_months, monthly_cents, currency, starts_on::text as starts_on, timezone from public.clients where id = $1",
+        [clientId],
+      );
+      expect(client).toEqual({
+        package_code: "executive",
+        hours_per_week: 40,
+        term_months: 6,
+        monthly_cents: 152000,
+        currency: "USD",
+        starts_on: "2026-11-02",
+        timezone: "America/New_York",
+      });
+      expect(await asServer("select kind, body from public.lead_events where lead_id = $1", [lead.id])).toEqual([{ kind: "conversion", body: "Agreed on the call." }]);
+    });
+
+    it("refuses hours that don't belong to the package and leaves the lead open", async () => {
+      const [lead] = await insert({ email: "hours@x.co" });
+      await expect(
+        asUser(asAdmin, "select public.convert_lead_noted($1::uuid, 'Cruz Co', 'Ana Cruz', null::text, 'Agreed.', 'executive', 20::smallint, 1::smallint, 160000, '2026-11-02'::date, 'America/New_York')", [lead.id]),
+      ).rejects.toThrow(/hours do not match/);
+      expect(await asServer("select status from public.leads where id = $1", [lead.id])).toEqual([{ status: "new" }]);
+    });
+
     it("is for admins with two-factor sign-in only", async () => {
       const [lead] = await insert({});
       for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser, asVa, asClient]) {
@@ -557,6 +621,34 @@ describe("leads", () => {
     ["converted without a client", { status: "converted" }],
   ])("rejects %s", async (_, values) => {
     await expect(insert(values)).rejects.toThrow(/violates check constraint/);
+  });
+});
+
+describe("client notes", () => {
+  it("stores a note and a small file, and refuses one over 2 MB", async () => {
+    await asUser(asAdmin, "select public.record_client_note($1, 'Called about the start date.', 'Start date.pdf', 'application/pdf', $2)", [
+      clientA,
+      Buffer.from("%PDF").toString("base64"),
+    ]);
+    expect(await asServer("select body, attachment_name, octet_length(attachment_bytes) as size, author_id from public.client_notes where client_id = $1", [clientA])).toEqual([
+      { body: "Called about the start date.", attachment_name: "Start date.pdf", size: 4, author_id: ADMIN },
+    ]);
+    const tooBig = Buffer.alloc(2_097_153).toString("base64");
+    await expect(asUser(asAdmin, "select public.record_client_note($1, 'Too big.', 'big.pdf', 'application/pdf', $2)", [clientA, tooBig])).rejects.toThrow(/attachment is too large/);
+  });
+
+  it("stores a note with no file", async () => {
+    await asUser(asAdmin, "select public.record_client_note($1, 'No file this time.', null, null, null)", [clientB]);
+    expect(await asServer("select attachment_name from public.client_notes where client_id = $1", [clientB])).toEqual([{ attachment_name: null }]);
+  });
+
+  it("is for admins with two-factor sign-in only", async () => {
+    for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser, asVa]) {
+      await expect(asUser(claims, "select public.record_client_note($1, 'Nope.', null, null, null)", [clientA])).rejects.toThrow(/admins with two-factor sign-in only/);
+    }
+    expect(await asUser(asCloser, "select id from public.client_notes")).toEqual([]);
+    await expect(as("anon", {}, "select id from public.client_notes")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "select public.record_client_note($1, 'Missing.', null, null, null)", ["00000000-0000-0000-0000-0000000000aa"])).rejects.toMatchObject({ code: "IVA01" });
   });
 });
 

@@ -28,7 +28,11 @@ export function TeamBoard({ users, total }: { users: readonly UserSummary[]; tot
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     return users.filter((user) => {
-      if (status && user.status !== status) return false;
+      if (status) {
+        if (user.status !== status) return false;
+      } else if (user.status === "inactive") {
+        return false;
+      }
       if (!term) return true;
       const roles = user.roles.map((role) => ROLE_LABELS[role]).join(" ");
       return `${user.fullName} ${user.email} ${user.phone ?? ""} ${roles}`.toLowerCase().includes(term);

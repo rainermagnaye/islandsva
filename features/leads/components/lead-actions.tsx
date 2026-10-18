@@ -11,11 +11,12 @@ import { AttachmentField } from "@/components/ui/attachment-field";
 import { TextField } from "@/components/ui/text-field";
 import { adminLeadHref } from "@/content/routes";
 import { cx } from "@/lib/cx";
-import { convertLeadNoted, deleteLead, saveLeadStep, setLeadPaused } from "../actions";
+import { deleteLead, saveLeadStep, setLeadPaused } from "../actions";
 import { LEAD_ATTACHMENT_ACCEPT, acceptLeadAttachment } from "../attachment";
-import { CONVERT_LIMITS, LEAD_EVENT_LIMIT, PIPELINE_STEP, type LeadDetail } from "../contract";
+import { LEAD_EVENT_LIMIT, PIPELINE_STEP, type LeadDetail } from "../contract";
+import { ConvertDialog } from "./convert-dialog";
 
-type Dialog = "step" | "convert" | "pause" | "delete" | null;
+type Dialog = "step" | "junk" | "convert" | "pause" | "delete" | null;
 
 /** Pipeline button and the edit / disable / delete menu. Each write opens a dialog first. */
 export function LeadActions({ lead, canDelete, editing }: { lead: LeadDetail; canDelete: boolean; editing: boolean }) {
@@ -44,6 +45,16 @@ export function LeadActions({ lead, canDelete, editing }: { lead: LeadDetail; ca
             Mark as Converted
           </Button>
         )}
+        {lead.status !== "closed" && (
+          <button
+            type="button"
+            aria-label="Mark as junk"
+            onClick={() => setDialog("junk")}
+            className={buttonClasses({ variant: "ghost", className: "size-11 cursor-pointer px-0" })}
+          >
+            <Icon name="trash" />
+          </button>
+        )}
         <details ref={menu} className="relative">
           <summary aria-label="Lead actions" className={buttonClasses({ variant: "ghost", className: "size-11 cursor-pointer list-none px-0 marker:content-none [&::-webkit-details-marker]:hidden" })}>
             <Icon name="menu" />
@@ -66,6 +77,17 @@ export function LeadActions({ lead, canDelete, editing }: { lead: LeadDetail; ca
 
       {dialog === "step" && step && (
         <RemarkDialog title={step.title} label={step.prompt} kind={step.kind} leadId={lead.id} allowFile={step.kind === "call"} onClose={close} />
+      )}
+      {dialog === "junk" && (
+        <RemarkDialog
+          title="Mark as junk"
+          label="Why is this a junk lead?"
+          kind="junk"
+          leadId={lead.id}
+          onClose={close}
+          submitLabel="Mark as junk"
+          blocked={lead.status === "converted" ? "This lead is already a client, so it can't be marked as junk." : lead.disabledAt ? "Enable this lead before marking it as junk." : undefined}
+        />
       )}
       {dialog === "convert" && <ConvertDialog lead={lead} onClose={close} />}
       {dialog === "pause" && <ConfirmDialog leadId={lead.id} disabled={!lead.disabledAt} onClose={close} />}
@@ -102,10 +124,11 @@ function MenuItem({ icon, label, onClick, danger = false }: { icon: "edit" | "tr
   );
 }
 
-function RemarkDialog({ title, label, kind, leadId, allowFile = false, onClose, submitLabel = "Save" }: { title: string; label: string; kind: string; leadId: string; allowFile?: boolean; onClose: () => void; submitLabel?: string }) {
+function RemarkDialog({ title, label, kind, leadId, allowFile = false, onClose, submitLabel = "Save", blocked }: { title: string; label: string; kind: string; leadId: string; allowFile?: boolean; onClose: () => void; submitLabel?: string; blocked?: string }) {
   return (
     <Modal open onClose={onClose} title={title}>
       <Form aria-label={title} onSubmit={async (formData) => {
+        if (blocked) return { ok: false, message: blocked };
         const file = formData.get("attachment");
         const title = formData.get("attachmentName");
         if (file instanceof File && file.size > 0) {
@@ -132,33 +155,10 @@ function RemarkDialog({ title, label, kind, leadId, allowFile = false, onClose, 
   );
 }
 
-function ConvertDialog({ lead, onClose }: { lead: LeadDetail; onClose: () => void }) {
-  return (
-    <Modal open onClose={onClose} title="Convert to client" description="This creates a client and keeps your remarks on the timeline.">
-      <Form aria-label="Convert to client" onSubmit={async (formData) => {
-        const result = await convertLeadNoted(formData);
-        if (result.ok) onClose();
-        return result;
-      }}>
-        {({ pending, fieldErrors }) => (
-          <>
-            <input type="hidden" name="leadId" value={lead.id} />
-            <TextField label="Company" name="companyName" required defaultValue={lead.companyName ?? ""} maxLength={CONVERT_LIMITS.companyName} data-autofocus error={fieldErrors.companyName} />
-            <TextField label="Contact name" name="contactName" required defaultValue={lead.fullName} maxLength={CONVERT_LIMITS.contactName} error={fieldErrors.contactName} />
-            <TextField label="Contact phone" name="contactPhone" type="tel" optional maxLength={CONVERT_LIMITS.contactPhone} error={fieldErrors.contactPhone} />
-            <TextField label="Conversion remarks" name="remarks" multiline required maxLength={LEAD_EVENT_LIMIT} error={fieldErrors.remarks} />
-            <DialogButtons pending={pending} onClose={onClose} submitLabel="Mark as converted" />
-          </>
-        )}
-      </Form>
-    </Modal>
-  );
-}
-
 function ConfirmDialog({ leadId, disabled, onClose }: { leadId: string; disabled: boolean; onClose: () => void }) {
   const title = disabled ? "Disable lead" : "Enable lead";
   return (
-    <Modal open onClose={onClose} title={title} description={disabled ? "The pipeline buttons stop until you enable this lead. The timeline stays." : "The pipeline buttons work again."}>
+    <Modal open onClose={onClose} title={title} description={disabled ? "This lead leaves the lead list until you enable them. The timeline stays." : "This lead shows on the lead list again."}>
       <Form aria-label={title} onSubmit={async (formData) => {
         const result = await setLeadPaused(formData);
         if (result.ok) onClose();
