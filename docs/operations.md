@@ -97,7 +97,7 @@ Reset or invite emails: "We couldn't send the reset email" is Supabase answering
 
 - Keys in Vercel (production and preview), marked Sensitive.
 - The Vercel project, region `sin1` (from `vercel.json`, next to Supabase).
-- Vercel Firewall rate limits on `/api/v1/leads` and the sign-in POSTs (Supabase sees our server's IP, so its per-IP limits don't separate visitors).
+- Vercel Firewall rate limits on `/api/v1/leads`, `/api/v1/onboarding-submissions`, `/onboarding/*` and the sign-in POSTs (Supabase sees our server's IP, so its per-IP limits don't separate visitors).
 - Turnstile production keys (test keys are refused on the live deployment).
 - Supabase steps 1–5 above (production settings, SMTP, templates, a test invite).
 - Privacy policy matches what the site actually does; legal review.
