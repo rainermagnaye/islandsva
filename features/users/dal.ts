@@ -100,18 +100,52 @@ export async function inviteAuthUser(email: string, fullName: string, redirectTo
 }
 
 /**
- * Creates a client's login without Supabase sending anything: we email our own /auth/confirm link with the
- * returned token hash (through Resend), so it works before custom SMTP and never uses the hash-link flow.
- * Secret key: Auth admin call, made only by the activation service after the actor is authorized.
+ * Creates a NEW login for a client, without Supabase sending anything: we email our own /auth/confirm link with
+ * the returned token hash (through Resend), so it works before custom SMTP and never uses the hash-link flow.
+ * createUser refuses every existing email (email_exists), confirmed or not. generateLink alone would hand back an
+ * existing unaccepted account (a pending staff invite, say) and replace its token — and a rollback would then
+ * delete someone else's account. Secret key: Auth admin calls, made only by the activation service after the
+ * actor is authorized.
  */
 export async function createLoginLink(email: string, fullName: string) {
-  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "invite", email, options: { data: { full_name: fullName } } });
-  if (error) {
-    const reason = classifyInviteError(error, false);
+  const admin = createAdminClient();
+  const created = await admin.auth.admin.createUser({ email, email_confirm: false, user_metadata: { full_name: fullName } });
+  if (created.error) {
+    const reason = classifyInviteError(created.error, false);
     if (reason) return { ok: false as const, reason };
-    throw new UpstreamError("supabase-auth", `Creating a login failed: ${error.code ?? error.message}`);
+    throw new UpstreamError("supabase-auth", `Creating a login failed (${created.error.code ?? "unknown"})`);
   }
-  return { ok: true as const, userId: data.user.id, tokenHash: data.properties.hashed_token };
+  const userId = created.data.user.id;
+  const link = await admin.auth.admin.generateLink({ type: "invite", email });
+  if (link.error || link.data.user.id !== userId) {
+    // Only the account created just above is ever removed here.
+    await admin.auth.admin.deleteUser(userId);
+    throw new UpstreamError("supabase-auth", `Creating a sign-in link failed (${link.error?.code ?? "user mismatch"})`);
+  }
+  return { ok: true as const, userId, tokenHash: link.data.properties.hashed_token };
+}
+
+/**
+ * Rolls back a login created by createLoginLink in the same request, when activation is refused. Refuses to touch
+ * an account that holds any role, so even a wrong id can't remove a working account. Secret key: Auth admin call.
+ */
+export async function discardNewLogin(userId: string) {
+  const admin = createAdminClient();
+  const { count, error } = await admin.from("roles").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  if (error) throw new UpstreamError("supabase", `Checking a login before removal failed (${error.code})`);
+  if ((count ?? 0) > 0) {
+    console.error("Refused to remove a login that holds roles", { userId });
+    return;
+  }
+  const removed = await admin.auth.admin.deleteUser(userId);
+  if (removed.error) throw new UpstreamError("supabase-auth", `Removing a new login failed (${removed.error.code ?? "unknown"})`);
+}
+
+/** The email a login signs in with, to send it a fresh link. Secret key: profiles of clients aren't readable by their Closer. */
+export async function getLoginEmail(userId: string) {
+  const { data, error } = await createAdminClient().from("profiles").select("email").eq("id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading a login's email failed (${error.code})`);
+  return data?.email ?? null;
 }
 
 /** A fresh sign-in link for an existing login (password reset type), to resend the account email. Secret key: Auth admin call. */
@@ -137,7 +171,7 @@ export async function setAccountInactive(userId: string) {
  */
 export async function deleteAuthUser(userId: string) {
   const { error } = await createAdminClient().auth.admin.deleteUser(userId);
-  if (error) throw new UpstreamError("supabase-auth", `Deleting user ${userId} failed: ${error.message}`, { cause: error });
+  if (error) throw new UpstreamError("supabase-auth", `Deleting user ${userId} failed (${error.code ?? "unknown"})`);
 }
 
 const PROFILE_COLUMNS =

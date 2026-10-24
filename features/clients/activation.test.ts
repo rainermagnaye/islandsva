@@ -25,7 +25,8 @@ describe("parseManualPayment", () => {
   it("refuses a date in the future or one that doesn't exist", () => {
     expect(parseManualPayment({ clientId, amount: "1", paidOn: "2026-10-26" }, now)).toMatchObject({ ok: false, fieldErrors: { paidOn: expect.any(String) } });
     expect(parseManualPayment({ clientId, amount: "1", paidOn: "2026-02-30" }, now)).toMatchObject({ ok: false, fieldErrors: { paidOn: expect.any(String) } });
-    expect(parseManualPayment({ clientId, amount: "1", paidOn: "2026-10-25" }, now).ok).toBe(true);
+    expect(parseManualPayment({ clientId, amount: "1", paidOn: "2026-10-24" }, now).ok).toBe(true);
+    expect(parseManualPayment({ clientId, amount: "1", paidOn: "2026-10-25" }, now)).toMatchObject({ ok: false, fieldErrors: { paidOn: expect.any(String) } });
   });
 
   it("treats a bad client id or an extra key as a tampered form", () => {

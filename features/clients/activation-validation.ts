@@ -17,7 +17,7 @@ const paymentSchema = z.strictObject({
     .string()
     .trim()
     .max(PAYMENT_LIMITS.reference, tooLong("the reference", PAYMENT_LIMITS.reference))
-    .regex(NO_CONTROL_CHARS, tooLong("the reference", PAYMENT_LIMITS.reference))
+    .regex(NO_CONTROL_CHARS, "Use letters, numbers and punctuation only in the reference.")
     .default(""),
   paidOn: z.string({ error: "Choose the date it arrived." }).regex(/^\d{4}-\d{2}-\d{2}$/, "Choose the date it arrived."),
 });
@@ -32,9 +32,9 @@ export function parseManualPayment(input: unknown, now = new Date()) {
   const [year, month, day] = paidOn.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   const real = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-  // A day of slack for time zones: the database refuses anything after its own current date.
-  const tomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  if (!real || date.getTime() > tomorrow) return { ok: false as const, fieldErrors: { paidOn: "Choose the date it arrived, today or earlier." } };
+  // Same as the database: no later than today in UTC (its current_date), so the two never disagree.
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  if (!real || date.getTime() > today) return { ok: false as const, fieldErrors: { paidOn: "Choose the date it arrived, today (UTC) or earlier." } };
   return { ok: true as const, value: { clientId, amountCents: amount, reference, paidOn } satisfies ManualPaymentInput };
 }
 
