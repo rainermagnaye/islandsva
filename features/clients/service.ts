@@ -1,11 +1,12 @@
 import "server-only";
 import { packages } from "@/content/packages";
-import { onboardingHref } from "@/content/routes";
+import { adminClientHref, closerClientHref, onboardingHref } from "@/content/routes";
 import { site } from "@/content/site";
 import type { ClientBusiness, ClientDetail } from "./contract";
-import { sendOnboardingEmail } from "./email";
-import { issueOnboardingLink, markOnboardingEmailSent, revokeOnboardingLink } from "./onboarding-dal";
-import { createOnboardingToken } from "./onboarding-token";
+import { sendOnboardingEmail, sendOnboardingSubmittedEmail } from "./email";
+import { getClientCreator, getInvitation, issueOnboardingLink, markOnboardingEmailSent, revokeOnboardingLink, submitOnboarding } from "./onboarding-dal";
+import { createOnboardingToken, hashOnboardingToken } from "./onboarding-token";
+import type { OnboardingInput } from "./onboarding-validation";
 import { insertClient, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
 import type { ClientDetailsInput, ClientNoteInput, NewClientInput } from "./validation";
 
@@ -68,4 +69,27 @@ export async function sendOnboardingForm(client: Pick<ClientDetail, "id" | "cont
 /** Withdraws the open link, so it stops working. */
 export async function withdrawOnboardingForm(clientId: string, actorId: string) {
   return revokeOnboardingLink(clientId, actorId);
+}
+
+/** What the public onboarding page shows for a token, by its hash. Viewing doesn't use the link up. */
+export async function loadInvitation(token: string) {
+  return getInvitation(hashOnboardingToken(token));
+}
+
+/** The client's submission: details, billing and consent, written once. */
+export async function submitClientOnboarding(input: OnboardingInput) {
+  return submitOnboarding(hashOnboardingToken(input.token), input);
+}
+
+/** Lets the Closer know the form is in. Runs after the response; a failure is only logged. */
+export async function notifyOnboardingSubmitted(clientId: string) {
+  const creator = await getClientCreator(clientId);
+  if (!creator) return;
+  await sendOnboardingSubmittedEmail({
+    to: creator.email,
+    name: creator.name,
+    companyName: creator.companyName,
+    // A client converted by an admin has no Closer: send them to the admin profile instead.
+    profileUrl: new URL(creator.isCloser ? closerClientHref(clientId) : adminClientHref(clientId), site.url).toString(),
+  });
 }
