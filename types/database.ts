@@ -83,6 +83,37 @@ type PaymentRow = {
   voided_by: string | null;
 };
 
+type DemoSlotRow = {
+  id: string;
+  tenant_id: string;
+  va_id: string;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+};
+
+/** Written only by book_demo, decide_demo and cancel_demo (secret key); company, time zone and VA name are snapshots. */
+type DemoBookingRow = {
+  id: string;
+  tenant_id: string;
+  client_id: string;
+  va_id: string;
+  slot_id: string | null;
+  starts_at: string;
+  ends_at: string;
+  status: Enum<"demo_status">;
+  client_note: string | null;
+  reject_reason: string | null;
+  decided_at: string | null;
+  cancelled_at: string | null;
+  booked_by: string;
+  company_name: string;
+  client_timezone: string | null;
+  va_name: string;
+  created_at: string;
+  updated_at: string;
+};
+
 /** Signed-in users may read every column except token_hash (column grant); the server reads all. */
 type OnboardingLinkRow = {
   id: string;
@@ -243,6 +274,18 @@ export type Database = {
         Update: Optional<PaymentRow>;
         Relationships: [];
       };
+      demo_slots: {
+        Row: DemoSlotRow;
+        Insert: InsertOf<DemoSlotRow, "va_id" | "starts_at" | "ends_at">;
+        Update: Optional<DemoSlotRow>;
+        Relationships: [];
+      };
+      demo_bookings: {
+        Row: DemoBookingRow;
+        Insert: InsertOf<DemoBookingRow, "client_id" | "va_id" | "starts_at" | "ends_at" | "booked_by" | "company_name" | "va_name">;
+        Update: Optional<DemoBookingRow>;
+        Relationships: [];
+      };
       client_onboarding_links: {
         Row: OnboardingLinkRow;
         Insert: InsertOf<OnboardingLinkRow, "client_id" | "token_hash" | "created_by">;
@@ -342,6 +385,10 @@ export type Database = {
       };
       void_payment: { Args: { payment_id: string; voided_by: string }; Returns: undefined };
       activate_client: { Args: { client_id: string; user_id: string; activated_by: string }; Returns: undefined };
+      // Demo scheduling: executable by the secret key only; each returns the details its email needs.
+      book_demo: { Args: { client_id: string; slot_id: string; actor: string; note: string | null }; Returns: Json };
+      decide_demo: { Args: { booking_id: string; actor: string; decision: "confirmed" | "rejected"; reason: string | null }; Returns: Json };
+      cancel_demo: { Args: { booking_id: string; actor: string }; Returns: Json };
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";
@@ -356,6 +403,7 @@ export type Database = {
       staff_review_status: "pending" | "pending_review" | "approved";
       payment_provider: "manual";
       payment_status: "paid" | "void";
+      demo_status: "pending" | "confirmed" | "rejected" | "cancelled" | "completed" | "expired";
     };
     CompositeTypes: { [_ in never]: never };
   };
