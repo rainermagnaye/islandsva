@@ -1034,3 +1034,164 @@ describe("client onboarding links", () => {
     await expect(asUser(asVa, create, [CLOSER])).rejects.toThrow(/row-level security/);
   });
 });
+
+describe("client payments and activation", () => {
+  // Payments are recorded by hand (Stripe arrives in M4); activation needs the form, consent and a payment.
+  const CLOSER_B = "00000000-0000-0000-0000-0000000000b3"; // the second tenant's Closer (see "tenants")
+  const LOGIN = "00000000-0000-0000-0000-0000000000e1";
+  const LOGIN_B = "00000000-0000-0000-0000-0000000000e2";
+  const FRESH = "00000000-0000-0000-0000-0000000000e3";
+  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+  let ready = "";
+  let unsent = "";
+  let noPackage = "";
+  let inB = "";
+  const newClient = async (name: string, closer: string, withPackage = true) =>
+    (await asServer<{ id: string }>(
+      withPackage
+        ? "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone) values ($1, 'C', $2, $3, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id"
+        : "insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'C', $2, $3) returning id",
+      [name, `${name.toLowerCase()}@activate.co`, closer],
+    ))[0].id;
+  const onboard = async (client: string, closer: string, value: string) => {
+    await asServer("select * from public.issue_onboarding_link($1, $2, $3)", [client, closer, sha(value)]);
+    await asServer("select public.submit_onboarding($1, 'C', '', '{}'::jsonb, '{}'::jsonb, true)", [sha(value)]);
+  };
+  const pay = (client: string, by: string, amount = 85500, paidOn = "2026-10-20") =>
+    asServer<{ id: string }>("select public.record_manual_payment($1, $2, $3, ' TRX-1 ', $4) as id", [client, by, amount, paidOn]);
+  const activate = (client: string, login: string, by: string) => asServer("select public.activate_client($1, $2, $3)", [client, login, by]);
+  const grant = (user: string, role: string, by: string) =>
+    asServer("insert into public.roles (user_id, role, assigned_by) values ($1, $2, $3) returning id", [user, role, by]);
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email) values ('${LOGIN}', 'owner@activate.co'), ('${LOGIN_B}', 'owner-b@activate.co'), ('${FRESH}', 'fresh@activate.co')`);
+    ready = await newClient("Ready", CLOSER);
+    unsent = await newClient("Unsent", CLOSER);
+    noPackage = await newClient("Bare", CLOSER, false);
+    inB = await newClient("Bravo", CLOSER_B);
+    await onboard(ready, CLOSER, "ready");
+    await onboard(inB, CLOSER_B, "bravo");
+  });
+
+  it("only the server records payments or activates", async () => {
+    await expect(asUser(asCloser, "select public.record_manual_payment($1, $2, 100, null, current_date)", [ready, CLOSER])).rejects.toThrow(/permission denied for function/);
+    await expect(asUser(asAdmin, "select public.activate_client($1, $2, $3)", [ready, LOGIN, ADMIN])).rejects.toThrow(/permission denied for function/);
+    await expect(as("anon", {}, "select public.void_payment($1, $2)", [ready, ADMIN])).rejects.toThrow(/permission denied for function/);
+    const [grants] = await asServer<Record<string, boolean>>(`
+      select
+        bool_or(has_function_privilege(r, 'public.record_manual_payment(uuid, uuid, integer, text, date)', 'execute')) as record,
+        bool_or(has_function_privilege(r, 'public.void_payment(uuid, uuid)', 'execute')) as void,
+        bool_or(has_function_privilege(r, 'public.activate_client(uuid, uuid, uuid)', 'execute')) as activate
+      from unnest(array['anon', 'authenticated']) as r`);
+    expect(grants).toEqual({ record: false, void: false, activate: false });
+  });
+
+  it("the client's Closer or an admin records a payment for the client's term; bad amounts and dates are refused", async () => {
+    const [{ id }] = await pay(ready, CLOSER);
+    const [row] = await asServer<{ term_months: number; provider_ref: string; status: string; provider: string }>(
+      "select term_months, provider_ref, status, provider from public.payments where id = $1",
+      [id],
+    );
+    expect(row).toEqual({ term_months: 6, provider_ref: "TRX-1", status: "paid", provider: "manual" });
+    await expect(pay(ready, CLOSER2)).rejects.toThrow(/only the client's Closer or an admin/);
+    await expect(pay(ready, VA)).rejects.toThrow(/only the client's Closer or an admin/);
+    await expect(pay(unsent, ADMIN)).resolves.toHaveLength(1);
+    await expect(pay(ready, CLOSER, 0)).rejects.toThrow(/payments_amount_cents_check/);
+    await expect(pay(ready, CLOSER, 100, "2999-01-01")).rejects.toThrow(/can't be in the future/);
+    await expect(pay(noPackage, CLOSER)).rejects.toThrow(/set the client's package/);
+  });
+
+  it("the Closer and admins with 2FA read payments; nobody else reads them, and no signed-in user writes them", async () => {
+    const read = "select id from public.payments where client_id = $1";
+    expect((await asUser(asCloser, read, [ready])).length).toBeGreaterThan(0);
+    expect(await asUser(asCloser2, read, [ready])).toEqual([]);
+    expect((await asUser(asAdmin, read, [ready])).length).toBeGreaterThan(0);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), read, [ready])).toEqual([]);
+    expect(await asUser(asVa, read, [ready])).toEqual([]);
+    expect(await asUser(asClient, read, [ready])).toEqual([]);
+    await expect(as("anon", {}, read, [ready])).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(asCloser, "insert into public.payments (client_id, amount_cents, term_months, paid_on, recorded_by) values ($1, 100, 6, current_date, $2)", [ready, CLOSER]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "update public.payments set amount_cents = 1 where client_id = $1", [ready])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "delete from public.payments where client_id = $1", [ready])).rejects.toThrow(/permission denied/);
+  });
+
+  it("a payment marked by mistake can be voided once, by the client's Closer or an admin", async () => {
+    const [{ id }] = await pay(unsent, CLOSER);
+    await expect(asServer("select public.void_payment($1, $2)", [id, CLOSER2])).rejects.toThrow(/only the client's Closer or an admin/);
+    await asServer("select public.void_payment($1, $2)", [id, CLOSER]);
+    await expect(asServer("select public.void_payment($1, $2)", [id, ADMIN])).rejects.toThrow(/already void/);
+    expect(await asServer("select status from public.payments where id = $1", [id])).toEqual([{ status: "void" }]);
+  });
+
+  it("activation needs the form, consent, a payment, an enabled client, and the client's Closer or an admin", async () => {
+    await expect(activate(unsent, LOGIN, CLOSER)).rejects.toThrow(/hasn't sent the onboarding form/);
+    await onboard(unsent, CLOSER, "unsent");
+    await asServer("update public.payments set status = 'void', voided_at = now(), voided_by = $2 where client_id = $1", [unsent, ADMIN]);
+    await expect(activate(unsent, LOGIN, CLOSER)).rejects.toThrow(/record a payment before activating/);
+    await expect(activate(ready, LOGIN, CLOSER2)).rejects.toThrow(/only the client's Closer or an admin/);
+    await asServer("update public.clients set disabled_at = now() where id = $1", [ready]);
+    await expect(activate(ready, LOGIN, CLOSER)).rejects.toThrow(/disabled/);
+    await asServer("update public.clients set disabled_at = null where id = $1", [ready]);
+    await expect(activate(ready, VA, CLOSER)).rejects.toThrow(/already belongs to someone/);
+    expect(await asServer("select status from public.clients where id = $1", [ready])).toEqual([{ status: "pending" }]);
+  });
+
+  it("activating grants the client role, links the login, marks the client active and closes open links", async () => {
+    await asServer("update public.client_onboarding_links set created_at = created_at - interval '3 minutes' where client_id = $1", [ready]);
+    await asServer("select * from public.issue_onboarding_link($1, $2, $3)", [ready, CLOSER, sha("reissued")]);
+    await activate(ready, LOGIN, CLOSER);
+    const [client] = await asServer<{ status: string; user_id: string; activated_at: string | null }>(
+      "select status, user_id, activated_at from public.clients where id = $1",
+      [ready],
+    );
+    expect(client).toMatchObject({ status: "active", user_id: LOGIN });
+    expect(client.activated_at).not.toBeNull();
+    expect(await asServer("select role, assigned_by from public.roles where user_id = $1", [LOGIN])).toEqual([{ role: "client", assigned_by: CLOSER }]);
+    expect((await hookRoles(LOGIN)).roles).toEqual(["client"]);
+    expect(await asServer("select id from public.client_onboarding_links where client_id = $1 and submitted_at is null and revoked_at is null", [ready])).toEqual([]);
+    const asOwner = token(LOGIN, ["client"]);
+    expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.clients"))).toEqual([ready]);
+    expect((await asUser(asOwner, "select id from public.payments")).length).toBeGreaterThan(0);
+  });
+
+  it("an active client can't be activated again, and its payments can't be added or voided by hand", async () => {
+    await expect(activate(ready, FRESH, CLOSER)).rejects.toThrow(/already active/);
+    await expect(pay(ready, CLOSER)).rejects.toThrow(/already active/);
+    const [{ id }] = await asServer<{ id: string }>("select id from public.payments where client_id = $1 and status = 'paid' limit 1", [ready]);
+    await expect(asServer("select public.void_payment($1, $2)", [id, ADMIN])).rejects.toThrow(/already active/);
+    await pay(unsent, CLOSER);
+    await expect(activate(unsent, LOGIN, CLOSER)).rejects.toThrow(/already belongs to someone/);
+  });
+
+  it("a fresh login moves into the client's tenant on activation", async () => {
+    await pay(inB, CLOSER_B);
+    await activate(inB, LOGIN_B, CLOSER_B);
+    const [{ tenant_id: clientTenant }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [inB]);
+    expect(await asServer("select tenant_id from public.profiles where id = $1", [LOGIN_B])).toEqual([{ tenant_id: clientTenant }]);
+    expect(await asServer("select tenant_id from public.roles where user_id = $1", [LOGIN_B])).toEqual([{ tenant_id: clientTenant }]);
+  });
+
+  it("payments stay inside their tenant; a Super Admin with 2FA sees them all", async () => {
+    const [{ tenant_id: other }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [inB]);
+    const adminB = { ...token("00000000-0000-0000-0000-0000000000b1", ["admin"], "aal2"), app_metadata: { roles: ["admin"], tenant_id: other } };
+    const clientsSeen = async (claims: Claims) => [...new Set((await asUser<{ client_id: string }>(claims, "select client_id from public.payments")).map((p) => p.client_id))];
+    expect(await clientsSeen(adminB)).toEqual([inB]);
+    expect(await clientsSeen(asAdmin)).not.toContain(inB);
+    expect(await clientsSeen(token("00000000-0000-0000-0000-000000000010", ["super_admin"], "aal2"))).toEqual(expect.arrayContaining([inB, ready]));
+  });
+
+  it("a Closer grants only the client role, only in their own tenant, only while active", async () => {
+    await expect(grant(FRESH, "va", CLOSER)).rejects.toThrow(/admin of the same tenant/);
+    await expect(grant(FRESH, "closer", CLOSER)).rejects.toThrow(/admin of the same tenant/);
+    await expect(grant(FRESH, "admin", CLOSER)).rejects.toThrow(/only a Super Admin/);
+    await expect(grant(FRESH, "client", CLOSER_B)).rejects.toThrow(/admin of the same tenant/);
+    await asServer("update public.profiles set status = 'inactive' where id = $1", [CLOSER2]);
+    await expect(grant(FRESH, "client", CLOSER2)).rejects.toThrow(/admin of the same tenant/);
+    await asServer("update public.profiles set status = 'active' where id = $1", [CLOSER2]);
+    await expect(grant(FRESH, "client", CLOSER)).resolves.toHaveLength(1);
+    await asServer("delete from public.roles where user_id = $1", [FRESH]);
+  });
+});

@@ -66,6 +66,23 @@ type ClientRow = {
   updated_at: string;
 };
 
+type PaymentRow = {
+  id: string;
+  client_id: string;
+  tenant_id: string;
+  provider: Enum<"payment_provider">;
+  status: Enum<"payment_status">;
+  amount_cents: number;
+  currency: string;
+  term_months: number;
+  provider_ref: string | null;
+  paid_on: string;
+  recorded_by: string | null;
+  created_at: string;
+  voided_at: string | null;
+  voided_by: string | null;
+};
+
 /** Signed-in users may read every column except token_hash (column grant); the server reads all. */
 type OnboardingLinkRow = {
   id: string;
@@ -220,6 +237,12 @@ export type Database = {
         Update: Optional<ClientNoteRow>;
         Relationships: [];
       };
+      payments: {
+        Row: PaymentRow;
+        Insert: InsertOf<PaymentRow, "client_id" | "amount_cents" | "term_months" | "paid_on">;
+        Update: Optional<PaymentRow>;
+        Relationships: [];
+      };
       client_onboarding_links: {
         Row: OnboardingLinkRow;
         Insert: InsertOf<OnboardingLinkRow, "client_id" | "token_hash" | "created_by">;
@@ -312,6 +335,13 @@ export type Database = {
         Args: { token_hash: string; contact_name: string; contact_phone: string; business: Json; billing: Json; consent: boolean };
         Returns: string;
       };
+      // Payments and activation: executable by the secret key only.
+      record_manual_payment: {
+        Args: { client_id: string; recorded_by: string; amount_cents: number; provider_ref: string | null; paid_on: string };
+        Returns: string;
+      };
+      void_payment: { Args: { payment_id: string; voided_by: string }; Returns: undefined };
+      activate_client: { Args: { client_id: string; user_id: string; activated_by: string }; Returns: undefined };
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";
@@ -324,6 +354,8 @@ export type Database = {
       staff_marital_status: "single" | "married" | "widowed" | "divorced" | "separated" | "prefer_not_to_say";
       staff_registration_status: "pending" | "in_progress" | "completed";
       staff_review_status: "pending" | "pending_review" | "approved";
+      payment_provider: "manual";
+      payment_status: "paid" | "void";
     };
     CompositeTypes: { [_ in never]: never };
   };
