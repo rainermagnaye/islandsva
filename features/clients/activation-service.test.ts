@@ -8,7 +8,7 @@ const dal = vi.hoisted(() => ({
   recordManualPayment: vi.fn(),
   voidPayment: vi.fn(),
 }));
-const email = vi.hoisted(() => ({ sendAccountEmail: vi.fn(async () => true), sendOnboardingEmail: vi.fn(), sendOnboardingSubmittedEmail: vi.fn() }));
+const email = vi.hoisted(() => ({ sendAccountEmail: vi.fn(async (_message: { to: string; link: string }) => true), sendOnboardingEmail: vi.fn(), sendOnboardingSubmittedEmail: vi.fn() }));
 vi.mock("@/features/users/service", () => users);
 vi.mock("./activation-dal", () => dal);
 vi.mock("./email", () => email);
@@ -48,7 +48,7 @@ describe("activateClientAccount", () => {
     users.createClientLogin.mockResolvedValue({ ok: true, userId: "new-1", tokenHash: "hash/+1" });
     dal.activateClientRecord.mockResolvedValue({ ok: true });
     expect(await activateClientAccount(client, "closer-1")).toEqual({ ok: true, emailed: true });
-    const sent = email.sendAccountEmail.mock.calls[0][0] as { to: string; link: string };
+    const sent = email.sendAccountEmail.mock.calls[0][0];
     expect(sent.to).toBe("ana@cruz.co");
     expect(sent.link).toMatch(/\/auth\/confirm\?token_hash=hash%2F%2B1&type=invite$/);
     expect(users.discardClientLogin).not.toHaveBeenCalled();
@@ -61,7 +61,7 @@ describe("resendClientAccountEmail", () => {
     users.clientSignInLink.mockResolvedValue({ ok: true, email: "login@cruz.co", tokenHash: "h" });
     await resendClientAccountEmail({ id: "c1", companyName: "Cruz Co" });
     expect(users.clientSignInLink).toHaveBeenCalledWith("u1");
-    expect((email.sendAccountEmail.mock.calls.at(-1)?.[0] as { to: string }).to).toBe("login@cruz.co");
+    expect(email.sendAccountEmail.mock.calls.at(-1)?.[0].to).toBe("login@cruz.co");
   });
 });
 
