@@ -2,6 +2,7 @@ import "server-only";
 import { connection } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UpstreamError } from "@/lib/upstream-error";
+import { isUuid } from "@/lib/uuid";
 import { timezoneForCountry } from "@/content/timezones";
 import { clientBusinessFrom, clientBusinessToJson, clientReviewSections, onboardingAccess, type PublicOnboarding } from "./contract";
 import { onboardingTokenHash } from "./token";
@@ -9,8 +10,6 @@ import type { OnboardingInput } from "./validation";
 
 // Registration packets (the customer's onboarding). The token and payment proof are server-only, so the reads and the
 // customer's submit use the secret key; each caller has already checked access (see each function).
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 const PACKET_REFUSALS = { IVA06: "not_found", IVA07: "exists", IVA08: "submitted", IVA09: "closed" } as const;
@@ -31,7 +30,7 @@ function decodeBytea(value: string) {
  * confirmed this admin can read the client.
  */
 export async function getClientPacket(clientId: string) {
-  if (!UUID.test(clientId)) return null;
+  if (!isUuid(clientId)) return null;
   const { data, error } = await createAdminClient()
     .from("client_packets")
     .select("token, consent_name, consent_signed_at, payment_proof_name, payment_proof_type, review_issues, review_note")
@@ -52,7 +51,7 @@ export async function getClientPacket(clientId: string) {
 
 /** Payment-file bytes. Not granted to the signed-in role; the caller has already confirmed they can read the client. */
 export async function getClientPaymentProof(clientId: string) {
-  if (!UUID.test(clientId)) return null;
+  if (!isUuid(clientId)) return null;
   const { data, error } = await createAdminClient()
     .from("client_packets")
     .select("payment_proof_name, payment_proof_type, payment_proof")

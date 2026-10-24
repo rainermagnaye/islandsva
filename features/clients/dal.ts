@@ -2,6 +2,7 @@ import "server-only";
 import { timezoneForCountry } from "@/content/timezones";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
+import { isUuid } from "@/lib/uuid";
 import {
   clientBusinessFrom,
   clientBusinessToJson,
@@ -12,8 +13,6 @@ import {
   type ClientStatus,
 } from "./contract";
 import type { ClientDetailsInput } from "./validation";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Reads use the signed-in user's session, so RLS decides what they see: all clients for an admin with
 // two-factor sign-in (a Closer only their own, a VA only their assigned ones — for later milestones).
@@ -97,7 +96,7 @@ const DETAIL_COLUMNS =
 
 /** One client for the profile, or null when the id is unknown or not visible. */
 export async function getClient(id: string): Promise<ClientDetail | null> {
-  if (!UUID.test(id)) return null;
+  if (!isUuid(id)) return null;
   const supabase = await createClient();
   const { data, error } = await supabase.from("clients").select(DETAIL_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading client ${id} failed: ${error.message}`, { cause: error });
@@ -196,7 +195,7 @@ const NOTE_REFUSALS = { IVA01: "not_found" } as const;
 
 /** Notes newest first, with the author's name when this admin can read the profile. */
 export async function listClientNotes(clientId: string): Promise<ClientNote[]> {
-  if (!UUID.test(clientId)) return [];
+  if (!isUuid(clientId)) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("client_notes")
@@ -244,7 +243,7 @@ export async function recordClientNote(clientId: string, body: string, file: { n
 
 /** The file on one note, for an admin who can already read that client. */
 export async function getClientNoteAttachment(clientId: string, noteId: string) {
-  if (!UUID.test(clientId) || !UUID.test(noteId)) return null;
+  if (!isUuid(clientId) || !isUuid(noteId)) return null;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("client_notes")
