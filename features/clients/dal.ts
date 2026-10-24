@@ -93,6 +93,15 @@ export async function listClients({
 const DETAIL_COLUMNS =
   "id, company_name, contact_name, contact_email, contact_phone, status, created_at, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone, business, disabled_at, onboarding_submitted_at, consented_at, activated_at, creator:profiles!clients_created_by_fkey(full_name, email)";
 
+/** The client record a client login belongs to (RLS: a client reads only their own), or null. */
+export async function getOwnClientId(userId: string) {
+  if (!UUID.test(userId)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("clients").select("id").eq("user_id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading the signed-in client's record failed (${error.code})`);
+  return data?.id ?? null;
+}
+
 /** One client for the profile, or null when the id is unknown or not visible. */
 export async function getClient(id: string): Promise<ClientDetail | null> {
   if (!UUID.test(id)) return null;
