@@ -1,4 +1,5 @@
 import { getStaffResume } from "@/features/users/dal";
+import { contentDisposition } from "@/lib/api/content-disposition";
 import { parseStaffId } from "@/features/users/validation";
 import { needsSecondFactor, requireUser } from "@/lib/auth/session";
 import { appRoutes } from "@/content/routes";
@@ -18,11 +19,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const resume = await getStaffResume(id);
     if (!resume || !TYPES.has(resume.type)) return new Response(null, { status: 404 });
-    const filename = resume.name.replace(/["\r\n]/g, "");
     return new Response(Buffer.from(resume.bytes), {
       headers: {
         "Content-Type": resume.type,
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": contentDisposition(resume.name),
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

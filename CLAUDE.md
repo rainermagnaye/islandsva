@@ -57,7 +57,7 @@ features/<feature>/   one business area (today: auth, leads, clients, users)
 components/           shared UI: ui/ (design system) · layout/ (shell, nav, footer) · marketing/ (sections)
 hooks/                [client] shared browser hooks, `use-x.ts` (today: use-current-path)
 lib/                  shared infrastructure only
-  api/                [server] createHandler, ApiError, ok/fail, Turnstile, IP hash
+  api/                [server] createHandler, ApiError, ok/fail, Turnstile, IP hash, file download headers
   auth/               roles.ts [shared] (roles, homes, safeNextPath) · session.ts [server] (getSessionUser, requireUser, requireRole)
   supabase/           [server] server.ts (visitor session, RLS) · admin.ts (secret key) · proxy.ts (session refresh) · config.ts
   validation.ts       [server] parseWith, emailField, toSubmitResult — building blocks for every validation.ts

@@ -1,4 +1,5 @@
 import { getClientNoteAttachment } from "@/features/clients/dal";
+import { contentDisposition } from "@/lib/api/content-disposition";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 
@@ -12,11 +13,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const file = await getClientNoteAttachment(id, noteId);
     if (!file || !TYPES.has(file.type)) return new Response(null, { status: 404 });
-    const filename = file.name.replace(/["\r\n]/g, "");
     return new Response(Buffer.from(file.bytes), {
       headers: {
         "Content-Type": file.type,
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": contentDisposition(file.name),
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },
