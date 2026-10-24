@@ -88,10 +88,18 @@ export async function activateClientRecord(clientId: string, userId: string, act
 }
 
 /** The login linked to an active client, to resend their account email. Read under RLS. */
-export async function getClientLoginEmail(clientId: string) {
+export async function getClientLogin(clientId: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("clients").select("user_id, status, contact_email, contact_name").eq("id", clientId).maybeSingle();
+  const { data, error } = await supabase.from("clients").select("user_id, status, contact_name").eq("id", clientId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading the client's login failed (${error.code})`);
   if (!data?.user_id || data.status !== "active") return null;
-  return { email: data.contact_email, name: data.contact_name };
+  return { userId: data.user_id, name: data.contact_name };
+}
+
+/** Whether a payment belongs to this client, read under RLS, before voiding it with the secret key. */
+export async function paymentBelongsTo(paymentId: string, clientId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("payments").select("id").eq("id", paymentId).eq("client_id", clientId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading payment ${paymentId} failed (${error.code})`);
+  return data !== null;
 }

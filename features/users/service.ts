@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { createLoginLink, createRecoveryLink, deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
+import { createLoginLink, createRecoveryLink, deleteAuthUser, discardNewLogin, getLoginEmail, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -93,12 +93,15 @@ export async function createClientLogin(email: string, fullName: string) {
   return createLoginLink(email, fullName);
 }
 
-/** For resending a client's account email: a fresh sign-in link for their existing login. */
-export async function clientSignInLink(email: string) {
-  return createRecoveryLink(email);
+/** For resending a client's account email: a fresh sign-in link for the login's own email (never a contact field). */
+export async function clientSignInLink(userId: string) {
+  const email = await getLoginEmail(userId);
+  if (!email) return { ok: false as const, reason: "missing" as const };
+  const link = await createRecoveryLink(email);
+  return link.ok ? { ok: true as const, email, tokenHash: link.tokenHash } : link;
 }
 
-/** Undoes createClientLogin when activation is refused, so no account is left without a client. */
+/** Undoes createClientLogin when activation is refused: removes only that new, role-less login. */
 export async function discardClientLogin(userId: string) {
-  await deleteAuthUser(userId);
+  await discardNewLogin(userId);
 }

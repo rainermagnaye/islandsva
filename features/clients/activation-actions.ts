@@ -59,7 +59,7 @@ export async function voidClientPaymentAction(clientId: unknown, paymentId: unkn
   if (!parsed.ok) return { ok: false, message: TAMPERED };
   try {
     if (!(await getClient(parsed.value.clientId))) return { ok: false, message: REFUSED.not_found };
-    const result = await voidClientPayment(parsed.value.paymentId, user.id);
+    const result = await voidClientPayment(parsed.value.clientId, parsed.value.paymentId, user.id);
     if (!result.ok) return { ok: false, message: REFUSED[result.reason] };
   } catch (error) {
     return outage(error, "Voiding a payment");

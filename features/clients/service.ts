@@ -2,7 +2,7 @@ import "server-only";
 import { packages } from "@/content/packages";
 import { adminClientHref, appRoutes, closerClientHref, onboardingHref } from "@/content/routes";
 import { clientSignInLink, createClientLogin, discardClientLogin } from "@/features/users/service";
-import { activateClientRecord, getClientLoginEmail, recordManualPayment, voidPayment } from "./activation-dal";
+import { activateClientRecord, getClientLogin, paymentBelongsTo, recordManualPayment, voidPayment } from "./activation-dal";
 import type { ManualPaymentInput } from "./activation-validation";
 import { site } from "@/content/site";
 import type { ClientBusiness, ClientDetail } from "./contract";
@@ -102,7 +102,9 @@ export async function markClientPaid(input: ManualPaymentInput, actorId: string)
   return recordManualPayment(input.clientId, actorId, input);
 }
 
-export async function voidClientPayment(paymentId: string, actorId: string) {
+/** Voids a payment only if it belongs to the client the caller was authorized for. */
+export async function voidClientPayment(clientId: string, paymentId: string, actorId: string) {
+  if (!(await paymentBelongsTo(paymentId, clientId))) return { ok: false as const, reason: "not_found" as const };
   return voidPayment(paymentId, actorId);
 }
 
@@ -123,11 +125,11 @@ export async function activateClientAccount(client: Pick<ClientDetail, "id" | "c
   try {
     activated = await activateClientRecord(client.id, login.userId, actorId);
   } catch (error) {
-    await discardClientLogin(login.userId).catch((cleanup: unknown) => console.error("Orphaned client login", { userId: login.userId, cleanup }));
+    await discardClientLogin(login.userId).catch((cleanup: unknown) => console.error("Orphaned client login", { userId: login.userId, service: cleanup instanceof Error ? cleanup.name : "unknown" }));
     throw error;
   }
   if (!activated.ok) {
-    await discardClientLogin(login.userId).catch((cleanup: unknown) => console.error("Orphaned client login", { userId: login.userId, cleanup }));
+    await discardClientLogin(login.userId).catch((cleanup: unknown) => console.error("Orphaned client login", { userId: login.userId, service: cleanup instanceof Error ? cleanup.name : "unknown" }));
     return activated;
   }
 
@@ -137,10 +139,11 @@ export async function activateClientAccount(client: Pick<ClientDetail, "id" | "c
 
 /** Sends an active client a fresh sign-in link (for an expired or lost account email). */
 export async function resendClientAccountEmail(client: Pick<ClientDetail, "id" | "companyName">) {
-  const login = await getClientLoginEmail(client.id);
+  const login = await getClientLogin(client.id);
   if (!login) return { ok: false as const, reason: "not_pending" as const };
-  const link = await clientSignInLink(login.email);
-  if (!link.ok) return { ok: false as const, reason: "rate" as const };
-  const emailed = await sendAccountEmail({ to: login.email, contactName: login.name, companyName: client.companyName, link: signInLink(link.tokenHash, "recovery") });
+  // The link goes to the login's own email, never to the editable contact email.
+  const link = await clientSignInLink(login.userId);
+  if (!link.ok) return { ok: false as const, reason: link.reason === "missing" ? ("not_found" as const) : ("rate" as const) };
+  const emailed = await sendAccountEmail({ to: link.email, contactName: login.name, companyName: client.companyName, link: signInLink(link.tokenHash, "recovery") });
   return { ok: true as const, emailed };
 }
