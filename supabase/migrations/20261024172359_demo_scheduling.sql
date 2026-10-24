@@ -120,6 +120,23 @@ create index demo_bookings_va_starts_at_idx on public.demo_bookings (va_id, star
 create index demo_bookings_client_created_at_idx on public.demo_bookings (client_id, created_at desc);
 create index demo_bookings_tenant_status_starts_at_idx on public.demo_bookings (tenant_id, status, starts_at);
 create index demo_bookings_slot_id_idx on public.demo_bookings (slot_id);
+create index demo_bookings_booked_by_idx on public.demo_bookings (booked_by);
+
+-- A slot with a booking (other than a cancelled one) can't be deleted, by anyone. The RLS delete policy already
+-- hides used slots; this also covers a delete that waited on book_demo's row lock, because a trigger's query
+-- sees the booking committed meanwhile, where the policy's snapshot doesn't.
+create function private.guard_slot_delete() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if exists (select 1 from public.demo_bookings b where b.slot_id = old.id and b.status <> 'cancelled') then
+    raise exception 'this slot is booked' using errcode = 'IVA20';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger demo_slots_guard_delete before delete on public.demo_slots
+  for each row execute function private.guard_slot_delete();
 
 -- Helpers (security definer: they read profiles, staff_profiles and bookings the caller can't) --------------
 
@@ -157,8 +174,8 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.demo_bookings b where b.slot_id = slot and b.status <> 'cancelled');
 $$;
 
-revoke all on function private.va_is_open(uuid), private.is_open_va(), private.open_slot_ids(), private.slot_in_use(uuid)
-  from public, anon, authenticated, service_role;
+revoke all on function private.va_is_open(uuid), private.is_open_va(), private.open_slot_ids(), private.slot_in_use(uuid),
+  private.guard_slot_delete() from public, anon, authenticated, service_role;
 grant execute on function private.is_open_va(), private.open_slot_ids(), private.slot_in_use(uuid) to authenticated;
 
 -- Functions (server only) -----------------------------------------------------------------------------------
@@ -181,7 +198,9 @@ begin
   if not found then
     raise exception 'client not found' using errcode = 'IVA01';
   end if;
-  if client.user_id is null or client.user_id is distinct from actor then
+  -- The client's own login, still active (a deactivated login's token keeps its role for up to an hour).
+  if client.user_id is null or client.user_id is distinct from actor
+    or not exists (select 1 from public.profiles p where p.id = actor and p.status <> 'inactive') then
     raise exception 'only the client can book their demo' using errcode = 'IVA14';
   end if;
   if client.status <> 'active' then
@@ -245,8 +264,13 @@ begin
   if not found then
     raise exception 'booking not found' using errcode = 'IVA01';
   end if;
-  if booking.va_id is distinct from actor
-    or not exists (select 1 from public.profiles p where p.id = actor and p.status <> 'inactive') then
+  -- The booking's VA, still a VA and open (the same rule as private.va_is_open).
+  if booking.va_id is distinct from actor or not exists (
+    select 1 from public.roles r join public.profiles p on p.id = r.user_id
+    left join public.staff_profiles sp on sp.user_id = p.id
+    where r.user_id = actor and r.role = 'va' and p.status <> 'inactive'
+      and (sp.review_status = 'approved' or (sp.user_id is null and p.status = 'active'))
+  ) then
     raise exception 'only the booking''s VA can decide it' using errcode = 'IVA14';
   end if;
   if decision is null or decision not in ('confirmed', 'rejected') then
@@ -279,7 +303,8 @@ begin
   if not found then
     raise exception 'booking not found' using errcode = 'IVA01';
   end if;
-  if not exists (select 1 from public.clients c where c.id = booking.client_id and c.user_id = actor) then
+  if not exists (select 1 from public.clients c where c.id = booking.client_id and c.user_id = actor)
+    or not exists (select 1 from public.profiles p where p.id = actor and p.status <> 'inactive') then
     raise exception 'only the client can cancel their demo' using errcode = 'IVA14';
   end if;
   if booking.status not in ('pending', 'confirmed') or booking.starts_at <= now() then

@@ -1543,6 +1543,65 @@ describe("demo scheduling", () => {
       await asServer("delete from public.demo_slots where id in ($1, $2, $3)", [soon, far, fine]);
     });
 
+    it("refuses a deactivated client login, and a VA who lost the role or the approval", async () => {
+      const slot = await addSlot(asVa, VA, at(64));
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [demoCo]);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [OWNER]);
+      await expect(book(demoCo, slot, OWNER)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'active' where id = $1", [OWNER]);
+      const [{ r }] = await book(demoCo, slot, OWNER);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [OWNER]);
+      await expect(cancel(r.id, OWNER)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'active' where id = $1", [OWNER]);
+      await asServer("update public.staff_profiles set review_status = 'pending' where user_id = $1", [VA]);
+      await expect(decide(r.id, VA, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [VA]);
+      await expect(decide(r.id, VA, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'active' where id = $1", [VA]);
+    });
+
+    it("refuses deciding or cancelling a pending request once its start has passed", async () => {
+      const past = at(-1);
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [demoCo]);
+      const [{ id: late }] = await asServer<{ id: string }>(
+        "insert into public.demo_bookings (client_id, va_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, 'Demo Co', 'Vera') returning id",
+        [demoCo, VA, past, end(past), OWNER],
+      );
+      await expect(decide(late, VA, "confirmed")).rejects.toMatchObject({ code: "IVA20" });
+      await expect(cancel(late, OWNER)).rejects.toMatchObject({ code: "IVA20" });
+      await asServer("update public.demo_bookings set status = 'expired' where id = $1", [late]);
+    });
+
+    it("a VA can't delete another VA's slot, a past slot, or a booked one — nor update any slot", async () => {
+      const mine = await addSlot(asVa, VA, at(66));
+      await asServer("update public.profiles set status = 'active' where id = $1", [VA2]);
+      expect(await asUser(asVa2, "delete from public.demo_slots where id = $1 returning id", [mine])).toEqual([]);
+      await asServer("update public.profiles set status = 'invited' where id = $1", [VA2]);
+      await expect(asUser(asVa, "update public.demo_slots set starts_at = starts_at where id = $1", [mine])).rejects.toThrow(/permission denied/);
+      const [{ id: past }] = await asServer<{ id: string }>("insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) returning id", [VA, at(-3), end(at(-3))]);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [past])).toEqual([]);
+      // Booked: hidden from the VA's delete, and refused by the trigger even for the server.
+      const [{ r }] = await book(demoCo, mine, OWNER);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [mine])).toEqual([]);
+      await expect(asServer("delete from public.demo_slots where id = $1", [mine])).rejects.toMatchObject({ code: "IVA20" });
+      // Once cancelled, the slot can go and the booking keeps its time without it.
+      await cancel(r.id, OWNER);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [mine])).toHaveLength(1);
+      expect(await asServer("select slot_id, starts_at from public.demo_bookings where id = $1", [r.id])).toEqual([{ slot_id: null, starts_at: expect.anything() }]);
+      await asServer("delete from public.demo_slots where id = $1", [past]);
+    });
+
+    it("the slot index holds even past the function: one non-cancelled booking per slot", async () => {
+      const slot = await addSlot(asVa, VA, at(68));
+      const [{ r }] = await book(demoCo, slot, OWNER);
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [otherCo]);
+      await expect(
+        asServer("insert into public.demo_bookings (client_id, va_id, slot_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, $6, 'Other Co', 'Vera')", [otherCo, VA, slot, at(68), end(at(68)), OTHER]),
+      ).rejects.toThrow(/demo_bookings_slot_once/);
+      await cancel(r.id, OWNER);
+    });
+
     it("keeps slots and bookings inside their tenant", async () => {
       const [{ tenant_id: tenant }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [demoCo]);
       const rows = await asServer<{ tenant_id: string }>("select distinct tenant_id from public.demo_bookings where client_id = $1", [demoCo]);
