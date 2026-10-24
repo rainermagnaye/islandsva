@@ -24,11 +24,20 @@ const labelClasses = "flex-1 md:max-lg:sr-only";
 const badgeClasses = "md:max-lg:absolute md:max-lg:top-0.5 md:max-lg:right-1.5";
 
 /** Admin menu. Server-rendered and static; only the current-section marker runs on the client. */
-export function AdminNav({ items, footer }: { items: readonly AdminNavItem[]; footer?: { href: string; label: string; icon: IconName } }) {
+export function AdminNav({
+  items,
+  footer,
+  label = "Admin",
+}: {
+  items: readonly AdminNavItem[];
+  footer?: { href: string; label: string; icon: IconName };
+  /** Accessible name and the heading above the items. */
+  label?: string;
+}) {
   return (
-    <nav aria-label="Admin" className="border-b border-border bg-surface-sunken md:border-r md:border-b-0">
+    <nav aria-label={label} className="portal-nav border-b border-border bg-surface-sunken md:border-r md:border-b-0">
       <div className="md:sticky md:top-0 md:grid md:gap-4 md:px-3 md:py-4">
-        <p className="m-0 hidden px-3 type-label text-ink-muted lg:block">Admin</p>
+        <p className="m-0 hidden px-3 type-label text-ink-muted lg:block">{label}</p>
         <ul className="m-0 flex list-none gap-1 overflow-x-auto px-2 py-2 md:grid md:overflow-visible md:p-0">
           {items.map(({ href, label, icon, exact, badge }) => {
             const content = (

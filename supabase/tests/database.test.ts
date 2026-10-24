@@ -118,6 +118,16 @@ describe("users (profiles)", () => {
     expect(p).toEqual({ email: "ada.admin@x.co", status: "active" });
   });
 
+  it("keeps a VA invited after they set a password, and still activates a Closer", async () => {
+    await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() where id = '${VA}'`);
+    const [va] = (await db.query<{ status: string; signed_in_at: string | null }>(`select status, signed_in_at from public.profiles where id = '${VA}'`)).rows;
+    expect(va.status).toBe("invited");
+    expect(va.signed_in_at).not.toBeNull();
+
+    await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() where id = '${CLOSER}'`);
+    expect((await db.query<{ status: string }>(`select status from public.profiles where id = '${CLOSER}'`)).rows[0].status).toBe("active");
+  });
+
   it("keeps a deactivated user inactive when they sign in", async () => {
     await asServer(`update public.profiles set status = 'inactive' where id = '${CLOSER2}'`);
     await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() where id = '${CLOSER2}'`);
@@ -658,6 +668,9 @@ describe("staff profiles", () => {
     expect(await asUser(asVa, `select nationality from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ nationality: "Filipino" }]);
     await asUser(asAdmin, `update public.staff_profiles set current_city = 'Cebu' where user_id = '${VA}'`);
     expect(await asUser(asAdmin, `select current_city from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ current_city: "Cebu" }]);
+    await asUser(asVa, `update public.staff_profiles set current_country = 'Philippines' where user_id = '${VA}'`);
+    expect(await asUser(asVa, `select current_country from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ current_country: "Philippines" }]);
+    await expect(asServer("select permanent_street from public.staff_profiles")).rejects.toThrow(/permanent_street/);
   });
 
   it("stores up to three references and refuses a fourth", async () => {
@@ -695,6 +708,17 @@ describe("staff profiles", () => {
     }
     await expect(asUser(asVa2, `insert into public.staff_profiles (user_id, registration_status) values ('${VA2}', 'completed')`)).rejects.toThrow(/permission denied/);
     expect(await asServer(`update public.staff_profiles set registration_status = 'completed' where user_id = '${VA}' returning user_id`)).toHaveLength(1);
+  });
+
+  it("leaves the review to the server, and only allows the sections an admin can send back", async () => {
+    for (const claims of [asVa, asAdmin]) {
+      await expect(asUser(claims, `update public.staff_profiles set review_status = 'approved' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    }
+    expect(await asServer(`update public.staff_profiles set review_status = 'pending_review', returned_sections = '{basic}' where user_id = '${VA}' returning review_status`)).toEqual([
+      { review_status: "pending_review" },
+    ]);
+    await expect(asServer(`update public.staff_profiles set returned_sections = '{salary}' where user_id = '${VA}'`)).rejects.toThrow(/check constraint/);
+    await asServer(`update public.staff_profiles set review_status = 'pending', returned_sections = '{}' where user_id = '${VA}'`);
   });
 
   it("only staff have a staff profile: a client can't create one for themselves", async () => {

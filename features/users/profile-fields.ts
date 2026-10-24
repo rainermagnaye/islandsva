@@ -1,5 +1,5 @@
 import { COUNTRIES } from "@/content/countries";
-import type { MaritalStatus, RegistrationStatus, StaffGender } from "./contract";
+import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type StaffGender } from "./contract";
 
 export { COUNTRIES };
 
@@ -30,22 +30,6 @@ export const LANGUAGES = [
   "Russian",
 ] as const;
 
-/** Street, city, province and postal code, one per line. A single comma-separated line is accepted too. */
-export function formatAddress(street: string, city: string, province: string, postal: string) {
-  return [street, city, province, postal].map((part) => part.trim()).filter(Boolean).join("\n");
-}
-
-export function splitAddress(text: string) {
-  const lines = text.split(/\r?\n/).map((part) => part.trim()).filter(Boolean);
-  const parts = lines.length > 1 ? lines : text.split(",").map((part) => part.trim()).filter(Boolean);
-  return {
-    street: parts[0] ?? "",
-    city: parts[1] ?? "",
-    province: parts[2] ?? "",
-    postal: parts.slice(3).join(" "),
-  };
-}
-
 const RANGE = /^(\d{4}-\d{2}-\d{2})\s+[–-]\s+(\d{4}-\d{2}-\d{2})$/;
 
 /** A stored duration is either a date range or older free text such as "2019–2022". */
@@ -66,11 +50,11 @@ export function withCurrent<T extends string>(choices: readonly T[], current: st
 }
 
 export function genderChoices(current: StaffGender | "") {
-  return withCurrent(["male", "female", "non_binary"] as const, current);
+  return withCurrent(GENDER_CHOICES, current);
 }
 
 export function maritalChoices(current: MaritalStatus | "") {
-  return withCurrent(["single", "married", "widowed", "divorced"] as const, current);
+  return withCurrent(MARITAL_CHOICES, current);
 }
 
 export type StaffProfileMeta = {

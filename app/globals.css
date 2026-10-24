@@ -206,13 +206,13 @@
 /* Admin: the portal header is a centered 1200px bar, and the menu is a full-bleed column, so on a wide
    window the logo sits away from the items. Drop the cap and use the menu's own inset (its row padding
    plus each item's padding) so the mark lines up with Overview. */
-body:has(nav[aria-label="Admin"]) .portal-header {
+body:has(nav.portal-nav) .portal-header {
   max-width: none !important;
   margin-inline: 0 !important;
   padding-left: 1.25rem !important;
 }
 @media (min-width: 768px) {
-  body:has(nav[aria-label="Admin"]) .portal-header {
+  body:has(nav.portal-nav) .portal-header {
     padding-left: 1.5rem !important;
   }
 }

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import type { Json } from "@/types/database";
-import { registrationStatus, staffSections, type RegistrationStatus, type StaffDetails, type StaffEmployer, type StaffReference, type StaffSection, type UserSummary } from "./contract";
+import { registrationStatus, reviewSections, staffSections, type RegistrationStatus, type ReviewSection, type StaffDetails, type StaffEmployer, type StaffReference, type StaffReviewStatus, type StaffSection, type UserSummary } from "./contract";
 import { classifyInviteError } from "./invite-result";
 
 /**
@@ -15,13 +15,13 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, full_name, status, created_at, roles!roles_user_id_fkey(role)")
+    .select("id, email, full_name, status, signed_in_at, created_at, roles!roles_user_id_fkey(role)")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new UpstreamError("supabase", `Listing users failed: ${error.message}`, { cause: error });
 
-  const phones = await phoneNumbers(data.map((row) => row.id));
-  return data.map((row) => toSummary(row, phones.get(row.id) ?? null));
+  const extras = await staffExtras(data.map((row) => row.id));
+  return data.map((row) => toSummary(row, extras.get(row.id)));
 }
 
 /** How many accounts the signed-in admin can see. Head-only count: no rows are transferred. */
@@ -37,22 +37,24 @@ export async function getUser(id: string): Promise<UserSummary | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, full_name, status, created_at, roles!roles_user_id_fkey(role)")
+    .select("id, email, full_name, status, signed_in_at, created_at, roles!roles_user_id_fkey(role)")
     .eq("id", id)
     .maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading user ${id} failed: ${error.message}`, { cause: error });
   if (!data) return null;
-  const phones = await phoneNumbers([data.id]);
-  return toSummary(data, phones.get(data.id) ?? null);
+  const extras = await staffExtras([data.id]);
+  return toSummary(data, extras.get(data.id));
 }
 
-/** Mobile numbers for these accounts. People without a staff profile, or with it blank, are absent. */
-async function phoneNumbers(ids: readonly string[]) {
-  if (ids.length === 0) return new Map<string, string>();
+type StaffExtra = { phone: string | null; reviewStatus: StaffReviewStatus | null };
+
+/** Phone and review state for these accounts. People without a staff profile are absent. */
+async function staffExtras(ids: readonly string[]) {
+  if (ids.length === 0) return new Map<string, StaffExtra>();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("staff_profiles").select("user_id, mobile_number").in("user_id", [...ids]);
-  if (error) throw new UpstreamError("supabase", `Reading phone numbers failed: ${error.message}`, { cause: error });
-  return new Map(data.flatMap((row) => (row.mobile_number ? [[row.user_id, row.mobile_number] as const] : [])));
+  const { data, error } = await supabase.from("staff_profiles").select("user_id, mobile_number, review_status").in("user_id", [...ids]);
+  if (error) throw new UpstreamError("supabase", `Reading staff profiles failed: ${error.message}`, { cause: error });
+  return new Map(data.map((row) => [row.user_id, { phone: row.mobile_number, reviewStatus: row.review_status }] as const));
 }
 
 function toSummary(row: {
@@ -60,16 +62,19 @@ function toSummary(row: {
   email: string;
   full_name: string;
   status: UserSummary["status"];
+  signed_in_at: string | null;
   created_at: string;
   roles: { role: Role }[];
-}, phone: string | null): UserSummary {
+}, extra: StaffExtra | undefined): UserSummary {
   return {
     id: row.id,
     email: row.email,
     fullName: row.full_name,
-    phone,
+    phone: extra?.phone ?? null,
     roles: ROLES.filter((role) => row.roles.some((granted) => granted.role === role)),
     status: row.status,
+    signedInAt: row.signed_in_at,
+    reviewStatus: extra?.reviewStatus ?? null,
     createdAt: row.created_at,
   };
 }
@@ -110,12 +115,15 @@ export async function deleteAuthUser(userId: string) {
 }
 
 const PROFILE_COLUMNS =
-  "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_city, current_province, current_postal_code, permanent_street, permanent_city, permanent_province, permanent_postal_code, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, job_references, key_responsibilities, achievements, resume_name, resume_type, registration_status, invitation_sent_at, registration_completed_at";
+  "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_line2, current_city, current_province, current_postal_code, current_country, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, job_references, key_responsibilities, achievements, resume_name, resume_type, registration_status, review_status, returned_sections, return_note, invitation_sent_at, registration_completed_at";
 
 export type StaffProfileRecord = {
   details: StaffDetails;
   resumeType: string | null;
   registrationStatus: RegistrationStatus;
+  reviewStatus: StaffReviewStatus;
+  returnedSections: ReviewSection[];
+  returnNote: string | null;
   invitationSentAt: string;
   registrationCompletedAt: string | null;
   sections: Record<StaffSection, boolean>;
@@ -132,6 +140,9 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
     details,
     resumeType: data.resume_type,
     registrationStatus: data.registration_status,
+    reviewStatus: data.review_status,
+    returnedSections: reviewSections(data.returned_sections ?? []),
+    returnNote: data.return_note,
     invitationSentAt: data.invitation_sent_at,
     registrationCompletedAt: data.registration_completed_at,
     sections: staffSections(details),
@@ -139,8 +150,8 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
 }
 
 /**
- * Saves the profile with the secret key. profiles has no update policy, and resume bytes are not granted
- * to the API, so this runs only after the caller has checked the admin role.
+ * Saves the profile with the secret key. profiles has no update policy, and résumé bytes are not granted
+ * to the API, so this runs only after the caller has checked the role.
  */
 export async function staffHasHistory(userId: string) {
   const supabase = await createClient();
@@ -212,13 +223,11 @@ export async function saveStaffProfile(
     nationality: blank(details.nationality),
     marital_status: details.maritalStatus || null,
     current_street: blank(details.currentStreet),
+    current_line2: blank(details.currentLine2),
     current_city: blank(details.currentCity),
     current_province: blank(details.currentProvince),
     current_postal_code: blank(details.currentPostalCode),
-    permanent_street: blank(details.permanentStreet),
-    permanent_city: blank(details.permanentCity),
-    permanent_province: blank(details.permanentProvince),
-    permanent_postal_code: blank(details.permanentPostalCode),
+    current_country: blank(details.currentCountry),
     mobile_number: blank(details.mobileNumber),
     alternate_phone: blank(details.alternatePhone),
     emergency_name: blank(details.emergencyName),
@@ -254,19 +263,33 @@ export async function saveStaffProfile(
   if (nameError) throw new UpstreamError("supabase", `Updating name ${userId} failed: ${nameError.message}`, { cause: nameError });
 }
 
+/**
+ * Review state is not granted to the API. The caller has already checked the role.
+ * Confirming also activates the account, which profiles does not let the signed-in user set.
+ */
+export async function setStaffReview(userId: string, review: StaffReviewStatus, returned: readonly ReviewSection[], note: string | null) {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("staff_profiles")
+    .update({ review_status: review, returned_sections: [...returned], return_note: note })
+    .eq("user_id", userId);
+  if (error) throw new UpstreamError("supabase", `Updating review for ${userId} failed: ${error.message}`, { cause: error });
+  if (review !== "approved") return;
+  const { error: statusError } = await admin.from("profiles").update({ status: "active" }).eq("id", userId).neq("status", "inactive");
+  if (statusError) throw new UpstreamError("supabase", `Activating ${userId} failed: ${statusError.message}`, { cause: statusError });
+}
+
 function detailsFrom(row: {
   date_of_birth: string | null;
   gender: StaffDetails["gender"] | null;
   nationality: string | null;
   marital_status: StaffDetails["maritalStatus"] | null;
   current_street: string | null;
+  current_line2: string | null;
   current_city: string | null;
   current_province: string | null;
   current_postal_code: string | null;
-  permanent_street: string | null;
-  permanent_city: string | null;
-  permanent_province: string | null;
-  permanent_postal_code: string | null;
+  current_country: string | null;
   mobile_number: string | null;
   alternate_phone: string | null;
   emergency_name: string | null;
@@ -289,13 +312,11 @@ function detailsFrom(row: {
     nationality: row.nationality ?? "",
     maritalStatus: row.marital_status ?? "",
     currentStreet: row.current_street ?? "",
+    currentLine2: row.current_line2 ?? "",
     currentCity: row.current_city ?? "",
     currentProvince: row.current_province ?? "",
     currentPostalCode: row.current_postal_code ?? "",
-    permanentStreet: row.permanent_street ?? "",
-    permanentCity: row.permanent_city ?? "",
-    permanentProvince: row.permanent_province ?? "",
-    permanentPostalCode: row.permanent_postal_code ?? "",
+    currentCountry: row.current_country ?? "",
     mobileNumber: row.mobile_number ?? "",
     alternatePhone: row.alternate_phone ?? "",
     emergencyName: row.emergency_name ?? "",

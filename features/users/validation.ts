@@ -4,6 +4,7 @@ import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, email
 import {
   GENDERS,
   MARITAL_STATUSES,
+  REVIEW_SECTIONS,
   STAFF_LIMITS,
   STAFF_ROLES,
   USER_LIMITS,
@@ -61,13 +62,11 @@ const staffDetailsSchema = z.strictObject({
   nationality: line(STAFF_LIMITS.nationality, "the nationality"),
   maritalStatus: z.union([z.literal(""), z.enum(MARITAL_STATUSES)]),
   currentStreet: line(STAFF_LIMITS.street, "the street"),
+  currentLine2: line(STAFF_LIMITS.street, "the additional info"),
   currentCity: line(STAFF_LIMITS.city, "the city"),
-  currentProvince: line(STAFF_LIMITS.province, "the province"),
+  currentProvince: line(STAFF_LIMITS.province, "the state"),
   currentPostalCode: line(STAFF_LIMITS.postalCode, "the postal code"),
-  permanentStreet: line(STAFF_LIMITS.street, "the street"),
-  permanentCity: line(STAFF_LIMITS.city, "the city"),
-  permanentProvince: line(STAFF_LIMITS.province, "the province"),
-  permanentPostalCode: line(STAFF_LIMITS.postalCode, "the postal code"),
+  currentCountry: line(STAFF_LIMITS.country, "the country"),
   mobileNumber: line(STAFF_LIMITS.phone, "the mobile number"),
   alternatePhone: line(STAFF_LIMITS.phone, "the phone number"),
   emergencyName: line(STAFF_LIMITS.emergencyName, "the emergency contact"),
@@ -90,13 +89,11 @@ const DETAIL_FIELDS = [
   "nationality",
   "maritalStatus",
   "currentStreet",
+  "currentLine2",
   "currentCity",
   "currentProvince",
   "currentPostalCode",
-  "permanentStreet",
-  "permanentCity",
-  "permanentProvince",
-  "permanentPostalCode",
+  "currentCountry",
   "mobileNumber",
   "alternatePhone",
   "emergencyName",
@@ -159,3 +156,11 @@ function parseReferenceEmail(value: string): { ok: true; value: string } | { ok:
 export function withEmployers(details: StaffDetailsInput, employers: StaffEmployer[], references: StaffReference[], resumeName: string): StaffDetails {
   return { ...details, employers, references, resumeName };
 }
+
+const reviewReturnSchema = z.strictObject({
+  userId: z.uuid({ error: FORM_ERROR }),
+  note: z.string().trim().max(STAFF_LIMITS.returnNote, tooLong("the note", STAFF_LIMITS.returnNote)).regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the note", STAFF_LIMITS.returnNote)),
+  sections: z.array(z.enum(REVIEW_SECTIONS)).min(1, "Choose a section to send back."),
+});
+
+export const parseReviewReturn = (input: unknown) => parseWith(reviewReturnSchema, input, ["note", "sections"] as const);

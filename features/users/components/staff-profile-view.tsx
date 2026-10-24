@@ -3,7 +3,7 @@ import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
-import { formatAddress, formatProfileDate, type StaffProfileMeta } from "../profile-fields";
+import { formatProfileDate, type StaffProfileMeta } from "../profile-fields";
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
@@ -35,8 +35,7 @@ export function StaffProfileView({ userId, details, resumeType, email, meta }: {
           <Field label="Marital status" value={details.maritalStatus ? MARITAL_LABELS[details.maritalStatus] : "Not provided"} />
         </DetailsCard>
         <DetailsCard title="Address information">
-          <Field label="Current address" value={shown(formatAddress(details.currentStreet, details.currentCity, details.currentProvince, details.currentPostalCode))} wide />
-          <Field label="Permanent address" value={shown(formatAddress(details.permanentStreet, details.permanentCity, details.permanentProvince, details.permanentPostalCode))} wide />
+          <AddressReadout street={details.currentStreet} line2={details.currentLine2} city={details.currentCity} state={details.currentProvince} postal={details.currentPostalCode} country={details.currentCountry} />
         </DetailsCard>
         <DetailsCard title="Education and skills">
           <Field label="Highest education" value={shown(details.highestEducation)} />
@@ -126,6 +125,33 @@ export function RegistrationStepper({ steps }: { steps: readonly RegistrationSte
         ))}
       </ol>
     </Card>
+  );
+}
+
+function AddressReadout({
+  street,
+  line2,
+  city,
+  state,
+  postal,
+  country,
+}: {
+  street: string;
+  line2: string;
+  city: string;
+  state: string;
+  postal: string;
+  country: string;
+}) {
+  return (
+    <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+      <Field label="Street address" value={shown(street)} wide />
+      <Field label="Additional info" value={shown(line2)} wide />
+      <Field label="City" value={shown(city)} />
+      <Field label="State" value={shown(state)} />
+      <Field label="Postal code" value={shown(postal)} />
+      <Field label="Country" value={shown(country)} />
+    </div>
   );
 }
 

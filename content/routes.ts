@@ -24,6 +24,8 @@ export const appRoutes = {
   dashboard: "/dashboard",
   client: "/client",
   va: "/va",
+  vaClients: "/va/clients",
+  vaCalendar: "/va/calendar",
   closer: "/closer",
   admin: "/admin",
   adminLeads: "/admin/leads",

@@ -1,6 +1,8 @@
 import "server-only";
+import { cache } from "react";
 import { appRoutes } from "@/content/routes";
-import { deleteAuthUser, grantRole, inviteAuthUser, setAccountInactive, staffHasHistory } from "./dal";
+import { vaPortalOpen, type ReviewSection } from "./contract";
+import { deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -51,5 +53,37 @@ export async function removeStaff(userId: string, actorId: string) {
     }
     throw error;
   }
+  return { ok: true as const };
+}
+
+/** The signed-in VA's gate, once per request. The layout and the page both ask. */
+export const loadVaAccess = cache(async (userId: string) => {
+  const [account, profile] = await Promise.all([getUser(userId), getStaffProfile(userId)]);
+  return { account, profile, open: account ? vaPortalOpen(account.status, profile?.reviewStatus ?? null) : false };
+});
+
+/** Sends a finished profile to the admin. The account stays invited. */
+export async function submitStaffForReview(userId: string) {
+  const profile = await getStaffProfile(userId);
+  if (!profile || profile.reviewStatus === "approved") return { ok: false as const, message: "This profile is already confirmed." };
+  if (profile.reviewStatus === "pending_review") return { ok: false as const, message: "This profile is already with the admin." };
+  await setStaffReview(userId, "pending_review", [], null);
+  return { ok: true as const };
+}
+
+/** Sends the profile back to the sections that need a change. */
+export async function returnStaffProfile(userId: string, sections: readonly ReviewSection[], note: string) {
+  const profile = await getStaffProfile(userId);
+  if (!profile || profile.reviewStatus !== "pending_review") return { ok: false as const, message: "This profile isn't waiting for review." };
+  await setStaffReview(userId, "pending", sections, note.trim() || null);
+  return { ok: true as const };
+}
+
+/** Confirms the profile and opens the VA portal. */
+export async function confirmStaffProfile(userId: string) {
+  const [profile, user] = await Promise.all([getStaffProfile(userId), getUser(userId)]);
+  if (!user || user.status === "inactive") return { ok: false as const, message: "This account is deactivated." };
+  if (!profile || profile.reviewStatus !== "pending_review") return { ok: false as const, message: "This profile isn't waiting for review." };
+  await setStaffReview(userId, "approved", [], null);
   return { ok: true as const };
 }

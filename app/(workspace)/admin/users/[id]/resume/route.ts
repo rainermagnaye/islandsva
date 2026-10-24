@@ -1,15 +1,19 @@
 import { getStaffResume } from "@/features/users/dal";
 import { parseStaffId } from "@/features/users/validation";
-import { requireRole } from "@/lib/auth/session";
+import { needsSecondFactor, requireUser } from "@/lib/auth/session";
+import { appRoutes } from "@/content/routes";
+import { redirect } from "next/navigation";
 import { UpstreamError } from "@/lib/upstream-error";
 
 const TYPES = new Set(["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]);
 
 // Résumé bytes are not granted to the signed-in role, so this is an authenticated download after the admin check.
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  await requireRole(["admin"]);
+  const user = await requireUser();
+  if (needsSecondFactor(user)) redirect(appRoutes.mfa);
   const { id } = await context.params;
   if (!parseStaffId({ userId: id }).ok) return new Response(null, { status: 404 });
+  if (user.id !== id && !user.roles.includes("admin")) return new Response(null, { status: 404 });
 
   try {
     const resume = await getStaffResume(id);
