@@ -1,6 +1,11 @@
 import "server-only";
 import { packages } from "@/content/packages";
-import type { ClientBusiness } from "./contract";
+import { onboardingHref } from "@/content/routes";
+import { site } from "@/content/site";
+import type { ClientBusiness, ClientDetail } from "./contract";
+import { sendOnboardingEmail } from "./email";
+import { issueOnboardingLink, markOnboardingEmailSent, revokeOnboardingLink } from "./onboarding-dal";
+import { createOnboardingToken } from "./onboarding-token";
 import { insertClient, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
 import type { ClientDetailsInput, ClientNoteInput, NewClientInput } from "./validation";
 
@@ -40,4 +45,27 @@ export async function addClientNote(input: ClientNoteInput, file: { name: string
 /** Hides the client from the list, or puts them back. */
 export async function pauseClient(clientId: string, disabled: boolean) {
   return setClientDisabled(clientId, disabled);
+}
+
+/**
+ * Issues a fresh onboarding link (the database withdraws any open one) and emails it to the client. The link is
+ * returned once so the Closer can copy it when email isn't available. The email time is recorded only when the
+ * mail provider accepts it.
+ */
+export async function sendOnboardingForm(client: Pick<ClientDetail, "id" | "contactName" | "contactEmail" | "companyName">, actorId: string) {
+  const { token, hash } = createOnboardingToken();
+  const issued = await issueOnboardingLink(client.id, actorId, hash);
+  if (!issued.ok) return issued;
+  const link = new URL(onboardingHref(token), site.url).toString();
+  const emailed = await sendOnboardingEmail({ to: client.contactEmail, contactName: client.contactName, companyName: client.companyName, link, expiresAt: issued.expiresAt });
+  if (emailed) {
+    // The client has the link either way; a failed bookkeeping write mustn't hide it from the Closer.
+    await markOnboardingEmailSent(client.id).catch((error: unknown) => console.error("Recording the onboarding email failed", { error }));
+  }
+  return { ok: true as const, link, expiresAt: issued.expiresAt, emailed };
+}
+
+/** Withdraws the open link, so it stops working. */
+export async function withdrawOnboardingForm(clientId: string, actorId: string) {
+  return revokeOnboardingLink(clientId, actorId);
 }
