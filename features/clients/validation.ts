@@ -16,10 +16,10 @@ import {
 
 const CLIENT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
 
-const optionalLine = (limit: number, name: string) =>
+export const optionalLine = (limit: number, name: string) =>
   z.string().trim().max(limit, tooLong(name, limit)).regex(NO_CONTROL_CHARS, tooLong(name, limit)).default("");
 
-const choice = (options: readonly string[], empty: string) =>
+export const choice = (options: readonly string[], empty: string) =>
   z
     .string()
     .trim()

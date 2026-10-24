@@ -48,3 +48,31 @@ export async function sendOnboardingEmail(message: { to: string; contactName: st
     return false;
   }
 }
+
+/** Tells the client's Closer that the onboarding form is in. Plain text; no client data beyond the company name. */
+export async function sendOnboardingSubmittedEmail(message: { to: string; name: string; companyName: string; profileUrl: string }) {
+  const apiKey = env.resendApiKey();
+  const from = env.emailFrom();
+  if (!apiKey || !from) {
+    console.warn("Onboarding notice skipped: RESEND_API_KEY or EMAIL_FROM is not set");
+    return false;
+  }
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        from,
+        to: [message.to],
+        subject: `${message.companyName} sent their onboarding form`,
+        text: [`Hi ${message.name || "there"},`, "", `${message.companyName} has filled in their onboarding form. Check the details and record their payment:`, "", message.profileUrl].join("\n"),
+      }),
+    });
+    if (!res.ok) console.error("Resend error (onboarding notice)", { status: res.status });
+    return res.ok;
+  } catch (error) {
+    console.error("Onboarding notice request failed", { error: error instanceof Error ? error.name : "unknown" });
+    return false;
+  }
+}

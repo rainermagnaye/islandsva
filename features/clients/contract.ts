@@ -28,6 +28,55 @@ export type ClientSummary = {
 export const NEW_CLIENT_LIMITS = { companyName: 160, contactName: 120, contactEmail: 254, contactPhone: 40 } as const;
 export type NewClientField = "companyName" | "contactName" | "contactEmail" | "contactPhone" | "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
 
+/** Billing details the client gives on the onboarding form. Mirrored by the size check on clients.billing. */
+export const CLIENT_BILLING_LIMITS = { name: 160, email: 254, street: 160, city: 80, state: 80, zip: 20, country: 80, taxId: 40 } as const;
+
+export type ClientBilling = { name: string; email: string; street: string; city: string; state: string; zip: string; country: string; taxId: string };
+
+/** The onboarding form's inputs, keyed by field name. Billing fields carry a `billing` prefix. */
+export type OnboardingField =
+  | "contactName"
+  | "contactPhone"
+  | "jobTitle"
+  | "industry"
+  | "website"
+  | "staffCount"
+  | "about"
+  | "street"
+  | "city"
+  | "state"
+  | "zip"
+  | "country"
+  | "billingName"
+  | "billingEmail"
+  | "billingStreet"
+  | "billingCity"
+  | "billingState"
+  | "billingZip"
+  | "billingCountry"
+  | "billingTaxId"
+  | "consent";
+
+/** What the browser posts to /api/v1/onboarding-submissions: the token from the URL plus every field as typed. */
+export type OnboardingPayload = { token: string; consent: boolean } & Record<Exclude<OnboardingField, "consent">, string>;
+export type OnboardingSubmitted = { ok: true };
+
+/** What the public onboarding page shows: who it's for and the agreed package (read-only). */
+export type OnboardingInvitation = {
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string | null;
+  business: ClientBusiness;
+  packageCode: string | null;
+  hoursPerWeek: number | null;
+  termMonths: number | null;
+  monthlyCents: number | null;
+  startsOn: string | null;
+  timezone: string | null;
+  expiresAt: string;
+};
+
 /** Where the onboarding form stands, from the latest link and the client record. */
 export type OnboardingState = "not_sent" | "sent" | "expired" | "withdrawn" | "submitted";
 

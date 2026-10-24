@@ -2,7 +2,16 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UpstreamError } from "@/lib/upstream-error";
-import { onboardingState, type OnboardingLink, type OnboardingStatus } from "./contract";
+import {
+  clientBusinessFrom,
+  clientBusinessToJson,
+  onboardingState,
+  type ClientBilling,
+  type ClientBusiness,
+  type OnboardingInvitation,
+  type OnboardingLink,
+  type OnboardingStatus,
+} from "./contract";
 
 // Onboarding links. Status is read with the signed-in session (RLS: the client's Closer and admins with 2FA).
 // Issuing and withdrawing use the secret key: the functions are server-only because they take token hashes,
@@ -65,4 +74,86 @@ export async function revokeOnboardingLink(clientId: string, revokedBy: string) 
 export async function markOnboardingEmailSent(clientId: string) {
   const { error } = await createAdminClient().from("clients").update({ registration_email_sent_at: new Date().toISOString() }).eq("id", clientId);
   if (error) throw new UpstreamError("supabase", `Recording the onboarding email for ${clientId} failed: ${error.message}`, { cause: error });
+}
+
+// The public onboarding page and form. The visitor is anonymous, so these use the secret key; the unguessable
+// token (looked up by its SHA-256) is the authorization. Only what the form needs is selected.
+
+export type InvitationLookup =
+  | { state: "open"; clientId: string; invitation: OnboardingInvitation }
+  | { state: "gone" }
+  | { state: "unknown" };
+
+/** The client and package behind a link, or why the link no longer works. Viewing never uses the link up. */
+export async function getInvitation(tokenHash: string): Promise<InvitationLookup> {
+  const admin = createAdminClient();
+  const { data: link, error } = await admin
+    .from("client_onboarding_links")
+    .select("client_id, expires_at, submitted_at, revoked_at")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading an onboarding link failed: ${error.message}`, { cause: error });
+  if (!link) return { state: "unknown" };
+  if (link.submitted_at || link.revoked_at || new Date(link.expires_at) <= new Date()) return { state: "gone" };
+
+  const { data: client, error: clientError } = await admin
+    .from("clients")
+    .select("status, disabled_at, company_name, contact_name, contact_email, contact_phone, business, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone")
+    .eq("id", link.client_id)
+    .maybeSingle();
+  if (clientError) throw new UpstreamError("supabase", `Reading an onboarding client failed: ${clientError.message}`, { cause: clientError });
+  if (!client || client.status !== "pending" || client.disabled_at) return { state: "gone" };
+
+  return {
+    state: "open",
+    clientId: link.client_id,
+    invitation: {
+      companyName: client.company_name,
+      contactName: client.contact_name,
+      contactEmail: client.contact_email,
+      contactPhone: client.contact_phone,
+      business: clientBusinessFrom(client.business),
+      packageCode: client.package_code,
+      hoursPerWeek: client.hours_per_week,
+      termMonths: client.term_months,
+      monthlyCents: client.monthly_cents,
+      startsOn: client.starts_on,
+      timezone: client.timezone,
+      expiresAt: link.expires_at,
+    },
+  };
+}
+
+// 23514 is a CHECK violation (details too long for the database): the client can shorten and retry.
+const SUBMIT_REFUSALS = { IVA06: "gone", IVA07: "gone", IVA08: "unknown", IVA09: "gone", IVA10: "gone", "23514": "too_large" } as const;
+
+/** Writes the client's details and uses the link up, in one transaction. Secret key: submit_onboarding is server-only. */
+export async function submitOnboarding(tokenHash: string, input: { contactName: string; contactPhone: string; business: ClientBusiness; billing: ClientBilling; consent: true }) {
+  const { data, error } = await createAdminClient().rpc("submit_onboarding", {
+    token_hash: tokenHash,
+    contact_name: input.contactName,
+    contact_phone: input.contactPhone,
+    business: clientBusinessToJson(input.business),
+    billing: { ...input.billing },
+    consent: input.consent,
+  });
+  if (error) {
+    const refusal = SUBMIT_REFUSALS[error.code as keyof typeof SUBMIT_REFUSALS];
+    if (refusal) return { ok: false as const, reason: refusal };
+    // Only the code: a Postgres error's details can repeat the client's whole row, which must not reach the logs.
+    throw new UpstreamError("supabase", `Submitting onboarding failed (${error.code})`);
+  }
+  return { ok: true as const, clientId: data };
+}
+
+/** The Closer (or admin) who created the client, to tell them the form is in. Secret key: no session here. */
+export async function getClientCreator(clientId: string) {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("clients").select("company_name, created_by, creator:profiles!clients_created_by_fkey(email, full_name, status)").eq("id", clientId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading the client's creator failed: ${error.message}`, { cause: error });
+  // Someone who has left gets no email about the client.
+  if (!data?.creator || data.creator.status === "inactive") return null;
+  const { data: roles, error: rolesError } = await admin.from("roles").select("role").eq("user_id", data.created_by);
+  if (rolesError) throw new UpstreamError("supabase", `Reading the creator's roles failed: ${rolesError.message}`, { cause: rolesError });
+  return { companyName: data.company_name, email: data.creator.email, name: data.creator.full_name, isCloser: roles.some((r) => r.role === "closer") };
 }
