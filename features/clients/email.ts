@@ -76,3 +76,37 @@ export async function sendOnboardingSubmittedEmail(message: { to: string; name: 
     return false;
   }
 }
+
+/** The client's account email after activation: a single-use link to choose a password. Plain text. */
+export async function sendAccountEmail(message: { to: string; contactName: string; companyName: string; link: string }) {
+  const apiKey = env.resendApiKey();
+  const from = env.emailFrom();
+  if (!apiKey || !from) {
+    console.warn("Account email skipped: RESEND_API_KEY or EMAIL_FROM is not set");
+    return false;
+  }
+  const text = [
+    `Hi ${message.contactName},`,
+    "",
+    `${message.companyName} is all set up with ${site.name}. Choose a password to open your dashboard:`,
+    "",
+    message.link,
+    "",
+    "The link works once and expires in 24 hours. If it has expired, ask your Islands VA contact to send a new one.",
+    "",
+    `— The ${site.name} team`,
+  ].join("\n");
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ from, to: [message.to], subject: `Your ${site.name} account is ready`, text }),
+    });
+    if (!res.ok) console.error("Resend error (account email)", { status: res.status });
+    return res.ok;
+  } catch (error) {
+    console.error("Account email request failed", { error: error instanceof Error ? error.name : "unknown" });
+    return false;
+  }
+}

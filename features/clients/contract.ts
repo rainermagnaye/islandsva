@@ -227,13 +227,31 @@ export type ClientRegistrationStep = {
   current: boolean;
 };
 
+/** Where activation stands, from the client record and its payments. */
+export type ClientProgress = { submitted: boolean; consented: boolean; paid: boolean; active: boolean };
+
+export function progressOf(
+  client: { status: ClientStatus; onboardingSubmittedAt: string | null; consentedAt: string | null },
+  payments: readonly { status: string }[],
+): ClientProgress {
+  return {
+    submitted: client.onboardingSubmittedAt !== null,
+    consented: client.consentedAt !== null,
+    paid: payments.some((payment) => payment.status === "paid"),
+    active: client.status === "active",
+  };
+}
+
 /**
- * Registration is done when the lead is converted. Company details follow. Consent and payment stay
- * ahead until those forms exist, so Completed waits on them.
+ * Registration is done when the client exists. Company details are done when the details are in (or the client
+ * sent the onboarding form); consent, payment and completion follow the form, a recorded payment and activation.
  */
-export function clientRegistrationSteps(business: ClientBusiness): ClientRegistrationStep[] {
-  const company = companyDetailsComplete(business);
-  const flags = [true, company, false, false, false];
+export function clientRegistrationSteps(
+  business: ClientBusiness,
+  progress: ClientProgress = { submitted: false, consented: false, paid: false, active: false },
+): ClientRegistrationStep[] {
+  const company = progress.submitted || companyDetailsComplete(business);
+  const flags = [true, company, progress.consented, progress.paid, progress.active];
   const open = flags.findIndex((done) => !done);
   const current = open === -1 ? flags.length - 1 : open;
   return CLIENT_REGISTRATION_STEPS.map((step, index) => ({
@@ -277,4 +295,7 @@ export type ClientDetail = ClientSummary & {
   startsOn: string | null;
   timezone: string | null;
   business: ClientBusiness;
+  onboardingSubmittedAt: string | null;
+  consentedAt: string | null;
+  activatedAt: string | null;
 };
