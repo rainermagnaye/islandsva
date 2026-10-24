@@ -10,6 +10,7 @@ import { ClientActions } from "./client-actions";
 import { ClientCompanyForm } from "./client-company-form";
 import { ClientNotes } from "./client-notes";
 import { ActivationPanel } from "./activation-panel";
+import { VaAssignment } from "./va-assignment";
 import { OnboardingPanel } from "./onboarding-panel";
 import { ClientConsents, ClientInvoices, ClientProfileView, ClientStatusBadge, ClientStepper } from "./client-profile-view";
 
@@ -19,6 +20,8 @@ export function ClientProfile({
   notes,
   onboarding,
   payments,
+  assignment,
+  vas,
   tab,
   editing,
 }: {
@@ -26,6 +29,8 @@ export function ClientProfile({
   notes: readonly ClientNote[];
   onboarding: OnboardingStatus;
   payments: readonly Payment[];
+  assignment: { vaName: string; startedAt: string } | null;
+  vas: readonly { id: string; fullName: string }[];
   tab: ClientProfileTab;
   editing: boolean;
 }) {
@@ -49,6 +54,7 @@ export function ClientProfile({
       <ClientStepper steps={steps} />
       <OnboardingPanel clientId={client.id} status={onboarding} canSend={client.status === "pending" && !client.disabledAt} />
       <ActivationPanel client={client} payments={payments} />
+      <VaAssignment clientId={client.id} assignment={assignment} vas={vas} />
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
         <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />
