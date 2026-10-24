@@ -14,8 +14,10 @@ import {
   GENDER_LABELS,
   MARITAL_LABELS,
   REGISTRATION_STATUS_LABELS,
+  REVIEW_SECTIONS,
   STAFF_LIMITS,
   USER_LIMITS,
+  type ReviewSection,
   type StaffDetailField,
   type StaffDetails,
   type StaffEmployer,
@@ -25,7 +27,6 @@ import {
   COUNTRIES,
   EDUCATION_LEVELS,
   LANGUAGES,
-  formatAddress,
   formatProfileDate,
   genderChoices,
   joinDuration,
@@ -34,7 +35,7 @@ import {
   withCurrent,
   type StaffProfileMeta,
 } from "../profile-fields";
-import { saveStaffProfileForm } from "../actions";
+import { saveOwnStaffProfile, saveStaffProfileForm } from "../actions";
 
 const RESUME_TOO_LARGE = "Keep the résumé under 2 MB.";
 const PHOTO_TOO_LARGE = "Keep the profile picture under 512 KB.";
@@ -55,6 +56,8 @@ export function StaffProfileForm({
   profilePic,
   onSaved,
   onCancel,
+  mode = "admin",
+  sections = REVIEW_SECTIONS,
 }: {
   userId: string;
   email: string;
@@ -64,7 +67,11 @@ export function StaffProfileForm({
   profilePic: File | null;
   onSaved?: () => void;
   onCancel?: () => void;
+  /** review = the VA is saving their own profile. */
+  mode?: "admin" | "review";
+  sections?: readonly ReviewSection[];
 }) {
+  const show = (section: ReviewSection) => sections.includes(section);
   const picture = useRef(profilePic);
   useEffect(() => {
     picture.current = profilePic;
@@ -84,7 +91,7 @@ export function StaffProfileForm({
     const avatar = formData.get("avatar");
     if (avatar instanceof File && avatar.size > STAFF_LIMITS.avatarBytes) return { ok: false, message: PHOTO_TOO_LARGE };
     try {
-      const result = await saveStaffProfileForm(formData);
+      const result = mode === "review" ? await saveOwnStaffProfile(formData) : await saveStaffProfileForm(formData);
       if (result.ok) onSaved?.();
       return result;
     } catch {
@@ -97,24 +104,19 @@ export function StaffProfileForm({
       {({ pending, fieldErrors }) => (
         <div className="grid gap-4">
           <input type="hidden" name="userId" value={userId} />
-          <div className="grid items-start gap-4 lg:grid-cols-2">
-            <div className="grid gap-4">
-              <Section title="Basic details">
+          <div className={sections.length === 1 ? "grid gap-4" : "grid items-start gap-4 lg:grid-cols-2"}>
+            <div className={sections.length === 1 ? "contents" : "grid gap-4"}>
+              {show("basic") && <Section title="Basic details">
                 <TextField compact label="Full name" name="fullName" required placeholder="Enter full name" maxLength={USER_LIMITS.fullName} defaultValue={details.fullName} error={fieldErrors.fullName} />
                 <TextField compact label="Date of birth" name="dateOfBirth" type="date" defaultValue={details.dateOfBirth} error={fieldErrors.dateOfBirth} />
                 <Select compact label="Gender" name="gender" placeholder="Choose gender" defaultValue={details.gender} options={genderChoices(details.gender).map((value) => ({ value, label: GENDER_LABELS[value] }))} error={fieldErrors.gender} />
                 <Select compact label="Nationality" name="nationality" placeholder="Choose nationality" defaultValue={details.nationality} options={withCurrent(COUNTRIES, details.nationality)} error={fieldErrors.nationality} />
                 <Select compact label="Marital status" name="maritalStatus" placeholder="Choose marital status" defaultValue={details.maritalStatus} options={maritalChoices(details.maritalStatus).map((value) => ({ value, label: MARITAL_LABELS[value] }))} error={fieldErrors.maritalStatus} />
-              </Section>
-              <Section title="Address information">
-                <Wide>
-                  <TextField compact label="Current address" name="currentStreet" multiline placeholder="Street, city, province, postal code — one per line" maxLength={400} defaultValue={formatAddress(details.currentStreet, details.currentCity, details.currentProvince, details.currentPostalCode)} error={fieldErrors.currentStreet} />
-                </Wide>
-                <Wide>
-                  <TextField compact label="Permanent address" name="permanentStreet" multiline placeholder="Street, city, province, postal code — one per line" maxLength={400} defaultValue={formatAddress(details.permanentStreet, details.permanentCity, details.permanentProvince, details.permanentPostalCode)} error={fieldErrors.permanentStreet} />
-                </Wide>
-              </Section>
-              <Section title="Education and skills">
+              </Section>}
+              {show("address") && <Section title="Address information">
+                <AddressFields details={details} fieldErrors={fieldErrors} />
+              </Section>}
+              {show("skills") && <Section title="Education and skills">
                 <Select compact label="Highest education" name="highestEducation" placeholder="Choose highest education" defaultValue={details.highestEducation} options={withCurrent(EDUCATION_LEVELS, details.highestEducation)} error={fieldErrors.highestEducation} />
                 <LanguageField defaultValue={details.languages} error={fieldErrors.languages} />
                 <SkillField defaultValue={details.skills} error={fieldErrors.skills} />
@@ -136,17 +138,18 @@ export function StaffProfileForm({
                 <Wide>
                   <TextField compact label="Certifications" name="certifications" optional multiline placeholder="Enter certifications" maxLength={STAFF_LIMITS.certifications} defaultValue={details.certifications} error={fieldErrors.certifications} />
                 </Wide>
-              </Section>
+              </Section>}
             </div>
-            <div className="grid gap-4">
-              <Section title="Contact information">
-                <TextField compact label="Email" name="email" type="email" required placeholder="Enter email address" maxLength={USER_LIMITS.email} defaultValue={email} error={fieldErrors.email} />
+            <div className={sections.length === 1 ? "contents" : "grid gap-4"}>
+              {show("contact") && <Section title="Contact information">
+                {mode === "review" ? <ReadOnly label="Email" value={email} /> : <TextField compact label="Email" name="email" type="email" required placeholder="Enter email address" maxLength={USER_LIMITS.email} defaultValue={email} error={fieldErrors.email} />}
                 <TextField compact label="Mobile number" name="mobileNumber" type="tel" placeholder="Enter mobile number" maxLength={STAFF_LIMITS.phone} defaultValue={details.mobileNumber} error={fieldErrors.mobileNumber} />
                 <TextField compact label="Alternate phone" name="alternatePhone" type="tel" optional placeholder="Enter alternate phone" maxLength={STAFF_LIMITS.phone} defaultValue={details.alternatePhone} error={fieldErrors.alternatePhone} />
                 <TextField compact label="Emergency contact name" name="emergencyName" placeholder="Enter contact name" maxLength={STAFF_LIMITS.emergencyName} defaultValue={details.emergencyName} error={fieldErrors.emergencyName} />
                 <TextField compact label="Relationship" name="emergencyRelationship" placeholder="Enter relationship" maxLength={STAFF_LIMITS.relationship} defaultValue={details.emergencyRelationship} error={fieldErrors.emergencyRelationship} />
                 <TextField compact label="Emergency phone" name="emergencyPhone" type="tel" placeholder="Enter phone number" maxLength={STAFF_LIMITS.phone} defaultValue={details.emergencyPhone} error={fieldErrors.emergencyPhone} />
-              </Section>
+              </Section>}
+              {show("experience") && <>
               <Section title="Work experience">
                 {employers.map((job, index) => (
                   <EmployerFields key={index} index={index} job={job} />
@@ -177,19 +180,20 @@ export function StaffProfileForm({
                   </div>
                 )}
               </Section>
+              </>}
             </div>
-            <div className="lg:col-span-2">
+            {mode === "admin" && <div className="lg:col-span-2">
               <Section title="System metadata">
                 <ReadOnly label="Registration status" value={REGISTRATION_STATUS_LABELS[meta.registrationStatus]} />
                 <ReadOnly label="Progress tracker" value={meta.progress} />
                 <ReadOnly label="Date of invitation sent" value={formatProfileDate(meta.invitationSentAt)} />
                 <ReadOnly label="Date of registration completed" value={formatProfileDate(meta.registrationCompletedAt)} />
               </Section>
-            </div>
+            </div>}
           </div>
           <div className="flex flex-wrap gap-3">
             <Button type="submit" loading={pending}>
-              {pending ? "Saving" : "Save profile"}
+              {pending ? (mode === "review" ? "Sending" : "Saving") : mode === "review" ? "Send for review" : "Save profile"}
             </Button>
             {onCancel && (
               <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
@@ -203,7 +207,23 @@ export function StaffProfileForm({
   );
 }
 
-export { FORM_ID as STAFF_PROFILE_FORM_ID };
+function AddressFields({ details, fieldErrors }: { details: StaffDetails; fieldErrors: Partial<Record<StaffDetailField, string>> }) {
+  const prefix = "current";
+  const name = (suffix: "Street" | "Line2" | "City" | "Province" | "PostalCode" | "Country") => `${prefix}${suffix}` as StaffDetailField;
+  const value = (suffix: "Street" | "Line2" | "City" | "Province" | "PostalCode" | "Country") => details[name(suffix)];
+  return (
+    <div className="grid gap-3 sm:col-span-2">
+      <TextField compact label="Street address" name={name("Street")} placeholder="Enter street address" maxLength={STAFF_LIMITS.street} defaultValue={value("Street")} error={fieldErrors[name("Street")]} />
+      <TextField compact label="Additional info" name={name("Line2")} optional placeholder="Apartment, floor, landmark" maxLength={STAFF_LIMITS.street} defaultValue={value("Line2")} error={fieldErrors[name("Line2")]} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <TextField compact label="City" name={name("City")} placeholder="Enter city" maxLength={STAFF_LIMITS.city} defaultValue={value("City")} error={fieldErrors[name("City")]} />
+        <TextField compact label="State" name={name("Province")} placeholder="Enter state" maxLength={STAFF_LIMITS.province} defaultValue={value("Province")} error={fieldErrors[name("Province")]} />
+        <TextField compact label="Postal code" name={name("PostalCode")} placeholder="Enter postal code" maxLength={STAFF_LIMITS.postalCode} defaultValue={value("PostalCode")} error={fieldErrors[name("PostalCode")]} />
+      </div>
+      <Select compact label="Country" name={name("Country")} optional placeholder="Choose country" defaultValue={value("Country")} options={withCurrent(COUNTRIES, value("Country"))} error={fieldErrors[name("Country")]} />
+    </div>
+  );
+}
 
 function Wide({ children }: { children: ReactNode }) {
   return <div className="min-w-0 sm:col-span-2">{children}</div>;

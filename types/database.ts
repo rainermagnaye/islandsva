@@ -22,6 +22,7 @@ type ProfileRow = {
   email: string;
   full_name: string;
   status: Enum<"account_status">;
+  signed_in_at: string | null;
   tenant_id: string;
   created_at: string;
   updated_at: string;
@@ -81,13 +82,11 @@ type StaffProfileRow = {
   nationality: string | null;
   marital_status: Enum<"staff_marital_status"> | null;
   current_street: string | null;
+  current_line2: string | null;
   current_city: string | null;
   current_province: string | null;
   current_postal_code: string | null;
-  permanent_street: string | null;
-  permanent_city: string | null;
-  permanent_province: string | null;
-  permanent_postal_code: string | null;
+  current_country: string | null;
   mobile_number: string | null;
   alternate_phone: string | null;
   emergency_name: string | null;
@@ -107,6 +106,9 @@ type StaffProfileRow = {
   avatar_type: string | null;
   avatar_bytes: string | null;
   registration_status: Enum<"staff_registration_status">;
+  review_status: Enum<"staff_review_status">;
+  returned_sections: string[];
+  return_note: string | null;
   invitation_sent_at: string;
   registration_completed_at: string | null;
   tenant_id: string;
@@ -289,6 +291,7 @@ export type Database = {
       staff_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
       staff_marital_status: "single" | "married" | "widowed" | "divorced" | "separated" | "prefer_not_to_say";
       staff_registration_status: "pending" | "in_progress" | "completed";
+      staff_review_status: "pending" | "pending_review" | "approved";
     };
     CompositeTypes: { [_ in never]: never };
   };

@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { adminUserHref } from "@/content/routes";
 import { ROLE_LABELS } from "@/lib/auth/roles";
-import { STATUS_LABELS, type AccountStatus, type UserSummary } from "../contract";
+import { staffAccessBadge, type UserSummary } from "../contract";
 
-// Invited = waiting on them to accept, active = signed in, deactivated = no action needed.
-const TONES: Record<AccountStatus, BadgeTone> = { invited: "info", active: "success", inactive: "neutral" };
+function accessOf(user: UserSummary) {
+  return { roles: user.roles, accountStatus: user.status, review: user.reviewStatus, signedIn: user.signedInAt !== null };
+}
 
 function clipped(value: string) {
   return (
@@ -33,11 +34,14 @@ const COLUMNS: Column<UserSummary>[] = [
   {
     key: "status",
     label: "Status",
-    render: (user) => (
-      <Badge tone={TONES[user.status]} size="sm" dot={TONES[user.status] === "neutral"}>
-        {STATUS_LABELS[user.status]}
-      </Badge>
-    ),
+    render: (user) => {
+      const access = staffAccessBadge(accessOf(user));
+      return (
+        <Badge tone={access.tone} size="sm" dot={access.tone === "neutral"}>
+          {access.label}
+        </Badge>
+      );
+    },
   },
 ];
 

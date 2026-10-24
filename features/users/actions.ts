@@ -6,11 +6,10 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { emailField, FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { STAFF_LIMITS, USER_LIMITS, type InviteField, type StaffDetailField } from "./contract";
-import { getStaffProfile, getUser, saveStaffProfile, updateStaffEmail } from "./dal";
-import { splitAddress } from "./profile-fields";
-import { deactivateStaff, inviteStaff as invite, removeStaff } from "./service";
-import { parseEmployers, parseInvite, parseReferences, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
+import { emptyStaffDetails, openReviewSections, registrationStatus, REVIEW_SECTION_LABELS, REVIEW_SECTIONS, reviewSectionFilled, STAFF_LIMITS, USER_LIMITS, staffSections, type InviteField, type ReviewSection, type StaffDetailField, type StaffDetails, type UserSummary } from "./contract";
+import { getStaffProfile, getUser, saveStaffProfile, setStaffReview, updateStaffEmail } from "./dal";
+import { confirmStaffProfile, deactivateStaff, inviteStaff as invite, removeStaff, returnStaffProfile, submitStaffForReview } from "./service";
+import { parseEmployers, parseInvite, parseReferences, parseReviewReturn, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
 import { parseResumeText, resumeText } from "./resume-text";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
@@ -93,62 +92,147 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
   await requireRole(["admin"]);
   const parsedId = parseStaffId({ userId: formData.get("userId") });
   if (!parsedId.ok) return { ok: false, message: "That account couldn't be found." };
+  const user = await getUser(parsedId.value.userId);
+  if (!user) return { ok: false, message: "That account couldn't be found." };
+  return persistStaffForm(formData, user, { updateEmail: true, forReview: false, allowed: REVIEW_SECTIONS });
+}
 
-  const raw = formEntries(formData);
-  const emailValue = raw.email;
-  const skillDraft = typeof raw.skillDraft === "string" ? raw.skillDraft.trim() : "";
-  delete raw.userId;
-  const resumeTitle = raw.resumeName;
-  delete raw.resume;
-  delete raw.resumeName;
-  delete raw.avatar;
-  delete raw.email;
-  delete raw.skillDraft;
-  delete raw.employerCompany;
-  delete raw.employerPosition;
-  delete raw.employerDuration;
-  delete raw.referenceName;
-  delete raw.referencePhone;
-  delete raw.referenceRelationship;
-  delete raw.referenceCompany;
-  delete raw.referenceEmail;
-  for (const key of Object.keys(raw)) {
-    if (key.startsWith("durationStart-") || key.startsWith("durationEnd-")) delete raw[key];
+/** Saves the VA's profile and sends it once every section is valid. */
+export async function saveOwnStaffProfile(formData: FormData): Promise<SubmitResult<StaffDetailField | "email">> {
+  const va = await requireRole(["va"]);
+  try {
+    const user = await getUser(va.id);
+    if (!user || user.status === "inactive") return { ok: false, message: "That account couldn't be found." };
+    const current = await getStaffProfile(va.id);
+    if (current?.reviewStatus === "pending_review") return { ok: false, message: "This profile is already with the admin." };
+    if (current?.reviewStatus === "approved") return { ok: false, message: "This profile is already confirmed." };
+    const allowed = openReviewSections(current?.sections ?? staffSections(emptyStaffDetails(user.fullName)), current?.returnedSections ?? []);
+    return await persistStaffForm(formData, user, { updateEmail: false, forReview: true, allowed, clearReturned: true });
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Staff profile save failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't save the profile. Please try again." };
+  }
+}
+
+/** Confirms a profile that is waiting for review and opens the VA portal. */
+export async function confirmStaffMember(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  await requireRole(["admin"]);
+  const parsed = parseStaffId({ userId });
+  if (!parsed.ok) return { ok: false, message: "That account couldn't be found." };
+  try {
+    const result = await confirmStaffProfile(parsed.value.userId);
+    if (!result.ok) return result;
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Staff confirmation failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't confirm that profile. Please try again." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Sends a profile back to the sections that need a change. */
+export async function returnStaffMember(formData: FormData): Promise<SubmitResult<"note" | "sections">> {
+  await requireRole(["admin"]);
+  const parsed = parseReviewReturn({
+    userId: formData.get("userId"),
+    note: formData.get("note") ?? "",
+    sections: formData.getAll("section").map(String),
+  });
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await returnStaffProfile(parsed.value.userId, parsed.value.sections, parsed.value.note);
+    if (!result.ok) return { ok: false, message: result.message };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Staff return failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't send that profile back. Please try again." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+const SECTION_FIELDS = {
+  basic: ["fullName", "dateOfBirth", "gender", "nationality", "maritalStatus"],
+  address: ["currentStreet", "currentLine2", "currentCity", "currentProvince", "currentPostalCode", "currentCountry"],
+  contact: ["mobileNumber", "alternatePhone", "emergencyName", "emergencyRelationship", "emergencyPhone"],
+  skills: ["highestEducation", "certifications", "skills", "languages"],
+  experience: ["keyResponsibilities", "achievements"],
+} as const satisfies Record<ReviewSection, readonly (keyof StaffDetails)[]>;
+
+/** Saves the posted sections and, for a VA, sends the profile on once every section is complete. */
+async function persistStaffForm(
+  formData: FormData,
+  user: UserSummary,
+  options: { updateEmail: boolean; forReview: boolean; allowed: readonly ReviewSection[]; clearReturned?: boolean },
+): Promise<SubmitResult<StaffDetailField | "email">> {
+  const allowed = new Set(options.allowed);
+  const posted = formEntries(formData);
+  const emailValue = posted.email;
+  const skillDraft = allowed.has("skills") && typeof posted.skillDraft === "string" ? posted.skillDraft.trim() : "";
+  const resumeTitle = posted.resumeName;
+  const current = await getStaffProfile(user.id);
+  const base = current?.details ?? emptyStaffDetails(user.fullName);
+  const raw: Record<string, unknown> = {
+    fullName: base.fullName,
+    dateOfBirth: base.dateOfBirth,
+    gender: base.gender,
+    nationality: base.nationality,
+    maritalStatus: base.maritalStatus,
+    currentStreet: base.currentStreet,
+    currentLine2: base.currentLine2,
+    currentCity: base.currentCity,
+    currentProvince: base.currentProvince,
+    currentPostalCode: base.currentPostalCode,
+    currentCountry: base.currentCountry,
+    mobileNumber: base.mobileNumber,
+    alternatePhone: base.alternatePhone,
+    emergencyName: base.emergencyName,
+    emergencyRelationship: base.emergencyRelationship,
+    emergencyPhone: base.emergencyPhone,
+    highestEducation: base.highestEducation,
+    certifications: base.certifications,
+    skills: base.skills,
+    languages: base.languages,
+    keyResponsibilities: base.keyResponsibilities,
+    achievements: base.achievements,
+  };
+  for (const section of allowed) {
+    for (const field of SECTION_FIELDS[section]) raw[field] = posted[field] ?? "";
   }
   if (skillDraft) {
     const skills = typeof raw.skills === "string" ? raw.skills.trim() : "";
     raw.skills = skills ? `${skills}, ${skillDraft}` : skillDraft;
   }
-  applyAddress(raw, "current");
-  applyAddress(raw, "permanent");
   const parsed = parseStaffDetails(raw);
   if (!parsed.ok) return toSubmitResult(parsed);
 
-  const jobs = parseEmployers(
-    formData.getAll("employerCompany").map((value) => String(value)),
-    formData.getAll("employerPosition").map((value) => String(value)),
-    formData.getAll("employerDuration").map((value) => String(value)),
-  );
+  const jobs = allowed.has("experience")
+    ? parseEmployers(
+        formData.getAll("employerCompany").map((value) => String(value)),
+        formData.getAll("employerPosition").map((value) => String(value)),
+        formData.getAll("employerDuration").map((value) => String(value)),
+      )
+    : { ok: true as const, value: base.employers };
   if (!jobs.ok) return { ok: false, message: jobs.message };
 
-  const people = parseReferences(
-    formData.getAll("referenceName").map((value) => String(value)),
-    formData.getAll("referencePhone").map((value) => String(value)),
-    formData.getAll("referenceRelationship").map((value) => String(value)),
-    formData.getAll("referenceCompany").map((value) => String(value)),
-    formData.getAll("referenceEmail").map((value) => String(value)),
-  );
+  const people = allowed.has("experience")
+    ? parseReferences(
+        formData.getAll("referenceName").map((value) => String(value)),
+        formData.getAll("referencePhone").map((value) => String(value)),
+        formData.getAll("referenceRelationship").map((value) => String(value)),
+        formData.getAll("referenceCompany").map((value) => String(value)),
+        formData.getAll("referenceEmail").map((value) => String(value)),
+      )
+    : { ok: true as const, value: base.references };
   if (!people.ok) return { ok: false, message: people.message };
 
-  const email = emailField(USER_LIMITS.email).safeParse(emailValue);
+  const email = options.updateEmail ? emailField(USER_LIMITS.email).safeParse(emailValue) : { success: true as const, data: user.email };
   if (!email.success) return { ok: false, message: FIELD_ERRORS, fieldErrors: { email: "Enter an email address like name@company.com." } };
-
-  const user = await getUser(parsedId.value.userId);
-  if (!user) return { ok: false, message: "That account couldn't be found." };
-  const current = await getStaffProfile(user.id);
   let resumeName = current?.details.resumeName ?? "";
   let resume: { name: string; type: string; bytes: Uint8Array } | undefined;
-  const file = formData.get("resume");
+  const file = allowed.has("skills") ? formData.get("resume") : null;
   if (file instanceof File && file.size > 0) {
     const type = RESUME_TYPES[file.type] ?? (file.name.toLowerCase().endsWith(".pdf") ? RESUME_TYPES["application/pdf"] : file.name.toLowerCase().endsWith(".docx") ? RESUME_TYPES["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] : "");
     if (!type) return { ok: false, message: "Upload a PDF or DOCX résumé." };
@@ -173,11 +257,28 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
     avatar = { type: photo.type, bytes: new Uint8Array(await photo.arrayBuffer()) };
   }
 
+  const details = withEmployers(parsed.value, jobs.value, people.value, resumeName);
   try {
-    await saveStaffProfile(user.id, user.createdAt, withEmployers(parsed.value, jobs.value, people.value, resumeName), resume, avatar);
-    if (email.data !== user.email) {
+    await saveStaffProfile(user.id, user.createdAt, details, resume, avatar);
+    if (options.updateEmail && email.data !== user.email) {
       const updated = await updateStaffEmail(user.id, email.data);
       if (!updated.ok) return { ok: false, message: FIELD_ERRORS, fieldErrors: { email: "That email already has an account." } };
+    }
+    const filled = staffSections(details);
+    let returned = current?.returnedSections ?? [];
+    if (options.clearReturned && current?.reviewStatus === "pending" && returned.length > 0) {
+      returned = returned.filter((item) => !reviewSectionFilled(filled, item));
+      if (returned.length !== current.returnedSections.length) {
+        await setStaffReview(user.id, "pending", returned, current.returnNote);
+      }
+    }
+    if (options.forReview) {
+      if (registrationStatus(filled) !== "completed" || returned.length > 0) {
+        refresh();
+        return { ok: false, message: unfinishedSections(filled) };
+      }
+      const sent = await submitStaffForReview(user.id);
+      if (!sent.ok) return { ok: false, message: sent.message };
     }
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
@@ -189,15 +290,11 @@ export async function saveStaffProfileForm(formData: FormData): Promise<SubmitRe
   return { ok: true };
 }
 
-/** The address textarea holds every line. Each line is stored in its own column. */
-function applyAddress(raw: Record<string, unknown>, prefix: "current" | "permanent") {
-  const street = raw[`${prefix}Street`];
-  const text = typeof street === "string" ? street : "";
-  const parts = splitAddress(text);
-  raw[`${prefix}Street`] = parts.street;
-  raw[`${prefix}City`] = parts.city;
-  raw[`${prefix}Province`] = parts.province;
-  raw[`${prefix}PostalCode`] = parts.postal;
+function unfinishedSections(sections: Parameters<typeof reviewSectionFilled>[0]) {
+  const missing = REVIEW_SECTIONS.filter((section) => !reviewSectionFilled(sections, section)).map((section) => REVIEW_SECTION_LABELS[section]);
+  if (missing.length === 0) return "Finish every section before sending this for review.";
+  const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)}`;
+  return `Finish ${list} before we can send this for review.`;
 }
 
 /** The address this invite was sent from, so the email link opens this same app. */

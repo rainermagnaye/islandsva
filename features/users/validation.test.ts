@@ -59,8 +59,7 @@ describe("parseReferences", () => {
 describe("parseStaffDetails — date of birth", () => {
   const blank = {
     fullName: "Vi Santos", dateOfBirth: "", gender: "", nationality: "", maritalStatus: "",
-    currentStreet: "", currentCity: "", currentProvince: "", currentPostalCode: "",
-    permanentStreet: "", permanentCity: "", permanentProvince: "", permanentPostalCode: "",
+    currentStreet: "", currentLine2: "", currentCity: "", currentProvince: "", currentPostalCode: "", currentCountry: "",
     mobileNumber: "", alternatePhone: "", emergencyName: "", emergencyRelationship: "", emergencyPhone: "",
     highestEducation: "", certifications: "", skills: "", languages: "", keyResponsibilities: "", achievements: "",
   };
