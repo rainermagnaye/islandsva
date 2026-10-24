@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { createLoginLink, createRecoveryLink, deleteAuthUser, discardNewLogin, getLoginEmail, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
+import { createLoginLink, createRecoveryLink, deleteAuthUser, discardNewLogin, getLoginEmail, getStaffProfile, getUser, grantRole, inviteAuthUser, listUsers, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -104,4 +104,13 @@ export async function clientSignInLink(userId: string) {
 /** Undoes createClientLogin when activation is refused: removes only that new, role-less login. */
 export async function discardClientLogin(userId: string) {
   await discardNewLogin(userId);
+}
+
+/** For assigning a VA to a client (features/clients): VAs whose account is active and profile approved. Read as the admin (RLS). */
+export async function listAssignableVas() {
+  const users = await listUsers();
+  return users
+    .filter((user) => user.roles.includes("va") && vaPortalOpen(user.status, user.reviewStatus))
+    .map((user) => ({ id: user.id, fullName: user.fullName || user.email, email: user.email }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
