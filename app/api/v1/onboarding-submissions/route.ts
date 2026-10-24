@@ -25,6 +25,7 @@ export const POST = createHandler(options, async ({ body }) => {
   if (!result.ok) {
     // Unknown and used-up links look alike to the visitor; only someone holding the token learns which.
     if (result.reason === "unknown") throw new ApiError(404, "not_found", "This link isn't valid. Ask your Islands VA contact for a new one.");
+    if (result.reason === "too_large") throw new ApiError(422, "too_large", "Some answers are longer than we can store. Please shorten the longest ones and send again.");
     throw new ApiError(410, "link_used", "This link has already been used or has expired. Ask your Islands VA contact for a new one.");
   }
 

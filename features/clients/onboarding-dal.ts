@@ -124,22 +124,24 @@ export async function getInvitation(tokenHash: string): Promise<InvitationLookup
   };
 }
 
-const SUBMIT_REFUSALS = { IVA06: "gone", IVA07: "gone", IVA08: "unknown", IVA09: "gone", IVA10: "gone" } as const;
+// 23514 is a CHECK violation (details too long for the database): the client can shorten and retry.
+const SUBMIT_REFUSALS = { IVA06: "gone", IVA07: "gone", IVA08: "unknown", IVA09: "gone", IVA10: "gone", "23514": "too_large" } as const;
 
 /** Writes the client's details and uses the link up, in one transaction. Secret key: submit_onboarding is server-only. */
-export async function submitOnboarding(tokenHash: string, input: { contactName: string; contactPhone: string; business: ClientBusiness; billing: ClientBilling }) {
+export async function submitOnboarding(tokenHash: string, input: { contactName: string; contactPhone: string; business: ClientBusiness; billing: ClientBilling; consent: true }) {
   const { data, error } = await createAdminClient().rpc("submit_onboarding", {
     token_hash: tokenHash,
     contact_name: input.contactName,
     contact_phone: input.contactPhone,
     business: clientBusinessToJson(input.business),
     billing: { ...input.billing },
-    consent: true,
+    consent: input.consent,
   });
   if (error) {
     const refusal = SUBMIT_REFUSALS[error.code as keyof typeof SUBMIT_REFUSALS];
     if (refusal) return { ok: false as const, reason: refusal };
-    throw new UpstreamError("supabase", `Submitting onboarding failed: ${error.message}`, { cause: error });
+    // Only the code: a Postgres error's details can repeat the client's whole row, which must not reach the logs.
+    throw new UpstreamError("supabase", `Submitting onboarding failed (${error.code})`);
   }
   return { ok: true as const, clientId: data };
 }
@@ -147,9 +149,10 @@ export async function submitOnboarding(tokenHash: string, input: { contactName: 
 /** The Closer (or admin) who created the client, to tell them the form is in. Secret key: no session here. */
 export async function getClientCreator(clientId: string) {
   const admin = createAdminClient();
-  const { data, error } = await admin.from("clients").select("company_name, created_by, creator:profiles!clients_created_by_fkey(email, full_name)").eq("id", clientId).maybeSingle();
+  const { data, error } = await admin.from("clients").select("company_name, created_by, creator:profiles!clients_created_by_fkey(email, full_name, status)").eq("id", clientId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading the client's creator failed: ${error.message}`, { cause: error });
-  if (!data?.creator) return null;
+  // Someone who has left gets no email about the client.
+  if (!data?.creator || data.creator.status === "inactive") return null;
   const { data: roles, error: rolesError } = await admin.from("roles").select("role").eq("user_id", data.created_by);
   if (rolesError) throw new UpstreamError("supabase", `Reading the creator's roles failed: ${rolesError.message}`, { cause: rolesError });
   return { companyName: data.company_name, email: data.creator.email, name: data.creator.full_name, isCloser: roles.some((r) => r.role === "closer") };

@@ -37,8 +37,26 @@ describe("parseOnboarding", () => {
         contactPhone: "",
         business: { industry: "Legal", country: "United States", website: "", jobTitle: "Founder", street: "", city: "Austin", state: "TX", zip: "", staffCount: "Just me", about: "Inbox and calendar." },
         billing: { name: "Cruz Co", email: "billing@cruz.co", street: "", city: "", state: "", zip: "", country: "", taxId: "" },
+        consent: true,
       },
     });
+  });
+
+  it("refuses answers that fit the character limits but not the database's byte limits", () => {
+    // 2,000 Japanese characters pass the character limit but take 6,000 bytes; the database allows 4,000.
+    expect(parseOnboarding({ ...form, about: "仕".repeat(2000) })).toEqual({ ok: false, fieldErrors: { about: expect.any(String) } });
+    expect(parseOnboarding({ ...form, about: "仕".repeat(1000) }).ok).toBe(true);
+    // Every billing text field at its character limit, in 3-byte characters, plus a long email: over 1,800 bytes.
+    const longBilling = {
+      billingName: "名".repeat(160),
+      billingStreet: "道".repeat(160),
+      billingCity: "市".repeat(80),
+      billingState: "州".repeat(80),
+      billingZip: "郵".repeat(20),
+      billingTaxId: "税".repeat(40),
+      billingEmail: `${"a".repeat(120)}@example.com`,
+    };
+    expect(parseOnboarding({ ...form, ...longBilling })).toEqual({ ok: false, fieldErrors: { billingStreet: expect.any(String) } });
   });
 
   it("needs consent, and only a real true counts", () => {

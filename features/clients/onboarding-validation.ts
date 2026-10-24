@@ -47,16 +47,21 @@ const onboardingSchema = z.strictObject({
 
 const FIELDS = Object.keys(onboardingSchema.shape).filter((key) => key !== "token") as OnboardingField[];
 
-export type OnboardingInput = { token: string; contactName: string; contactPhone: string; business: ClientBusiness; billing: ClientBilling };
+export type OnboardingInput = { token: string; contactName: string; contactPhone: string; business: ClientBusiness; billing: ClientBilling; consent: true };
+
+// The database limits business and billing by bytes of their JSON (octet_length ≤ 4000 / 2000); characters
+// outside ASCII take up to 4 bytes, so a long answer in, say, Japanese can pass the character limits and still
+// not fit. Checked here, with room for jsonb's own spacing, so the client gets a field error, not a failure.
+const BUSINESS_MAX_BYTES = 3800;
+const BILLING_MAX_BYTES = 1800;
+const jsonBytes = (value: object) => Buffer.byteLength(JSON.stringify(value), "utf8");
 
 /** Validates the public onboarding form. Unknown keys or a bad token are a tampered request (400). */
 export function parseOnboarding(input: unknown) {
   const parsed = parseWith(onboardingSchema, input, FIELDS);
   if (!parsed.ok) return parsed;
   const v = parsed.value;
-  return {
-    ok: true as const,
-    value: {
+  const value = {
       token: v.token,
       contactName: v.contactName,
       contactPhone: v.contactPhone,
@@ -82,8 +87,13 @@ export function parseOnboarding(input: unknown) {
         country: v.billingCountry,
         taxId: v.billingTaxId,
       },
-    } satisfies OnboardingInput,
-  };
+      consent: v.consent,
+    } satisfies OnboardingInput;
+  const fieldErrors: Partial<Record<OnboardingField, string>> = {};
+  if (jsonBytes(value.business) > BUSINESS_MAX_BYTES) fieldErrors.about = "Please shorten your answer a little; it's longer than we can store.";
+  if (jsonBytes(value.billing) > BILLING_MAX_BYTES) fieldErrors.billingStreet = "Please shorten the billing details a little; they're longer than we can store.";
+  if (Object.keys(fieldErrors).length > 0) return { ok: false as const, fieldErrors };
+  return { ok: true as const, value };
 }
 
 /** The token from the page URL, checked before any lookup. */

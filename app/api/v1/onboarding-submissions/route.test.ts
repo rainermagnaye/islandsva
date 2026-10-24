@@ -30,7 +30,7 @@ describe("POST /api/v1/onboarding-submissions", () => {
   it("saves a valid form once and answers 201", async () => {
     service.submitClientOnboarding.mockResolvedValue({ ok: true, clientId: "c1" });
     expect(await post(valid)).toEqual({ status: 201, body: { data: { ok: true } } });
-    expect(service.submitClientOnboarding).toHaveBeenCalledWith(expect.objectContaining({ token, contactName: "Ana" }));
+    expect(service.submitClientOnboarding).toHaveBeenCalledWith(expect.objectContaining({ token, contactName: "Ana", consent: true }));
   });
 
   it("answers 404 for an unknown link and 410 for a used or expired one", async () => {
@@ -38,6 +38,11 @@ describe("POST /api/v1/onboarding-submissions", () => {
     expect((await post(valid)).status).toBe(404);
     service.submitClientOnboarding.mockResolvedValue({ ok: false, reason: "gone" });
     expect(await post(valid)).toMatchObject({ status: 410, body: { error: { code: "link_used" } } });
+  });
+
+  it("answers 422 when the database finds the details too long, so the client can shorten and retry", async () => {
+    service.submitClientOnboarding.mockResolvedValue({ ok: false, reason: "too_large" });
+    expect(await post(valid)).toMatchObject({ status: 422, body: { error: { code: "too_large" } } });
   });
 
   it("never reaches the database with a bad token, missing consent or an unexpected field", async () => {
