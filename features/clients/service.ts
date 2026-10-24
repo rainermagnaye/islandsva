@@ -1,7 +1,27 @@
 import "server-only";
+import { packages } from "@/content/packages";
 import type { ClientBusiness } from "./contract";
-import { recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
-import type { ClientDetailsInput, ClientNoteInput } from "./validation";
+import { insertClient, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
+import type { ClientDetailsInput, ClientNoteInput, NewClientInput } from "./validation";
+
+/** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
+export async function createClientProfile(input: NewClientInput, createdBy: string) {
+  const pkg = packages.find((item) => item.slug === input.packageSlug && item.weeklyHours === input.hoursPerWeek);
+  if (!pkg) throw new Error(`Unknown package ${input.packageSlug} at ${input.hoursPerWeek} hours`);
+  return insertClient({
+    createdBy,
+    companyName: input.companyName,
+    contactName: input.contactName,
+    contactEmail: input.contactEmail,
+    contactPhone: input.contactPhone,
+    packageCode: pkg.slug,
+    hoursPerWeek: pkg.weeklyHours,
+    termMonths: input.termMonths,
+    monthlyCents: pkg.monthlyPrice[input.termMonths],
+    startsOn: input.startsOn,
+    timezone: input.timezone,
+  });
+}
 
 /** Copies what the lead already told us onto the new pending client. The registration email comes later. */
 export async function openClientRegistration(clientId: string, business: ClientBusiness) {

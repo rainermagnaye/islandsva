@@ -1,10 +1,29 @@
 import type { ReactNode } from "react";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { formatPrice, packages, terms } from "@/content/packages";
 import { PACKAGE_TIMEZONES } from "@/features/leads/contract";
-import type { ClientDetail, ClientRegistrationStep } from "../contract";
+import { CLIENT_STATUS_LABELS, type ClientDetail, type ClientRegistrationStep, type ClientStatus } from "../contract";
+
+const TONES: Record<ClientStatus, BadgeTone> = { pending: "warning", active: "success", inactive: "neutral" };
+
+/** Disabled wins over the onboarding status, so a hidden client never reads as active. */
+export function ClientStatusBadge({ status, disabledAt }: { status: ClientStatus; disabledAt: string | null }) {
+  if (disabledAt) {
+    return (
+      <Badge tone="neutral" size="sm" dot>
+        Disabled
+      </Badge>
+    );
+  }
+  return (
+    <Badge tone={TONES[status]} dot={status === "inactive"}>
+      {CLIENT_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
 
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 

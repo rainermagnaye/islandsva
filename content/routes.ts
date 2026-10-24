@@ -27,6 +27,7 @@ export const appRoutes = {
   vaClients: "/va/clients",
   vaCalendar: "/va/calendar",
   closer: "/closer",
+  closerNewClient: "/closer/clients/new",
   admin: "/admin",
   adminLeads: "/admin/leads",
   adminClients: "/admin/clients",
@@ -49,3 +50,6 @@ export const adminUserHref = (id: string) => `${appRoutes.adminUsers}/${id}`;
 
 /** One client profile. The id is a random UUID, so the URL carries no personal data. */
 export const adminClientHref = (id: string) => `${appRoutes.adminClients}/${id}`;
+
+/** A Closer's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */
+export const closerClientHref = (id: string) => `${appRoutes.closer}/clients/${id}`;

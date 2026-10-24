@@ -2,16 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { adminClientHref } from "@/content/routes";
-import { CLIENT_PROFILE_TABS, CLIENT_STATUS_LABELS, clientRegistrationSteps, type ClientDetail, type ClientNote, type ClientProfileTab, type ClientStatus } from "../contract";
+import { CLIENT_PROFILE_TABS, clientRegistrationSteps, type ClientDetail, type ClientNote, type ClientProfileTab } from "../contract";
 import { ClientActions } from "./client-actions";
 import { ClientCompanyForm } from "./client-company-form";
 import { ClientNotes } from "./client-notes";
-import { ClientConsents, ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
-
-const TONES: Record<ClientStatus, BadgeTone> = { pending: "warning", active: "success", inactive: "neutral" };
+import { ClientConsents, ClientInvoices, ClientProfileView, ClientStatusBadge, ClientStepper } from "./client-profile-view";
 
 /** The client profile: registration progress, then overview, notes, consents, or invoices. */
 export function ClientProfile({ client, notes, tab, editing }: { client: ClientDetail; notes: readonly ClientNote[]; tab: ClientProfileTab; editing: boolean }) {
@@ -27,15 +24,7 @@ export function ClientProfile({ client, notes, tab, editing }: { client: ClientD
             {client.contactName}
             <span className="font-normal"> - {client.companyName}</span>
           </h1>
-          {client.disabledAt ? (
-            <Badge tone="neutral" size="sm" dot>
-              Disabled
-            </Badge>
-          ) : (
-            <Badge tone={TONES[client.status]} dot={client.status === "inactive"}>
-              {CLIENT_STATUS_LABELS[client.status]}
-            </Badge>
-          )}
+          <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </div>
         <ClientActions clientId={client.id} editing={showEditor} disabledAt={client.disabledAt} />
       </Card>

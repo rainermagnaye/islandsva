@@ -19,12 +19,12 @@ function clipped(value: string) {
   );
 }
 
-const COLUMNS: Column<ClientSummary>[] = [
+const columns = (hrefFor: (id: string) => string): Column<ClientSummary>[] => [
   {
     key: "company",
     label: "Company",
     render: (client) => (
-      <Link href={adminClientHref(client.id)} className="staff-row-link" title={client.companyName}>
+      <Link href={hrefFor(client.id)} className="staff-row-link" title={client.companyName}>
         {client.companyName}
       </Link>
     ),
@@ -49,7 +49,17 @@ const COLUMNS: Column<ClientSummary>[] = [
   { key: "created", label: "Created", render: (client) => <span className="whitespace-nowrap text-ink-muted">{created.format(new Date(client.createdAt))}</span> },
 ];
 
-/** Admin client list. The company opens the profile, where registration progress lives. */
-export function ClientsTable({ clients, empty, keepHeader = false }: { clients: readonly ClientSummary[]; empty: ReactNode; keepHeader?: boolean }) {
-  return <DataTable caption="Clients" columns={COLUMNS} rows={clients} rowKey={(client) => client.id} keepHeader={keepHeader} empty={empty} />;
+/** Client list. The company opens the profile (the admin's by default), where registration progress lives. */
+export function ClientsTable({
+  clients,
+  empty,
+  keepHeader = false,
+  hrefFor = adminClientHref,
+}: {
+  clients: readonly ClientSummary[];
+  empty: ReactNode;
+  keepHeader?: boolean;
+  hrefFor?: (id: string) => string;
+}) {
+  return <DataTable caption="Clients" columns={columns(hrefFor)} rows={clients} rowKey={(client) => client.id} keepHeader={keepHeader} empty={empty} />;
 }
