@@ -26,6 +26,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 - Server Components by default; `'use client'` only on the smallest leaf that needs state, effects or browser APIs. Prefer platform features (`<details>`, `<dialog>`, popover, CSS) over libraries.
 - Forms use `<Form>` (`useActionState`: pending state, error summary as a danger `Alert`, focus on the first invalid field). Inputs have a visible label and are at least 44px tall.
 - Status is a `Badge`: icon or dot + word + tint, never colour alone.
+- Icons: `<Icon name>` draws a `<symbol>` from `IconSprite` (root layout), so icon shapes ship once in the HTML, not in every client bundle. A new icon = its shape in `ui/icon-sprite.tsx` + its name in `types/icon.ts`.
 - Images: `getImageProps()` + `<img>` / `<picture>` in Server Components (no client JS — `<Image>` adds ~5 KB per page); a `prefers-color-scheme` `<picture>` source for themed images.
 - Every interactive target is at least 44×44px; focus is always visible.
 

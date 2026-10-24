@@ -1,6 +1,6 @@
 /**
  * Names of the design-system outline icons. Lives in types/ so content and UI can both use it;
- * `components/ui/icon.tsx` must draw exactly these (enforced there with `satisfies`).
+ * `components/ui/icon-sprite.tsx` must draw exactly these (enforced there with `satisfies`).
  */
 export type IconName =
   | "menu"

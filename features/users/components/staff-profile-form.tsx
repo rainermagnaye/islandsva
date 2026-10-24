@@ -10,6 +10,7 @@ import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import type { SubmitResult } from "@/types/form";
+import type { StaffDetailField, StaffDetails, StaffEmployer, StaffReference } from "../contract";
 import {
   GENDER_LABELS,
   MARITAL_LABELS,
@@ -18,11 +19,7 @@ import {
   STAFF_LIMITS,
   USER_LIMITS,
   type ReviewSection,
-  type StaffDetailField,
-  type StaffDetails,
-  type StaffEmployer,
-  type StaffReference,
-} from "../contract";
+} from "../staff-fields";
 import {
   COUNTRIES,
   EDUCATION_LEVELS,
