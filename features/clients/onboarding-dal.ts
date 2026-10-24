@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UpstreamError } from "@/lib/upstream-error";
+import { isUuid } from "@/lib/uuid";
 import {
   clientBusinessFrom,
   clientBusinessToJson,
@@ -17,11 +18,9 @@ import {
 // Issuing and withdrawing use the secret key: the functions are server-only because they take token hashes,
 // and each checks the actor itself. Callers have already checked the session and read the client under RLS.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** The latest link and the client's submission and email times, or null when the client isn't visible. */
 export async function getOnboardingStatus(clientId: string): Promise<OnboardingStatus | null> {
-  if (!UUID.test(clientId)) return null;
+  if (!isUuid(clientId)) return null;
   const supabase = await createClient();
   const [client, links] = await Promise.all([
     supabase.from("clients").select("onboarding_submitted_at, registration_email_sent_at").eq("id", clientId).maybeSingle(),

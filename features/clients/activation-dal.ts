@@ -2,17 +2,16 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
+import { isUuid } from "@/lib/uuid";
 import type { Payment } from "./activation-contract";
 
 // Payments and activation. Payments are read with the signed-in session (RLS: the client's Closer, the client,
 // admins with 2FA). Writes go through server-only functions with the secret key — each checks the actor is the
 // client's Closer or an admin of its tenant; callers have already checked the session and read the client under RLS.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** A client's payments, newest first. */
 export async function listPayments(clientId: string): Promise<Payment[]> {
-  if (!UUID.test(clientId)) return [];
+  if (!isUuid(clientId)) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("payments")
