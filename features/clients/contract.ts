@@ -364,3 +364,14 @@ export type ClientPacketSummary = {
   reviewIssues: ClientReviewSection[];
   reviewNote: string | null;
 };
+
+/** A client as their assigned VA sees them: who to work with and when, nothing about billing or onboarding. */
+export type AssignedClient = {
+  id: string;
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  timezone: string | null;
+  hoursPerWeek: number | null;
+  startedAt: string;
+};

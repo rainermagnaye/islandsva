@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
+import type { AssignedClient } from "./contract";
 
 // A client's VA. Read and written with the signed-in session: admins with 2FA create and end assignments, a VA
 // reads their own, a client their own record's (RLS). The database allows one active assignment per client and
@@ -60,4 +61,29 @@ export async function getVaFirstName(vaId: string) {
   if (error) throw new UpstreamError("supabase", `Reading the VA's name failed (${error.code})`);
   const first = data?.full_name.trim().split(/\s+/)[0];
   return first || null;
+}
+
+/**
+ * The VA's active clients, newest assignment first. Signed-in session: RLS lets a VA read only their own
+ * assignments and the clients behind them; the va_id filter keeps it to them even for a reader with more access.
+ */
+export async function listAssignedClients(vaId: string): Promise<AssignedClient[]> {
+  if (!isUuid(vaId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("client_va_assignments")
+    .select("started_at, client:clients!inner(id, company_name, contact_name, contact_email, timezone, hours_per_week)")
+    .eq("va_id", vaId)
+    .eq("status", "active")
+    .order("started_at", { ascending: false });
+  if (error) throw new UpstreamError("supabase", `Listing assigned clients failed (${error.code})`);
+  return data.map(({ started_at, client }) => ({
+    id: client.id,
+    companyName: client.company_name,
+    contactName: client.contact_name,
+    contactEmail: client.contact_email,
+    timezone: client.timezone,
+    hoursPerWeek: client.hours_per_week,
+    startedAt: started_at,
+  }));
 }
