@@ -1,112 +1,56 @@
 import "server-only";
 import { site } from "@/content/site";
-import { env } from "@/lib/env";
+import { sendPlainEmail } from "@/lib/email";
 
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" });
 
 /**
- * The onboarding form link, to the client's contact email, via Resend's REST API (no Supabase mailer, so it
- * works before custom SMTP). Plain text, so names are never interpreted as HTML. Returns false (and logs
- * without the address or link) when email isn't configured, unreachable or refused; the Closer can still copy the link.
+ * The onboarding form link, to the client's contact email. Returns false when it doesn't go out; the link already
+ * exists, so the Closer can still copy it.
  */
 export async function sendOnboardingEmail(message: { to: string; contactName: string; companyName: string; link: string; expiresAt: string }) {
-  const apiKey = env.resendApiKey();
-  const from = env.emailFrom();
-  if (!apiKey || !from) {
-    console.warn("Onboarding email skipped: RESEND_API_KEY or EMAIL_FROM is not set");
-    return false;
-  }
-
-  const text = [
-    `Hi ${message.contactName},`,
-    "",
-    `Thanks for choosing ${site.name}. To set up ${message.companyName}, please fill in your onboarding form:`,
-    "",
-    message.link,
-    "",
-    `It takes a few minutes. The link works once and expires on ${day.format(new Date(message.expiresAt))}.`,
-    `If it has expired, reply to your contact at ${site.name} and we'll send a new one.`,
-    "",
-    `— The ${site.name} team`,
-  ].join("\n");
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({ from, to: [message.to], subject: `Your ${site.name} onboarding form`, text }),
-    });
-    if (!res.ok) {
-      console.error("Resend error (onboarding email)", { status: res.status });
-      return false;
-    }
-    return true;
-  } catch (error) {
-    // The link already exists: report "not emailed" so the Closer can copy it, rather than failing the send.
-    console.error("Onboarding email request failed", { error: error instanceof Error ? error.name : "unknown" });
-    return false;
-  }
+  return sendPlainEmail("Onboarding email", {
+    to: message.to,
+    subject: `Your ${site.name} onboarding form`,
+    text: [
+      `Hi ${message.contactName},`,
+      "",
+      `Thanks for choosing ${site.name}. To set up ${message.companyName}, please fill in your onboarding form:`,
+      "",
+      message.link,
+      "",
+      `It takes a few minutes. The link works once and expires on ${day.format(new Date(message.expiresAt))}.`,
+      `If it has expired, reply to your contact at ${site.name} and we'll send a new one.`,
+      "",
+      `— The ${site.name} team`,
+    ].join("\n"),
+  });
 }
 
-/** Tells the client's Closer that the onboarding form is in. Plain text; no client data beyond the company name. */
+/** Tells the client's Closer that the onboarding form is in. No client data beyond the company name. */
 export async function sendOnboardingSubmittedEmail(message: { to: string; name: string; companyName: string; profileUrl: string }) {
-  const apiKey = env.resendApiKey();
-  const from = env.emailFrom();
-  if (!apiKey || !from) {
-    console.warn("Onboarding notice skipped: RESEND_API_KEY or EMAIL_FROM is not set");
-    return false;
-  }
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({
-        from,
-        to: [message.to],
-        subject: `${message.companyName} sent their onboarding form`,
-        text: [`Hi ${message.name || "there"},`, "", `${message.companyName} has filled in their onboarding form. Check the details and record their payment:`, "", message.profileUrl].join("\n"),
-      }),
-    });
-    if (!res.ok) console.error("Resend error (onboarding notice)", { status: res.status });
-    return res.ok;
-  } catch (error) {
-    console.error("Onboarding notice request failed", { error: error instanceof Error ? error.name : "unknown" });
-    return false;
-  }
+  return sendPlainEmail("Onboarding notice", {
+    to: message.to,
+    subject: `${message.companyName} sent their onboarding form`,
+    text: [`Hi ${message.name || "there"},`, "", `${message.companyName} has filled in their onboarding form. Check the details and record their payment:`, "", message.profileUrl].join("\n"),
+  });
 }
 
-/** The client's account email after activation: a single-use link to choose a password. Plain text. */
+/** The client's account email after activation: a single-use link to choose a password. */
 export async function sendAccountEmail(message: { to: string; contactName: string; companyName: string; link: string }) {
-  const apiKey = env.resendApiKey();
-  const from = env.emailFrom();
-  if (!apiKey || !from) {
-    console.warn("Account email skipped: RESEND_API_KEY or EMAIL_FROM is not set");
-    return false;
-  }
-  const text = [
-    `Hi ${message.contactName},`,
-    "",
-    `${message.companyName} is all set up with ${site.name}. Choose a password to open your dashboard:`,
-    "",
-    message.link,
-    "",
-    "The link works once and expires in 24 hours. If it has expired, ask your Islands VA contact to send a new one.",
-    "",
-    `— The ${site.name} team`,
-  ].join("\n");
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({ from, to: [message.to], subject: `Your ${site.name} account is ready`, text }),
-    });
-    if (!res.ok) console.error("Resend error (account email)", { status: res.status });
-    return res.ok;
-  } catch (error) {
-    console.error("Account email request failed", { error: error instanceof Error ? error.name : "unknown" });
-    return false;
-  }
+  return sendPlainEmail("Account email", {
+    to: message.to,
+    subject: `Your ${site.name} account is ready`,
+    text: [
+      `Hi ${message.contactName},`,
+      "",
+      `${message.companyName} is all set up with ${site.name}. Choose a password to open your dashboard:`,
+      "",
+      message.link,
+      "",
+      "The link works once and expires in 24 hours. If it has expired, ask your Islands VA contact to send a new one.",
+      "",
+      `— The ${site.name} team`,
+    ].join("\n"),
+  });
 }
