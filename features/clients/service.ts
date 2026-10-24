@@ -1,9 +1,12 @@
 import "server-only";
 import { packages } from "@/content/packages";
-import { adminClientHref, closerClientHref, onboardingHref } from "@/content/routes";
+import { adminClientHref, appRoutes, closerClientHref, onboardingHref } from "@/content/routes";
+import { clientSignInLink, createClientLogin, discardClientLogin } from "@/features/users/service";
+import { activateClientRecord, getClientLoginEmail, recordManualPayment, voidPayment } from "./activation-dal";
+import type { ManualPaymentInput } from "./activation-validation";
 import { site } from "@/content/site";
 import type { ClientBusiness, ClientDetail } from "./contract";
-import { sendOnboardingEmail, sendOnboardingSubmittedEmail } from "./email";
+import { sendAccountEmail, sendOnboardingEmail, sendOnboardingSubmittedEmail } from "./email";
 import { getClientCreator, getInvitation, issueOnboardingLink, markOnboardingEmailSent, revokeOnboardingLink, submitOnboarding } from "./onboarding-dal";
 import { createOnboardingToken, hashOnboardingToken } from "./onboarding-token";
 import type { OnboardingInput } from "./onboarding-validation";
@@ -92,4 +95,52 @@ export async function notifyOnboardingSubmitted(clientId: string) {
     // A client converted by an admin has no Closer: send them to the admin profile instead.
     profileUrl: new URL(creator.isCloser ? closerClientHref(clientId) : adminClientHref(clientId), site.url).toString(),
   });
+}
+
+/** A payment received outside the app (bank transfer, card terminal…), recorded by the Closer or an admin. */
+export async function markClientPaid(input: ManualPaymentInput, actorId: string) {
+  return recordManualPayment(input.clientId, actorId, input);
+}
+
+export async function voidClientPayment(paymentId: string, actorId: string) {
+  return voidPayment(paymentId, actorId);
+}
+
+const signInLink = (tokenHash: string, type: "invite" | "recovery") =>
+  new URL(`${appRoutes.authConfirm}?token_hash=${encodeURIComponent(tokenHash)}&type=${type}`, site.url).toString();
+
+/**
+ * Activation: creates the client's login (no Supabase email), then the database grants the client role, links the
+ * login and marks the client active in one transaction. If the database refuses (form not in, no payment…), the
+ * new login is deleted again. The account email carries a single-use link to choose a password; the link is never
+ * shown to staff, because it signs in as the client.
+ */
+export async function activateClientAccount(client: Pick<ClientDetail, "id" | "contactEmail" | "contactName" | "companyName">, actorId: string) {
+  const login = await createClientLogin(client.contactEmail, client.contactName);
+  if (!login.ok) return { ok: false as const, reason: login.reason === "exists" ? ("login_taken" as const) : ("rate" as const) };
+
+  let activated: Awaited<ReturnType<typeof activateClientRecord>>;
+  try {
+    activated = await activateClientRecord(client.id, login.userId, actorId);
+  } catch (error) {
+    await discardClientLogin(login.userId).catch((cleanup: unknown) => console.error("Orphaned client login", { userId: login.userId, cleanup }));
+    throw error;
+  }
+  if (!activated.ok) {
+    await discardClientLogin(login.userId).catch((cleanup: unknown) => console.error("Orphaned client login", { userId: login.userId, cleanup }));
+    return activated;
+  }
+
+  const emailed = await sendAccountEmail({ to: client.contactEmail, contactName: client.contactName, companyName: client.companyName, link: signInLink(login.tokenHash, "invite") });
+  return { ok: true as const, emailed };
+}
+
+/** Sends an active client a fresh sign-in link (for an expired or lost account email). */
+export async function resendClientAccountEmail(client: Pick<ClientDetail, "id" | "companyName">) {
+  const login = await getClientLoginEmail(client.id);
+  if (!login) return { ok: false as const, reason: "not_pending" as const };
+  const link = await clientSignInLink(login.email);
+  if (!link.ok) return { ok: false as const, reason: "rate" as const };
+  const emailed = await sendAccountEmail({ to: login.email, contactName: login.name, companyName: client.companyName, link: signInLink(link.tokenHash, "recovery") });
+  return { ok: true as const, emailed };
 }

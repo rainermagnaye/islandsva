@@ -99,6 +99,32 @@ export async function inviteAuthUser(email: string, fullName: string, redirectTo
   return { ok: true as const, userId: data.user.id };
 }
 
+/**
+ * Creates a client's login without Supabase sending anything: we email our own /auth/confirm link with the
+ * returned token hash (through Resend), so it works before custom SMTP and never uses the hash-link flow.
+ * Secret key: Auth admin call, made only by the activation service after the actor is authorized.
+ */
+export async function createLoginLink(email: string, fullName: string) {
+  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "invite", email, options: { data: { full_name: fullName } } });
+  if (error) {
+    const reason = classifyInviteError(error, false);
+    if (reason) return { ok: false as const, reason };
+    throw new UpstreamError("supabase-auth", `Creating a login failed: ${error.code ?? error.message}`);
+  }
+  return { ok: true as const, userId: data.user.id, tokenHash: data.properties.hashed_token };
+}
+
+/** A fresh sign-in link for an existing login (password reset type), to resend the account email. Secret key: Auth admin call. */
+export async function createRecoveryLink(email: string) {
+  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "recovery", email });
+  if (error) {
+    const reason = classifyInviteError(error, false);
+    if (reason) return { ok: false as const, reason };
+    throw new UpstreamError("supabase-auth", `Creating a sign-in link failed: ${error.code ?? error.message}`);
+  }
+  return { ok: true as const, tokenHash: data.properties.hashed_token };
+}
+
 /** Soft deactivate. profiles has no update policy, so this uses the secret key after the admin check. */
 export async function setAccountInactive(userId: string) {
   const { error } = await createAdminClient().from("profiles").update({ status: "inactive" }).eq("id", userId);

@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { adminClientHref } from "@/content/routes";
-import { CLIENT_PROFILE_TABS, clientRegistrationSteps, type ClientDetail, type ClientNote, type ClientProfileTab, type OnboardingStatus } from "../contract";
+import type { Payment } from "../activation-contract";
+import { CLIENT_PROFILE_TABS, clientRegistrationSteps, progressOf, type ClientDetail, type ClientNote, type ClientProfileTab, type OnboardingStatus } from "../contract";
 import { ClientActions } from "./client-actions";
 import { ClientCompanyForm } from "./client-company-form";
 import { ClientNotes } from "./client-notes";
+import { ActivationPanel } from "./activation-panel";
 import { OnboardingPanel } from "./onboarding-panel";
 import { ClientConsents, ClientInvoices, ClientProfileView, ClientStatusBadge, ClientStepper } from "./client-profile-view";
 
@@ -16,17 +18,19 @@ export function ClientProfile({
   client,
   notes,
   onboarding,
+  payments,
   tab,
   editing,
 }: {
   client: ClientDetail;
   notes: readonly ClientNote[];
   onboarding: OnboardingStatus;
+  payments: readonly Payment[];
   tab: ClientProfileTab;
   editing: boolean;
 }) {
   const router = useRouter();
-  const steps = clientRegistrationSteps(client.business);
+  const steps = clientRegistrationSteps(client.business, progressOf(client, payments));
   const showEditor = editing && tab === "overview";
 
   return (
@@ -44,6 +48,7 @@ export function ClientProfile({
 
       <ClientStepper steps={steps} />
       <OnboardingPanel clientId={client.id} status={onboarding} canSend={client.status === "pending" && !client.disabledAt} />
+      <ActivationPanel client={client} payments={payments} />
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
         <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />

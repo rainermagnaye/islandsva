@@ -6,8 +6,10 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card } from "@/components/ui/card";
 import { appRoutes } from "@/content/routes";
 import { ClientProfileView, ClientStatusBadge, ClientStepper } from "@/features/clients/components/client-profile-view";
+import { listPayments } from "@/features/clients/activation-dal";
+import { ActivationPanel } from "@/features/clients/components/activation-panel";
 import { OnboardingPanel } from "@/features/clients/components/onboarding-panel";
-import { clientRegistrationSteps } from "@/features/clients/contract";
+import { clientRegistrationSteps, progressOf } from "@/features/clients/contract";
 import { getClient } from "@/features/clients/dal";
 import { getOnboardingStatus } from "@/features/clients/onboarding-dal";
 import { parseClientId } from "@/features/clients/validation";
@@ -28,7 +30,7 @@ async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, 
   const { id } = await params;
   if (!parseClientId({ clientId: id }).ok) notFound();
   // RLS: a Closer reads only the clients they created, so anyone else's id is a 404.
-  const [client, onboarding] = await Promise.all([getClient(id), getOnboardingStatus(id)]);
+  const [client, onboarding, payments] = await Promise.all([getClient(id), getOnboardingStatus(id), listPayments(id)]);
   if (!client || !onboarding) notFound();
 
   return (
@@ -44,8 +46,9 @@ async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, 
           </h1>
           <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </Card>
-        <ClientStepper steps={clientRegistrationSteps(client.business)} />
+        <ClientStepper steps={clientRegistrationSteps(client.business, progressOf(client, payments))} />
         <OnboardingPanel clientId={client.id} status={onboarding} canSend={client.status === "pending" && !client.disabledAt} />
+        <ActivationPanel client={client} payments={payments} />
         <ClientProfileView client={client} />
       </div>
     </Workspace>

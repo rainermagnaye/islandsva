@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
+import { createLoginLink, createRecoveryLink, deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -86,4 +86,19 @@ export async function confirmStaffProfile(userId: string) {
   if (!profile || profile.reviewStatus !== "pending_review") return { ok: false as const, message: "This profile isn't waiting for review." };
   await setStaffReview(userId, "approved", [], null);
   return { ok: true as const };
+}
+
+/** For client activation (features/clients): a new login and the token hash for its first sign-in link. */
+export async function createClientLogin(email: string, fullName: string) {
+  return createLoginLink(email, fullName);
+}
+
+/** For resending a client's account email: a fresh sign-in link for their existing login. */
+export async function clientSignInLink(email: string) {
+  return createRecoveryLink(email);
+}
+
+/** Undoes createClientLogin when activation is refused, so no account is left without a client. */
+export async function discardClientLogin(userId: string) {
+  await deleteAuthUser(userId);
 }
