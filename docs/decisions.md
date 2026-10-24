@@ -14,6 +14,7 @@ Architecture decisions and why they were made. Change one by PR, updating the ru
 | PGlite for database tests | Real Postgres without Docker; runs in CI | If tests need Supabase services beyond Postgres |
 | Static CSP without nonces | Keeps public pages static | Portal pages, if a script-injection risk appears there |
 | Theme follows the OS, no toggle | No script or cookie; public pages stay static | — |
+| First-load JS: 160 KB per public and sign-in page, 170 KB per signed-in portal page | Visitors and Lighthouse only meet public and sign-in pages; portal pages are behind sign-in and some carry long forms (the VA profile, filled in once per VA, put `/va` at 166.5 KB) | When the staff profile form is server-rendered with small client islands — then try lowering the portal budget again |
 | Rate limiting in Vercel Firewall | No extra service | When per-user limits are needed |
 | `features/` + shared `lib/` | Each business area in one place as the app grows | — |
 | Invite-only accounts; deactivate, never delete | B2B: staff are invited, Closers create clients; restrict foreign keys keep history resolvable | — |
