@@ -13,8 +13,18 @@ export function LogoStrip({ brands }: { brands: readonly Brand[] }) {
           return (
             <li key={`${brand.id}-${index}`} aria-hidden={clone || undefined} className={clone ? "motion-reduce:hidden" : undefined}>
               {/* The file is already a small transparent PNG. The optimizer paints a white box behind it. */}
+              {/* Lazy: an eager <img> gets a high-priority preload from React, so every logo (~1.6 MB) competed
+                  with the hero on first load. width/height reserve each logo's box before it arrives. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brand.logo} alt={clone ? "" : brand.name} className="h-12 w-auto max-w-40 object-contain" />
+              <img
+                src={brand.logo}
+                alt={clone ? "" : brand.name}
+                width={brand.width}
+                height={brand.height}
+                loading="lazy"
+                decoding="async"
+                className="h-12 w-auto max-w-40 object-contain"
+              />
             </li>
           );
         })}
