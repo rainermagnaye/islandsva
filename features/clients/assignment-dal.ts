@@ -1,4 +1,5 @@
 import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
@@ -46,4 +47,17 @@ export async function endActiveAssignment(clientId: string) {
     .select("id");
   if (error) throw new UpstreamError("supabase", `Ending the assignment for ${clientId} failed (${error.code})`);
   return data.length > 0;
+}
+
+/**
+ * The assigned VA's first name, for the client's dashboard. Secret key: a client can't read staff profiles under
+ * RLS. Called only with a va_id from an assignment the signed-in client just read under RLS, and returns only
+ * the first name.
+ */
+export async function getVaFirstName(vaId: string) {
+  if (!isUuid(vaId)) return null;
+  const { data, error } = await createAdminClient().from("profiles").select("full_name").eq("id", vaId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading the VA's name failed (${error.code})`);
+  const first = data?.full_name.trim().split(/\s+/)[0];
+  return first || null;
 }
