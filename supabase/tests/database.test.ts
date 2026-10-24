@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
@@ -298,10 +299,11 @@ describe("clients: who can write", () => {
     await asServer("update public.clients set disabled_at = null where id in ($1, $2)", [clientB, clientC]);
   });
 
-  it("stores business details and when the registration email went out", async () => {
-    expect(
-      await asUser(asAdmin, "update public.clients set business = '{\"city\":\"Austin\"}'::jsonb, registration_email_sent_at = now() where id = $1 returning id", [clientC]),
-    ).toHaveLength(1);
+  it("stores business details; only the server records when the registration email went out", async () => {
+    expect(await asUser(asAdmin, "update public.clients set business = '{\"city\":\"Austin\"}'::jsonb where id = $1 returning id", [clientC])).toHaveLength(1);
+    await expect(asUser(asAdmin, "update public.clients set registration_email_sent_at = now() where id = $1", [clientC])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asCloser, "update public.clients set registration_email_sent_at = now() where id = $1", [clientB])).rejects.toThrow(/permission denied/);
+    expect(await asServer("update public.clients set registration_email_sent_at = now() where id = $1 returning id", [clientC])).toHaveLength(1);
     await expect(asUser(asAdmin, "update public.clients set business = '[]'::jsonb where id = $1", [clientC])).rejects.toThrow(/clients_business_object/);
     await expect(asUser(asAdmin, "update public.clients set business = jsonb_build_object('about', repeat('a', 5000)) where id = $1", [clientC])).rejects.toThrow(/clients_business_object/);
     expect(await asUser(asVa, "update public.clients set business = '{}'::jsonb where id = $1 returning id", [clientC])).toHaveLength(0);
@@ -876,5 +878,159 @@ describe("tenants", () => {
   it("tenant helpers can't be called by visitors", async () => {
     await expect(as("anon", {}, "select private.tenant_id()")).rejects.toThrow(/permission denied/);
     await expect(asUser(asClient, "select private.assign_tenant()")).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("client onboarding links", () => {
+  // Fresh clients so earlier blocks can't leave them disabled or linked. Links are issued and used by the server
+  // (secret key); signed-in users only read their status.
+  const OTHER_ADMIN = "00000000-0000-0000-0000-0000000000b1"; // the second tenant's admin (see "tenants")
+  const SUPER = "00000000-0000-0000-0000-000000000010";
+  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+  let mine = "";
+  let theirs = "";
+  let spare = "";
+  const newClient = async (name: string, closer: string) =>
+    (await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'Contact', $2, $3) returning id",
+      [name, `${name.toLowerCase()}@onboard.co`, closer],
+    ))[0].id;
+  const issue = (client: string, by: string, value: string) =>
+    asServer<{ link_id: string; link_expires_at: string }>("select * from public.issue_onboarding_link($1, $2, $3)", [client, by, sha(value)]);
+  const submit = (value: string, consent = true, billing = JSON.stringify({ name: "Acme Ltd" })) =>
+    asServer<{ id: string }>(
+      "select public.submit_onboarding($1, 'Ada Lovelace', ' +1 555 0100 ', $2::jsonb, $3::jsonb, $4) as id",
+      [sha(value), JSON.stringify({ city: "Austin" }), billing, consent],
+    );
+  const ageLinks = (client: string) =>
+    asServer("update public.client_onboarding_links set created_at = created_at - interval '3 minutes' where client_id = $1", [client]);
+
+  beforeAll(async () => {
+    mine = await newClient("Onboard", CLOSER);
+    theirs = await newClient("Elsewhere", CLOSER2);
+    spare = await newClient("Spare", CLOSER);
+  });
+
+  it("only the server can issue, revoke or use a link", async () => {
+    await expect(asUser(asCloser, "select * from public.issue_onboarding_link($1, $2, $3)", [mine, CLOSER, sha("x")])).rejects.toThrow(/permission denied for function/);
+    await expect(asUser(asAdmin, "select public.revoke_onboarding_link($1, $2)", [mine, ADMIN])).rejects.toThrow(/permission denied for function/);
+    await expect(as("anon", {}, "select public.submit_onboarding($1, 'A', '', '{}', '{}', true)", [sha("x")])).rejects.toThrow(/permission denied for function/);
+    const [grants] = await asServer<Record<string, boolean>>(`
+      select
+        bool_or(has_function_privilege(r, 'public.issue_onboarding_link(uuid, uuid, text)', 'execute')) as issue,
+        bool_or(has_function_privilege(r, 'public.revoke_onboarding_link(uuid, uuid)', 'execute')) as revoke,
+        bool_or(has_function_privilege(r, 'public.submit_onboarding(text, text, text, jsonb, jsonb, boolean)', 'execute')) as submit
+      from unnest(array['anon', 'authenticated']) as r`);
+    expect(grants).toEqual({ issue: false, revoke: false, submit: false });
+  });
+
+  it("the client's Closer or an admin of the tenant issues a link, valid for 7 days; others are refused", async () => {
+    const [link] = await issue(mine, CLOSER, "first");
+    const days = (new Date(link.link_expires_at).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThanOrEqual(7);
+    await expect(issue(theirs, CLOSER, "nope")).rejects.toThrow(/only the client's Closer or an admin/);
+    await expect(issue(mine, VA, "nope")).rejects.toThrow(/only the client's Closer or an admin/);
+    await expect(issue(theirs, ADMIN, "admin-sent")).resolves.toHaveLength(1);
+    await expect(asServer("select * from public.issue_onboarding_link($1, $2, 'not-a-hash')", [spare, CLOSER])).rejects.toThrow(/64 hex/);
+  });
+
+  it("a new link revokes the old one, never within two minutes, and only one link is open at a time", async () => {
+    await expect(issue(mine, CLOSER, "too-soon")).rejects.toThrow(/sent moments ago/);
+    await ageLinks(mine);
+    await issue(mine, CLOSER, "second");
+    const rows = await asServer<{ token_hash: string; revoked_at: string | null }>(
+      "select token_hash, revoked_at from public.client_onboarding_links where client_id = $1",
+      [mine],
+    );
+    expect(rows.find((r) => r.token_hash === sha("first"))?.revoked_at).not.toBeNull();
+    expect(rows.filter((r) => r.revoked_at === null)).toHaveLength(1);
+    await expect(
+      asServer("insert into public.client_onboarding_links (client_id, token_hash, created_by) values ($1, $2, $3)", [mine, sha("third"), CLOSER]),
+    ).rejects.toThrow(/client_onboarding_links_one_open_idx/);
+  });
+
+  it("links go only to pending, enabled clients", async () => {
+    await asServer("update public.clients set disabled_at = now() where id = $1", [spare]);
+    await expect(issue(spare, CLOSER, "disabled")).rejects.toThrow(/disabled/);
+    await asServer("update public.clients set disabled_at = null, status = 'inactive' where id = $1", [spare]);
+    await expect(issue(spare, CLOSER, "inactive")).rejects.toThrow(/already inactive/);
+    await asServer("update public.clients set status = 'pending' where id = $1", [spare]);
+  });
+
+  it("the Closer and admins with 2FA read a link's status, never its hash; nobody else reads or writes links", async () => {
+    const status = "select id from public.client_onboarding_links where client_id = $1";
+    expect((await asUser(asCloser, status, [mine])).length).toBeGreaterThan(0);
+    expect(await asUser(asCloser2, status, [mine])).toEqual([]);
+    expect((await asUser(asAdmin, status, [mine])).length).toBeGreaterThan(0);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), status, [mine])).toEqual([]);
+    expect(await asUser(asClient, status, [mine])).toEqual([]);
+    expect(await asUser(asVa, status, [mine])).toEqual([]);
+    await expect(as("anon", {}, status, [mine])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asCloser, "select token_hash from public.client_onboarding_links")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "select * from public.client_onboarding_links")).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(asCloser, "insert into public.client_onboarding_links (client_id, token_hash, created_by) values ($1, $2, $3)", [spare, sha("mine"), CLOSER]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "update public.client_onboarding_links set revoked_at = now() where client_id = $1", [mine])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "delete from public.client_onboarding_links where client_id = $1", [mine])).rejects.toThrow(/permission denied/);
+  });
+
+  it("links stay inside their tenant; a Super Admin with 2FA sees them all", async () => {
+    const [{ id: other }] = await asServer<{ id: string }>("select id from public.tenants where slug = 'other-agency'");
+    const otherAdmin = { ...token(OTHER_ADMIN, ["admin"], "aal2"), app_metadata: { roles: ["admin"], tenant_id: other } };
+    expect(await asUser(otherAdmin, "select id from public.client_onboarding_links")).toEqual([]);
+    await expect(issue(spare, OTHER_ADMIN, "cross-tenant")).rejects.toThrow(/only the client's Closer or an admin/);
+    expect((await asUser(token(SUPER, ["super_admin"], "aal2"), "select id from public.client_onboarding_links where client_id = $1", [mine])).length).toBeGreaterThan(0);
+    const [link] = await asServer<{ tenant_id: string }>("select tenant_id from public.client_onboarding_links where client_id = $1 limit 1", [mine]);
+    const [client] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [mine]);
+    expect(link.tenant_id).toBe(client.tenant_id);
+  });
+
+  it("a revoked or unknown link can't be used, and only the client's Closer or an admin revokes", async () => {
+    await expect(asServer("select public.revoke_onboarding_link($1, $2)", [mine, CLOSER2])).rejects.toThrow(/only the client's Closer or an admin/);
+    expect(await asServer("select public.revoke_onboarding_link($1, $2) as revoked", [theirs, ADMIN])).toEqual([{ revoked: true }]);
+    await expect(submit("admin-sent")).rejects.toThrow(/already used or withdrawn/);
+    await expect(submit("never-issued")).rejects.toThrow(/unknown link/);
+  });
+
+  it("an expired link can't be used", async () => {
+    await issue(spare, CLOSER, "old");
+    await asServer(
+      "update public.client_onboarding_links set created_at = now() - interval '8 days', expires_at = now() - interval '1 day' where token_hash = $1",
+      [sha("old")],
+    );
+    await expect(submit("old")).rejects.toThrow(/expired/);
+  });
+
+  it("a submission needs consent and fitting billing details, writes them once, and never touches the email", async () => {
+    await expect(submit("second", false)).rejects.toThrow(/consent is required/);
+    await expect(submit("second", true, JSON.stringify({ notes: "x".repeat(2100) }))).rejects.toThrow(/clients_billing_object/);
+    await expect(submit("second", true, "[]")).rejects.toThrow(/clients_billing_object/);
+    expect((await submit("second"))[0].id).toBe(mine);
+    const [row] = await asServer<{ contact_name: string; contact_phone: string; contact_email: string; billing: object; consented_at: string | null; onboarding_submitted_at: string | null }>(
+      "select contact_name, contact_phone, contact_email, billing, consented_at, onboarding_submitted_at from public.clients where id = $1",
+      [mine],
+    );
+    expect(row).toMatchObject({ contact_name: "Ada Lovelace", contact_phone: "+1 555 0100", contact_email: "onboard@onboard.co", billing: { name: "Acme Ltd" } });
+    expect(row.consented_at).not.toBeNull();
+    expect(row.onboarding_submitted_at).not.toBeNull();
+    await expect(submit("second")).rejects.toThrow(/already used or withdrawn/);
+  });
+
+  it("signed-in users can't set consent or submission times; Closers and admins may correct billing", async () => {
+    await expect(asUser(asCloser, "update public.clients set consented_at = now() where id = $1", [mine])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "update public.clients set onboarding_submitted_at = now() where id = $1", [mine])).rejects.toThrow(/permission denied/);
+    expect(await asUser(asCloser, "update public.clients set billing = $1::jsonb where id = $2 returning id", [JSON.stringify({ name: "Acme Limited" }), mine])).toHaveLength(1);
+    expect(await asUser(asCloser2, "update public.clients set billing = '{}'::jsonb where id = $1 returning id", [mine])).toHaveLength(0);
+    expect(await asUser(asVa, "update public.clients set billing = '{}'::jsonb where id = $1 returning id", [mine])).toHaveLength(0);
+  });
+
+  it("a Closer creates a client with its package in one step, only as themselves", async () => {
+    const create =
+      "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone, business) values ('Pkg', 'C', 'pkg@onboard.co', $1, 'essentials', 20, 1, 90000, '2026-11-01', 'America/New_York', '{}') returning status";
+    expect(await asUser(asCloser, create, [CLOSER])).toEqual([{ status: "pending" }]);
+    await expect(asUser(asCloser, create, [CLOSER2])).rejects.toThrow(/row-level security/);
+    await expect(asUser(asVa, create, [CLOSER])).rejects.toThrow(/row-level security/);
   });
 });

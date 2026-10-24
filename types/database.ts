@@ -58,9 +58,25 @@ type ClientRow = {
   business: Json;
   registration_email_sent_at: string | null;
   disabled_at: string | null;
+  billing: Json;
+  consented_at: string | null;
+  onboarding_submitted_at: string | null;
   tenant_id: string;
   created_at: string;
   updated_at: string;
+};
+
+/** Signed-in users may read every column except token_hash (column grant); the server reads all. */
+type OnboardingLinkRow = {
+  id: string;
+  client_id: string;
+  tenant_id: string;
+  token_hash: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+  submitted_at: string | null;
+  revoked_at: string | null;
 };
 
 type AssignmentRow = {
@@ -204,6 +220,12 @@ export type Database = {
         Update: Optional<ClientNoteRow>;
         Relationships: [];
       };
+      client_onboarding_links: {
+        Row: OnboardingLinkRow;
+        Insert: InsertOf<OnboardingLinkRow, "client_id" | "token_hash" | "created_by">;
+        Update: Optional<OnboardingLinkRow>;
+        Relationships: [];
+      };
       client_va_assignments: {
         Row: AssignmentRow;
         Insert: InsertOf<AssignmentRow, "client_id" | "va_id">;
@@ -278,6 +300,16 @@ export type Database = {
       };
       record_lead_note: {
         Args: { lead_id: string; body: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
+      // Onboarding: executable by the secret key only.
+      issue_onboarding_link: {
+        Args: { client_id: string; issued_by: string; token_hash: string };
+        Returns: { link_id: string; link_expires_at: string }[];
+      };
+      revoke_onboarding_link: { Args: { client_id: string; revoked_by: string }; Returns: boolean };
+      submit_onboarding: {
+        Args: { token_hash: string; contact_name: string; contact_phone: string; business: Json; billing: Json; consent: boolean };
         Returns: string;
       };
     };
