@@ -89,6 +89,11 @@ export const parseClientDetails = (input: unknown) => parseWith(detailsSchema, i
 
 const idSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }) });
 
+const assignSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }), vaId: z.uuid({ error: "Choose a VA." }) });
+
+/** Assigning a VA: a bad client id is a tampered form; a missing VA is a field error. */
+export const parseVaAssignment = (input: unknown) => parseWith(assignSchema, input, ["vaId"]);
+
 export const parseClientId = (input: unknown) => parseWith(idSchema, input, []);
 
 const noteSchema = z.strictObject({
