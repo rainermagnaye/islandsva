@@ -16,7 +16,7 @@ Rules for the team and AI agents; change them by PR. This file holds everyday ru
 - **Product:** B2B virtual-assistant staffing platform — public site, client/VA portal, agency back office. Scope: `Island-VA-MVP.docx`.
 - **Stack:** Next.js 16 App Router (React 19, TS strict, Tailwind v4, `cacheComponents`, `partialPrefetching`) · Supabase (Singapore) · Vercel · Resend · Cloudflare Turnstile. Runtime deps stay minimal; `zod` and the Supabase packages are server-only and never reach the browser.
 - **Priorities:** secure → correct → maintainable → performant.
-- **Phase:** M2 — auth, role dashboards, admin system (`docs/roadmap.md`). **Build only the current phase.** Not in the MVP: blog, chatbot, client rating, VA mailer, salary deductions, Staff module, native apps, i18n.
+- **Phase:** M3 (Closer onboarding, manual payment, activation) and M5/M6 dashboards for clients, VAs and admins; M4 (Stripe) is paused (`docs/roadmap.md`). **Build only the current phase.** Not in the MVP: blog, chatbot, client rating, VA mailer, salary deductions, Staff module, native apps, i18n.
 - **Domain:** roles Client, VA, Closer (also called lead gen), Admin, plus Super Admin across tenants (a user can hold several). *Tenant* = an agency using the platform; today there is one ("Islands VA"), and every user and record belongs to exactly one. *Lead* = contact-form submission. *Client* = a company record, `pending` until activated; it gets a login only when invited. *Staff* = VA, Closer or Admin. Accounts are invite-only, and deactivated, never deleted.
 
 ## 2. Commands
