@@ -8,7 +8,9 @@ import { clientProfileTab } from "@/features/clients/contract";
 import { ClientProfile } from "@/features/clients/components/client-profile";
 import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
 import { getClient, listClientNotes } from "@/features/clients/dal";
+import { getActiveAssignment } from "@/features/clients/assignment-dal";
 import { getClientPacket } from "@/features/clients/onboarding-dal";
+import { listAssignableVas } from "@/features/users/service";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
 
@@ -26,7 +28,8 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
   await requireRole(["admin"]);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (!parseClientId({ clientId: id }).ok) notFound();
-  const [client, notes] = await Promise.all([getClient(id), listClientNotes(id)]);
+  // Independent reads, in parallel; each runs as the signed-in admin, so RLS applies too.
+  const [client, notes, assignment, vas] = await Promise.all([getClient(id), listClientNotes(id), getActiveAssignment(id), listAssignableVas()]);
   if (!client) notFound();
   // The packet table is server-only. Read it only after this admin can see the client.
   const stored = await getClientPacket(id);
@@ -53,7 +56,7 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
         />
       }
     >
-      <ClientProfile client={client} notes={notes} packet={packet} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
+      <ClientProfile client={client} notes={notes} packet={packet} assignment={assignment} vas={vas} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
     </Workspace>
   );
 }

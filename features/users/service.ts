@@ -3,7 +3,7 @@ import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import type { Role } from "@/lib/auth/roles";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, searchProfiles, setAccountInactive, setStaffReview, staffHasAvatar, staffHasHistory } from "./dal";
+import { deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, listUsers, searchProfiles, setAccountInactive, setStaffReview, staffHasAvatar, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -113,4 +113,13 @@ export async function findStaff(search: string, limit: number) {
 /** The signed-in person is asking whether their own picture is saved. */
 export function ownProfileHasAvatar(userId: string) {
   return staffHasAvatar(userId);
+}
+
+/** For assigning a VA to a client (features/clients): VAs whose account is active and profile approved. Read as the admin (RLS). */
+export async function listAssignableVas() {
+  const users = await listUsers();
+  return users
+    .filter((user) => user.roles.includes("va") && vaPortalOpen(user.status, user.reviewStatus))
+    .map((user) => ({ id: user.id, fullName: user.fullName || user.email, email: user.email }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
