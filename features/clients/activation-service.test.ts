@@ -8,7 +8,7 @@ const dal = vi.hoisted(() => ({
   recordManualPayment: vi.fn(),
   voidPayment: vi.fn(),
 }));
-const email = vi.hoisted(() => ({ sendAccountEmail: vi.fn(async (_message: { to: string; link: string }) => true), sendOnboardingEmail: vi.fn(), sendOnboardingSubmittedEmail: vi.fn() }));
+const email = vi.hoisted(() => ({ sendAccountEmail: vi.fn<(message: { to: string; link: string }) => Promise<boolean>>(async () => true), sendOnboardingEmail: vi.fn(), sendOnboardingSubmittedEmail: vi.fn() }));
 vi.mock("@/features/users/service", () => users);
 vi.mock("./activation-dal", () => dal);
 vi.mock("./email", () => email);
