@@ -1,5 +1,5 @@
 import { COUNTRIES } from "@/content/countries";
-import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type StaffGender } from "./contract";
+import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type StaffGender } from "./staff-fields";
 
 export { COUNTRIES };
 
