@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { deleteAuthUser, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
+import { createLoginLink, createRecoveryLink, deleteAuthUser, discardNewLogin, getLoginEmail, getStaffProfile, getUser, grantRole, inviteAuthUser, setAccountInactive, setStaffReview, staffHasHistory } from "./dal";
 import type { InviteInput } from "./validation";
 
 /**
@@ -86,4 +86,22 @@ export async function confirmStaffProfile(userId: string) {
   if (!profile || profile.reviewStatus !== "pending_review") return { ok: false as const, message: "This profile isn't waiting for review." };
   await setStaffReview(userId, "approved", [], null);
   return { ok: true as const };
+}
+
+/** For client activation (features/clients): a new login and the token hash for its first sign-in link. */
+export async function createClientLogin(email: string, fullName: string) {
+  return createLoginLink(email, fullName);
+}
+
+/** For resending a client's account email: a fresh sign-in link for the login's own email (never a contact field). */
+export async function clientSignInLink(userId: string) {
+  const email = await getLoginEmail(userId);
+  if (!email) return { ok: false as const, reason: "missing" as const };
+  const link = await createRecoveryLink(email);
+  return link.ok ? { ok: true as const, email, tokenHash: link.tokenHash } : link;
+}
+
+/** Undoes createClientLogin when activation is refused: removes only that new, role-less login. */
+export async function discardClientLogin(userId: string) {
+  await discardNewLogin(userId);
 }

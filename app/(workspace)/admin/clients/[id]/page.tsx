@@ -8,6 +8,7 @@ import { clientProfileTab } from "@/features/clients/contract";
 import { ClientProfile } from "@/features/clients/components/client-profile";
 import { getClient, listClientNotes } from "@/features/clients/dal";
 import { getOnboardingStatus } from "@/features/clients/onboarding-dal";
+import { listPayments } from "@/features/clients/activation-dal";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
 
@@ -25,7 +26,7 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
   await requireRole(["admin"]);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (!parseClientId({ clientId: id }).ok) notFound();
-  const [client, notes, onboarding] = await Promise.all([getClient(id), listClientNotes(id), getOnboardingStatus(id)]);
+  const [client, notes, onboarding, payments] = await Promise.all([getClient(id), listClientNotes(id), getOnboardingStatus(id), listPayments(id)]);
   if (!client || !onboarding) notFound();
 
   return (
@@ -41,7 +42,7 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
         />
       }
     >
-      <ClientProfile client={client} notes={notes} onboarding={onboarding} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
+      <ClientProfile client={client} notes={notes} onboarding={onboarding} payments={payments} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
     </Workspace>
   );
 }
