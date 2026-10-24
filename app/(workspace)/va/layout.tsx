@@ -2,7 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import { appRoutes } from "@/content/routes";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
-import { AdminNav } from "../admin/_components/admin-nav";
+import { WorkspaceNav } from "@/components/layout/workspace-nav";
 
 /**
  * VA shell. The menu appears only after an admin confirms the profile. Until then the page is the form.
@@ -23,7 +23,7 @@ async function VaShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="grid min-h-[inherit] md:grid-cols-[76px_minmax(0,1fr)] lg:grid-cols-[264px_minmax(0,1fr)]">
-      <AdminNav
+      <WorkspaceNav
         label="VA"
         items={[
           { href: appRoutes.va, label: "Dashboard", icon: "home", exact: true },

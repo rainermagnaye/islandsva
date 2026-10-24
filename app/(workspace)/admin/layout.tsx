@@ -4,7 +4,7 @@ import { appRoutes, routes } from "@/content/routes";
 import { countNewLeads } from "@/features/leads/dal";
 import { getSessionUser, needsSecondFactor } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
-import { AdminNav } from "./_components/admin-nav";
+import { WorkspaceNav } from "@/components/layout/workspace-nav";
 
 /**
  * Admin shell (the design system's DashboardShell): menu beside the page — a 76px icon rail from 768px,
@@ -15,7 +15,7 @@ import { AdminNav } from "./_components/admin-nav";
 export default function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="grid min-h-[inherit] md:grid-cols-[76px_minmax(0,1fr)] lg:grid-cols-[264px_minmax(0,1fr)]">
-      <AdminNav
+      <WorkspaceNav
         items={[
           { href: appRoutes.admin, label: "Overview", icon: "home", exact: true },
           {

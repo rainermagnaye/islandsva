@@ -7,7 +7,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 ## Folders
 
 - `ui/` — design-system primitives (Button, Form, TextField, FileField, Modal, Badge, Alert, EmptyState, Card, Panel, StatCard, DataTable, Pagination, Breadcrumbs, SearchField, FilterMenu, StepList, …). No data fetching, no feature imports.
-- `layout/` — site shell, nav, footer, logo, portal `Workspace`.
+- `layout/` — site shell, nav, footer, logo, portal `Workspace` and `WorkspaceNav` (the admin, VA and client menu).
 - `marketing/` — public-page sections (Hero, Section, FAQ, testimonials, CTA band, package cards).
 
 ## Tokens and styling
