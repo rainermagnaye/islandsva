@@ -120,6 +120,45 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
   };
 }
 
+/**
+ * A pending client with its agreed package, created as the signed-in Closer: RLS requires created_by to be
+ * them, and the database checks they're an active Closer or admin.
+ */
+export async function insertClient(row: {
+  createdBy: string;
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string | null;
+  packageCode: string;
+  hoursPerWeek: number;
+  termMonths: number;
+  monthlyCents: number;
+  startsOn: string;
+  timezone: string;
+}) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({
+      created_by: row.createdBy,
+      company_name: row.companyName,
+      contact_name: row.contactName,
+      contact_email: row.contactEmail,
+      contact_phone: row.contactPhone,
+      package_code: row.packageCode,
+      hours_per_week: row.hoursPerWeek,
+      term_months: row.termMonths,
+      monthly_cents: row.monthlyCents,
+      starts_on: row.startsOn,
+      timezone: row.timezone,
+    })
+    .select("id")
+    .single();
+  if (error) throw new UpstreamError("supabase", `Creating a client failed: ${error.message}`, { cause: error });
+  return data.id;
+}
+
 /** Writes the business details gathered from the lead. Contact columns stay as conversion set them. */
 export async function saveClientBusiness(clientId: string, business: ClientBusiness) {
   const supabase = await createClient();

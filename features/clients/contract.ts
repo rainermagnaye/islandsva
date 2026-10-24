@@ -24,6 +24,10 @@ export type ClientSummary = {
   createdAt: string;
 };
 
+/** A client a Closer adds by hand: who they are and the agreed package. Limits mirror the clients CHECKs. */
+export const NEW_CLIENT_LIMITS = { companyName: 160, contactName: 120, contactEmail: 254, contactPhone: 40 } as const;
+export type NewClientField = "companyName" | "contactName" | "contactEmail" | "contactPhone" | "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
+
 /** A page of clients, newest first. */
 export type ClientPage = { clients: ClientSummary[]; total: number; page: number; pageCount: number };
 
