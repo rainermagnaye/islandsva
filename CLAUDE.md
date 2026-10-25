@@ -61,7 +61,8 @@ lib/                  shared infrastructure only
   auth/               roles.ts [shared] (roles, homes, safeNextPath) · session.ts [server] (getSessionUser, requireUser, requireRole)
   supabase/           [server] server.ts (visitor session, RLS) · admin.ts (secret key) · proxy.ts (session refresh) · config.ts
   validation.ts       [server] parseWith, emailField, toSubmitResult — building blocks for every validation.ts
-  env · upstream-error · cx
+  email.ts            [server] sendPlainEmail — every outbound email goes through it (Resend REST, plain text)
+  env · upstream-error · uuid (isUuid) · cx
 types/                shared types only (api, form, icon, turnstile, database)
 content/              typed static content; content/routes.ts is the only source of internal URLs
 supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)

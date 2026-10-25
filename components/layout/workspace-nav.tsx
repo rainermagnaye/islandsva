@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { Icon } from "@/components/ui/icon";
 import type { IconName } from "@/types/icon";
-import { NavLink } from "./nav-link";
+import { WorkspaceNavLink } from "./workspace-nav-link";
 
-export type AdminNavItem = {
+export type WorkspaceNavItem = {
   href: string;
   label: string;
   icon: IconName;
@@ -23,13 +23,13 @@ const labelClasses = "flex-1 md:max-lg:sr-only";
 // In the rail the badge sits on the icon's corner; elsewhere at the end of the row.
 const badgeClasses = "md:max-lg:absolute md:max-lg:top-0.5 md:max-lg:right-1.5";
 
-/** Admin menu. Server-rendered and static; only the current-section marker runs on the client. */
-export function AdminNav({
+/** The portal menu (admin, VA, client). Server-rendered and static; only the current-section marker runs on the client. */
+export function WorkspaceNav({
   items,
   footer,
-  label = "Admin",
+  label = "Portal",
 }: {
-  items: readonly AdminNavItem[];
+  items: readonly WorkspaceNavItem[];
   footer?: { href: string; label: string; icon: IconName };
   /** Accessible name for the menu. Not shown as a heading. */
   label?: string;
@@ -54,10 +54,10 @@ export function AdminNav({
                     </Link>
                   }
                 >
-                  <NavLink href={href} exact={exact} title={label} className={linkClasses}>
+                  <WorkspaceNavLink href={href} exact={exact} title={label} className={linkClasses}>
                     {content}
                     {badge && <span className={badgeClasses}>{badge}</span>}
-                  </NavLink>
+                  </WorkspaceNavLink>
                 </Suspense>
               </li>
             );

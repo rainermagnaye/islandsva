@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import { appRoutes } from "@/content/routes";
-import { AdminNav } from "../../admin/_components/admin-nav";
+import { WorkspaceNav } from "@/components/layout/workspace-nav";
 
 /** The VA menu beside the page. Shared by the VA section and My Profile. */
 export function VaShell({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-[inherit] md:grid-cols-[76px_minmax(0,1fr)] lg:grid-cols-[264px_minmax(0,1fr)]">
-      <AdminNav
+      <WorkspaceNav
         label="VA"
         items={[
           { href: appRoutes.va, label: "Dashboard", icon: "home", exact: true },

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
+import { isUuid } from "@/lib/uuid";
 import { leadProfileFrom, leadProfileToJson, type LeadDetail, type LeadEvent, type LeadEventKind, type LeadPage, type LeadStatus, type LeadSummary } from "./contract";
 import type { ConvertNotedInput, LeadEditInput, LeadInput } from "./validation";
 
@@ -42,8 +43,6 @@ export async function markLeadNotified(id: string) {
 const PAGE_SIZE = 25;
 const SUMMARY_COLUMNS = "id, full_name, email, company_name, package_code, status, closer_id, created_at";
 // Lead ids are UUIDs; anything else in a URL is a 404, not a database error.
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 type SummaryRow = {
   id: string;
   full_name: string;
@@ -138,7 +137,7 @@ export async function searchLeads(search: string, limit: number) {
 
 /** One lead with its message, or null if it doesn't exist (or isn't visible to the caller). */
 export async function getLead(id: string): Promise<LeadDetail | null> {
-  if (!UUID.test(id)) return null;
+  if (!isUuid(id)) return null;
   const supabase = await createClient();
   const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, industry, country, message, updated_at, disabled_at, profile`).eq("id", id).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading lead ${id} failed: ${error.message}`, { cause: error });
@@ -157,7 +156,7 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
 
 /** Timeline rows, newest first, with the author's name when this admin can read the profile. */
 export async function listLeadEvents(leadId: string): Promise<LeadEvent[]> {
-  if (!UUID.test(leadId)) return [];
+  if (!isUuid(leadId)) return [];
   const supabase = await createClient();
   const { data, error } = await supabase.from("lead_events").select("id, kind, body, author_id, created_at, attachment_name, attachment_type").eq("lead_id", leadId).order("created_at", { ascending: false });
   if (error) throw new UpstreamError("supabase", `Reading the timeline for ${leadId} failed: ${error.message}`, { cause: error });
@@ -267,7 +266,7 @@ export async function recordLeadFile(kind: "call" | "note", leadId: string, body
 
 /** The file on one timeline row, for an admin who can already read that lead. */
 export async function getLeadAttachment(leadId: string, eventId: string) {
-  if (!UUID.test(leadId) || !UUID.test(eventId)) return null;
+  if (!isUuid(leadId) || !isUuid(eventId)) return null;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("lead_events")
