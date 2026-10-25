@@ -58,3 +58,40 @@ export const isOpenDemo = (state: DemoStatus) => state === "pending" || state ==
 export type VaSlot = { id: string; startsAt: string; booking: { status: DemoStatus; companyName: string } | null };
 
 export type SlotField = "date" | "times";
+
+/** The client's latest demo, as their dashboard shows it. */
+export type ClientDemo = {
+  id: string;
+  status: DemoStatus;
+  startsAt: string;
+  endsAt: string;
+  vaName: string;
+  rejectReason: string | null;
+};
+
+/** One bookable time. Several VAs may offer the same time; the client picks a time, not a person. */
+export type BookableTime = { slotId: string; startsAt: string };
+
+export type BookField = "slotId" | "note";
+
+/** One time per start: the first slot offered at each time (slots arrive sorted by start). */
+export function bookableTimes(slots: readonly { id: string; startsAt: string }[]): BookableTime[] {
+  const seen = new Set<string>();
+  const times: BookableTime[] = [];
+  for (const slot of slots) {
+    if (seen.has(slot.startsAt)) continue;
+    seen.add(slot.startsAt);
+    times.push({ slotId: slot.id, startsAt: slot.startsAt });
+  }
+  return times;
+}
+
+/** A moment in a time zone, for emails and screens ("Tue, Nov 3, 9:30 AM EST"). Falls back to UTC for a bad zone. */
+export function formatInZone(iso: string, timeZone: string | null) {
+  const options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" };
+  try {
+    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: timeZone ?? "UTC" }).format(new Date(iso));
+  } catch {
+    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: "UTC" }).format(new Date(iso));
+  }
+}

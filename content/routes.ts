@@ -27,6 +27,7 @@ export const appRoutes = {
   acceptInvite: "/accept-invite",
   dashboard: dashboardPath,
   client: "/client",
+  clientDemo: "/client/demo",
   va: "/va",
   vaClients: "/va/clients",
   vaCalendar: "/va/calendar",
