@@ -29,6 +29,7 @@ export function StaffProfile({
     invitationSentAt: profile?.invitationSentAt ?? user.createdAt,
     registrationCompletedAt: status === "completed" ? (profile?.registrationCompletedAt ?? null) : null,
     progress: steps.find((step) => step.current)?.label ?? "Invitation sent",
+    timeFormat: profile?.timeFormat ?? "12",
   };
 
   return (
@@ -36,7 +37,6 @@ export function StaffProfile({
       user={user}
       actorId={actorId}
       details={details}
-      resumeType={profile?.resumeType ?? null}
       steps={steps}
       meta={meta}
       hasHistory={hasHistory}

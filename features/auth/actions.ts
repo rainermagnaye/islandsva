@@ -60,6 +60,13 @@ export async function signOut(): Promise<void> {
   redirect(appRoutes.login);
 }
 
+/** Revokes every session for the signed-in person, then returns them to sign-in. */
+export async function signOutEverywhere(): Promise<void> {
+  await requireUser();
+  await attempt(auth.signOutEverywhere);
+  redirect(appRoutes.login);
+}
+
 export async function requestPasswordReset(formData: FormData): Promise<SubmitResult<EmailField>> {
   const parsed = parseEmail(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
@@ -96,6 +103,23 @@ export async function setPassword(formData: FormData): Promise<SubmitResult<NewP
 
   // Straight to their workspace (admins pass through /mfa there); /dashboard only without a role.
   redirect(homeFor(user.roles) ?? appRoutes.dashboard);
+}
+
+/** A signed-in person changing their password from My Profile. They stay on that page. */
+export async function changePassword(formData: FormData): Promise<SubmitResult<NewPasswordField>> {
+  await requireUser();
+  const parsed = parseNewPassword(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  const code = await attempt(() => auth.updatePassword(parsed.value.password));
+  if (code === OUTAGE) return { ok: false, message: UNAVAILABLE };
+  const rejected = code && PASSWORD_REJECTED[code];
+  if (rejected) return { ok: false, message: FIELD_ERRORS, fieldErrors: { password: rejected } };
+  if (code === "reauthentication_needed") {
+    return { ok: false, message: "For your security, sign in again and then change your password." };
+  }
+  if (code) return { ok: false, message: "We couldn't save your password. Please try again." };
+  return { ok: true };
 }
 
 /** Creates the authenticator-app factor on demand; the QR code and secret go to the setup screen. */

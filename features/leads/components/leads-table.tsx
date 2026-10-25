@@ -32,14 +32,14 @@ const LIST_COLUMNS: Column<LeadSummary>[] = [
   { key: "email", label: "Email Address", render: (lead) => clipped(lead.email) },
   { key: "company", label: "Company", render: (lead) => (lead.companyName ? clipped(lead.companyName) : "—") },
   { key: "closer", label: "Assigned Lead", render: (lead) => (lead.closerName ? clipped(lead.closerName) : "—") },
-  { key: "status", label: "Status", render: (lead) => <LeadStatusBadge status={lead.status} /> },
+  { key: "status", label: "Status", nowrap: true, render: (lead) => <LeadStatusBadge status={lead.status} /> },
 ];
 
 const SUMMARY_COLUMNS: Column<LeadSummary>[] = [
   nameColumn,
   { key: "company", label: "Company", render: (lead) => (lead.companyName ? clipped(lead.companyName) : "—") },
   { key: "package", label: "Package", render: (lead) => packageName(lead.packageCode) },
-  { key: "status", label: "Status", render: (lead) => <LeadStatusBadge status={lead.status} /> },
+  { key: "status", label: "Status", nowrap: true, render: (lead) => <LeadStatusBadge status={lead.status} /> },
   { key: "received", label: "Received", render: (lead) => <span className="whitespace-nowrap text-ink-muted">{received.format(new Date(lead.createdAt))}</span> },
 ];
 
@@ -64,6 +64,7 @@ export function LeadsTable({
       columns={variant === "summary" ? SUMMARY_COLUMNS : LIST_COLUMNS}
       rows={leads}
       rowKey={(lead) => lead.id}
+      rowLabel={(lead) => lead.fullName}
       keepHeader={keepHeader}
       empty={empty ?? <EmptyState compact title="No leads yet" description="They appear here as soon as someone sends the discovery call form." />}
     />

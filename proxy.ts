@@ -13,6 +13,7 @@ const SIGNED_IN_ONLY = [
   appRoutes.va,
   appRoutes.closer,
   appRoutes.admin,
+  appRoutes.profile,
   appRoutes.setPassword,
   appRoutes.mfa,
 ];
@@ -65,5 +66,6 @@ export const config = {
     "/va/:path*",
     "/closer/:path*",
     "/admin/:path*",
+    "/profile",
   ],
 };

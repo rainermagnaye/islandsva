@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { compactControlClasses } from "@/components/ui/field";
 import { AttachmentField } from "@/components/ui/attachment-field";
-import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
@@ -48,7 +47,6 @@ export function StaffProfileForm({
   userId,
   email,
   details,
-  resumeType,
   meta,
   profilePic,
   onSaved,
@@ -59,7 +57,6 @@ export function StaffProfileForm({
   userId: string;
   email: string;
   details: StaffDetails;
-  resumeType: string | null;
   meta: StaffProfileMeta;
   profilePic: File | null;
   onSaved?: () => void;
@@ -119,7 +116,9 @@ export function StaffProfileForm({
                 <SkillField defaultValue={details.skills} error={fieldErrors.skills} />
                 <div className="sm:col-span-2 grid gap-3">
                   {details.resumeName ? (
-                    <AttachmentPreview href={`/admin/users/${userId}/resume`} name={details.resumeName} type={resumeType ?? "application/pdf"} />
+                    <a href={`/admin/users/${userId}/resume`} className="type-body-sm text-link">
+                      {details.resumeName}
+                    </a>
                   ) : (
                     <ReadOnly label="Résumé" value="Not provided" />
                   )}

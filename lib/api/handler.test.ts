@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 import { UpstreamError } from "@/lib/upstream-error";
 import { ApiError } from "./errors";
-import { createHandler } from "./handler";
+import { createGetHandler, createHandler } from "./handler";
 import { ok } from "./response";
 
 const URL_ = "http://localhost:3000/api/v1/test";
@@ -66,6 +66,18 @@ describe("createHandler", () => {
     log.mockRestore();
   });
 
+  it("reads a same-origin GET and rejects a foreign origin", async () => {
+    const handler = createGetHandler({}, async () => ok({ ok: true }));
+    const allowed = await handler(new NextRequest(URL_, { headers: { origin: "http://localhost:3000" } }));
+    expect(allowed.status).toBe(200);
+    const browserGet = await handler(new NextRequest(URL_, { headers: { "sec-fetch-site": "same-origin" } }));
+    expect(browserGet.status).toBe(200);
+    const blocked = await handler(new NextRequest(URL_, { headers: { origin: "https://evil.example" } }));
+    expect((await blocked.json()).error.code).toBe("forbidden_origin");
+    const bare = await handler(new NextRequest(URL_));
+    expect((await bare.json()).error.code).toBe("forbidden_origin");
+  });
+
   it("turns any other error into a generic 500", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await respond(async () => {
@@ -74,5 +86,16 @@ describe("createHandler", () => {
     expect(res).toMatchObject({ status: 500, body: { error: { code: "internal_error" } } });
     expect(JSON.stringify(res.body)).not.toContain("SQL");
     log.mockRestore();
+  });
+
+  it("lets a prerender interrupt leave the handler", async () => {
+    const handler = createGetHandler({}, async () => {
+      const error = new Error("bail") as Error & { digest: string };
+      error.digest = "NEXT_PRERENDER_INTERRUPTED";
+      throw error;
+    });
+    await expect(handler(new NextRequest(URL_, { headers: { origin: "http://localhost:3000" } }))).rejects.toMatchObject({
+      digest: "NEXT_PRERENDER_INTERRUPTED",
+    });
   });
 });

@@ -38,8 +38,8 @@ const nextConfig: NextConfig = {
   experimental: {
     agentUpgrade: "security",
     serverActions: {
-      // The staff profile form uploads a résumé of up to 2 MB (STAFF_LIMITS.resumeBytes) with its fields;
-      // the default 1 MB would reject it before the action runs. Every other action stays far below this.
+      // The staff profile form uploads a résumé of up to 2 MB, and the registration packet uploads a
+      // payment proof of the same size. The default 1 MB would reject either before the action runs.
       bodySizeLimit: "3mb",
     },
   },

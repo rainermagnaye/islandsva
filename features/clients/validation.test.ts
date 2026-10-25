@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClientDetails, parseClientFlag, parseClientNote, parseNewClient } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding } from "./validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
 
@@ -132,5 +132,79 @@ describe("parseNewClient", () => {
       ok: false,
       fieldErrors: { companyName: expect.any(String), contactName: expect.any(String) },
     });
+  });
+});
+
+describe("parseOnboarding", () => {
+  const packet = {
+    token: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456",
+    companyName: " Cruz Co ",
+    contactName: " Ana Cruz ",
+    contactPhone: "",
+    industry: "Legal",
+    country: "United States",
+    website: "",
+    jobTitle: "",
+    street: "",
+    city: " Austin ",
+    state: "",
+    zip: "",
+    staffCount: "",
+    about: " Inbox help. ",
+    signature: " Ana Cruz ",
+    consent: "yes",
+  };
+
+  it("keeps the signature and requires the company, the city and the consent", () => {
+    expect(parseOnboarding(packet)).toMatchObject({
+      ok: true,
+      value: { companyName: "Cruz Co", business: { city: "Austin" }, consentName: "Ana Cruz", contactPhone: null },
+    });
+    expect(parseOnboarding({ ...packet, city: " ", consent: "no" })).toMatchObject({
+      ok: false,
+      fieldErrors: { city: "Enter the city.", consent: "Confirm the consent to continue." },
+    });
+  });
+
+  it("treats a bad token as a tampered form", () => {
+    expect(parseOnboarding({ ...packet, token: "short" })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseCreateClient", () => {
+  it("trims the company and contact and keeps a blank phone empty", () => {
+    expect(parseCreateClient({ companyName: " Cruz Co ", contactName: " Ana Cruz ", contactEmail: " Ana@Cruz.co ", contactPhone: "" })).toEqual({
+      ok: true,
+      value: { companyName: "Cruz Co", contactName: "Ana Cruz", contactEmail: "ana@cruz.co", contactPhone: null },
+    });
+  });
+
+  it("requires a company, a name, and an email", () => {
+    expect(parseCreateClient({ companyName: " ", contactName: "", contactEmail: "not-an-email", contactPhone: "" })).toMatchObject({
+      ok: false,
+      fieldErrors: { companyName: "Enter the company name.", contactName: "Enter the contact's name.", contactEmail: expect.any(String) },
+    });
+  });
+
+  it("rejects a field that is not on the form", () => {
+    expect(parseCreateClient({ companyName: "Cruz Co", contactName: "Ana", contactEmail: "ana@cruz.co", status: "active" }).ok).toBe(false);
+  });
+});
+
+describe("parseClientReview", () => {
+  it("requires a section and keeps an optional note", () => {
+    expect(parseClientReview({ clientId, sections: [], note: "" })).toMatchObject({
+      ok: false,
+      fieldErrors: { sections: "Choose a section to send back." },
+    });
+    expect(parseClientReview({ clientId, sections: ["basic"], note: " City is wrong " })).toMatchObject({
+      ok: true,
+      value: { sections: ["basic"], note: "City is wrong" },
+    });
+    expect(parseClientReview({ clientId, sections: ["address"], note: "" })).toMatchObject({ ok: true, value: { note: "" } });
+  });
+
+  it("rejects a section that is not part of the review", () => {
+    expect(parseClientReview({ clientId, sections: ["notes"], note: "" }).ok).toBe(false);
   });
 });

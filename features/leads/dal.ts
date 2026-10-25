@@ -116,6 +116,26 @@ export async function listLeads({
   return { leads: await withClosers(data), total, page, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
+/** A few leads matching a name, email, or company, newest first. Hidden leads stay out. */
+export async function searchLeads(search: string, limit: number) {
+  const supabase = await createClient();
+  const pattern = `%${search}%`;
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, full_name, email, company_name")
+    .is("disabled_at", null)
+    .or(`full_name.ilike."${pattern}",email.ilike."${pattern}",company_name.ilike."${pattern}"`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new UpstreamError("supabase", `Searching leads failed: ${error.message}`, { cause: error });
+  return data.map((row) => ({
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    companyName: row.company_name,
+  }));
+}
+
 /** One lead with its message, or null if it doesn't exist (or isn't visible to the caller). */
 export async function getLead(id: string): Promise<LeadDetail | null> {
   if (!UUID.test(id)) return null;
@@ -267,7 +287,7 @@ function decodeBytea(value: string) {
 }
 
 /** Converts the lead, stores the confirmed package on the client, and writes the remark. */
-export async function convertLeadNoted(input: ConvertNotedInput & { monthlyCents: number }) {
+export async function convertLeadNoted(input: ConvertNotedInput & { monthlyCents: number; timezone: string }) {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("convert_lead_noted", {
     lead_id: input.leadId,

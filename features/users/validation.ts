@@ -8,7 +8,9 @@ import {
   STAFF_LIMITS,
   STAFF_ROLES,
   USER_LIMITS,
+  TIME_FORMATS,
   type InviteField,
+  type MyProfileField,
   type StaffDetails,
   type StaffEmployer,
   type StaffReference,
@@ -108,6 +110,17 @@ const DETAIL_FIELDS = [
 ] as const satisfies readonly (keyof StaffDetailsInput)[];
 
 export const parseStaffDetails = (input: unknown) => parseWith(staffDetailsSchema, input, DETAIL_FIELDS);
+
+/** Phone and time format from My Profile. Name, email and languages are not accepted here. */
+export const parseMyProfile = (input: unknown) =>
+  parseWith(
+    z.strictObject({
+      mobileNumber: staffDetailsSchema.shape.mobileNumber,
+      timeFormat: z.enum(TIME_FORMATS, { error: "Choose a time format." }),
+    }),
+    input,
+    ["mobileNumber", "timeFormat"] satisfies MyProfileField[],
+  );
 
 const jobLine = (max: number) => z.string().trim().max(max, tooLong("that entry", max)).regex(NO_CONTROL_CHARS, tooLong("that entry", max));
 

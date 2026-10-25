@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { appRoutes } from "@/content/routes";
+import { loginPath, setPasswordPath } from "@/content/routes";
 import { establishEmailSession } from "../actions";
 
 // Survives a strict-mode remount, so the one-time tokens are exchanged only once.
@@ -45,7 +45,7 @@ export function EmailLinkSession() {
     listeners.forEach((listener) => listener());
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     void establishEmailSession(tokens.accessToken, tokens.refreshToken).then((result) => {
-      window.location.assign(result.ok ? appRoutes.setPassword : `${appRoutes.login}?error=invalid`);
+      window.location.assign(result.ok ? setPasswordPath : `${loginPath}?error=invalid`);
     });
   }, []);
 

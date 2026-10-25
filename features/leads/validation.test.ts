@@ -195,7 +195,6 @@ describe("parseConvertNoted", () => {
     hoursPerWeek: "40",
     termMonths: "6",
     startsOn: day(7),
-    timezone: "America/New_York",
   };
 
   it("keeps the confirmed package and drops the price, which the server fills in", () => {
@@ -211,7 +210,6 @@ describe("parseConvertNoted", () => {
         hoursPerWeek: 40,
         termMonths: 6,
         startsOn: noted.startsOn,
-        timezone: "America/New_York",
       },
     });
   });

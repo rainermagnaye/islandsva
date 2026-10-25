@@ -93,6 +93,6 @@ export function startingPrice(pkg: Package) {
   return Math.min(...Object.values(pkg.monthlyPrice));
 }
 
-export function formatPrice(minor: number, currency: Package["currency"] = "USD") {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(minor / 100);
+export function formatPrice(minor: number, currency = "USD", display: "symbol" | "code" = "symbol") {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency, currencyDisplay: display, maximumFractionDigits: 0 }).format(minor / 100);
 }

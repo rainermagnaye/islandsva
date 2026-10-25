@@ -1,16 +1,31 @@
 import Link from "next/link";
-import { ROLE_LABELS, workspacesFor } from "@/lib/auth/roles";
+import { adminUserHref, appRoutes } from "@/content/routes";
+import { homeFor, ROLE_LABELS, workspacesFor } from "@/lib/auth/roles";
 import { getSessionUser } from "@/lib/auth/session";
-import { SignOutButton } from "./sign-out-button";
+import { UpstreamError } from "@/lib/upstream-error";
+import { ownProfileHasAvatar } from "@/features/users/service";
+import { getOwnProfileName } from "../dal";
+import { AccountMenus } from "./account-menus";
 
-/** Header controls for the portal: a link per workspace the user can enter, their email, sign out. */
+/** Header controls: workspace links, notifications, then the profile menu. */
 export async function AccountNav() {
   const user = await getSessionUser();
   if (!user) return null;
   const workspaces = workspacesFor(user.roles);
+  let name = "";
+  let hasPhoto = false;
+  try {
+    name = (await getOwnProfileName(user.id)) ?? "";
+    hasPhoto = await ownProfileHasAvatar(user.id);
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Profile name failed", { service: error.service, error });
+  }
+  const staff = user.roles.some((role) => role === "admin" || role === "va" || role === "closer");
+  const profileHref = staff ? appRoutes.profile : (homeFor(user.roles) ?? appRoutes.dashboard);
 
   return (
-    <div className="flex items-center gap-2 sm:gap-4">
+    <div className="flex items-center gap-2">
       {workspaces.length > 1 && (
         <nav aria-label="Workspaces">
           <ul className="m-0 flex list-none gap-1 p-0">
@@ -24,8 +39,14 @@ export async function AccountNav() {
           </ul>
         </nav>
       )}
-      <span className="hidden type-body-sm text-ink-muted md:inline">{user.email}</span>
-      <SignOutButton />
+      <AccountMenus
+        name={name}
+        email={user.email}
+        profileHref={profileHref}
+        photoSrc={hasPhoto ? `${adminUserHref(user.id)}/avatar` : undefined}
+        showSettings={user.roles.includes("admin")}
+        settingsHref={appRoutes.adminSettings}
+      />
     </div>
   );
 }

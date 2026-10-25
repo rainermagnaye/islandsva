@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { USER_LIMITS } from "./contract";
-import { parseInvite, parseReferences, parseStaffDetails, parseStaffId } from "./validation";
+import { parseInvite, parseMyProfile, parseReferences, parseStaffDetails, parseStaffId } from "./validation";
 
 const valid = { email: " Vi@Islandsva.com ", fullName: " Vi Santos ", role: "va" };
 
@@ -27,6 +27,21 @@ describe("parseInvite", () => {
 
   it("rejects unknown keys as a form-level error", () => {
     expect(parseInvite({ ...valid, grantedBy: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseMyProfile", () => {
+  it("keeps the phone and time format, and leaves the name off this form", () => {
+    expect(parseMyProfile({ mobileNumber: " +63 900 ", timeFormat: "24" })).toEqual({
+      ok: true,
+      value: { mobileNumber: "+63 900", timeFormat: "24" },
+    });
+  });
+
+  it("rejects a name or email posted from this page", () => {
+    expect(parseMyProfile({ mobileNumber: "", timeFormat: "12", fullName: "Vi Santos" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseMyProfile({ mobileNumber: "", timeFormat: "12", email: "other@example.com" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseMyProfile({ mobileNumber: "", timeFormat: "am" })).toMatchObject({ ok: false, fieldErrors: { timeFormat: expect.any(String) } });
   });
 });
 

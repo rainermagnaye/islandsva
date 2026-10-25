@@ -1195,3 +1195,126 @@ describe("client payments and activation", () => {
     await asServer("delete from public.roles where user_id = $1", [FRESH]);
   });
 });
+
+
+describe("client onboarding", () => {
+  const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456";
+  const hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const details = {
+    industry: "Legal",
+    country: "United States",
+    city: "Austin",
+    about: "Inbox",
+    website: "",
+    jobTitle: "",
+    street: "",
+    state: "",
+    zip: "",
+    staffCount: "",
+  };
+  let clientId = "";
+
+  beforeAll(async () => {
+    clientId = (
+      await asServer<{ id: string }>(
+        "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Packet Co', 'Nia', 'packet@x.co', $1) returning id",
+        [CLOSER],
+      )
+    )[0].id;
+  });
+
+  it("keeps the link, the signature and the payment file off the API", async () => {
+    await expect(as("anon", {}, "select client_id from public.client_packets")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "select client_id from public.client_packets")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "select public.issue_client_onboarding_link($1, $2, $3)", [clientId, token, hash])).rejects.toThrow(/permission denied/);
+    await expect(as("anon", {}, "select public.issue_client_onboarding_link($1, $2, $3)", [clientId, token, hash])).rejects.toThrow(/permission denied/);
+  });
+
+  it("refuses a token that is not 43 characters", async () => {
+    await expect(asServer("select public.issue_client_onboarding_link($1, 'short', $2)", [clientId, hash])).rejects.toThrow(/bad onboarding token/);
+  });
+
+  it("issues one stable link and then accepts the packet once", async () => {
+    await asServer("select public.issue_client_onboarding_link($1, $2, $3)", [clientId, token, hash]);
+    const [open] = await asServer<{ onboarding_status: string; token: string }>(
+      "select c.onboarding_status, p.token from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+      [clientId],
+    );
+    expect(open).toEqual({ onboarding_status: "pending_customer", token });
+    await expect(asServer("select public.issue_client_onboarding_link($1, $2, $3)", [clientId, token, hash])).rejects.toThrow(/onboarding link already exists/);
+
+    await asServer(
+      "select public.submit_client_packet($1, 'Packet Co', 'Nia', null, $2::jsonb, 'Nia Packet', 'receipt.pdf', 'application/pdf', 'YQ==')",
+      [hash, JSON.stringify(details)],
+    );
+    const [done] = await asServer<{ onboarding_status: string; consent_name: string; size: number }>(
+      "select c.onboarding_status, p.consent_name, octet_length(p.payment_proof) as size from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+      [clientId],
+    );
+    expect(done).toEqual({ onboarding_status: "pending_review", consent_name: "Nia Packet", size: 1 });
+    await expect(
+      asServer("select public.submit_client_packet($1, 'Packet Co', 'Nia', null, $2::jsonb, 'Nia Packet', 'receipt.pdf', 'application/pdf', 'YQ==')", [
+        hash,
+        JSON.stringify(details),
+      ]),
+    ).rejects.toThrow(/registration is not open/);
+    await expect(
+      asServer("select public.submit_client_packet($1, 'Packet Co', 'Nia', null, $2::jsonb, 'Nia Packet', 'receipt.pdf', 'application/pdf', 'YQ==')", [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        JSON.stringify(details),
+      ]),
+    ).rejects.toThrow(/unknown registration link/);
+  });
+
+  it("refuses a link for a disabled client", async () => {
+    const [row] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by, disabled_at) values ('Closed Co', 'Nia', 'closed@x.co', $1, now()) returning id",
+      [CLOSER],
+    );
+    await expect(asServer("select public.issue_client_onboarding_link($1, $2, $3)", [row.id, `${token.slice(0, 42)}Z`, hash])).rejects.toThrow(/client is disabled/);
+  });
+
+  it("keeps review marks until every section is clear, then links the login", async () => {
+    await expect(asUser(asAdmin, "select public.accept_client_review($1)", [clientId])).rejects.toThrow(/permission denied/);
+    await expect(asServer("select public.accept_client_review($1)", ["00000000-0000-0000-0000-000000000099"])).rejects.toThrow(/client not found/);
+    await asServer("select public.save_client_review($1, $2::text[], $3)", [clientId, ["basic", "payment"], "City is wrong"]);
+    const [marked] = await asServer<{ review_issues: string[]; review_note: string; onboarding_status: string }>(
+      "select p.review_issues, p.review_note, c.onboarding_status from public.client_packets p join public.clients c on c.id = p.client_id where c.id = $1",
+      [clientId],
+    );
+    expect(marked.onboarding_status).toBe("changes_requested");
+    expect(marked.review_note).toBe("City is wrong");
+    expect(marked.review_issues.sort()).toEqual(["basic", "payment"]);
+    await expect(asServer("select public.accept_client_review($1)", [clientId])).rejects.toThrow(/registration is not in review/);
+
+    await asServer(
+      "select public.submit_client_packet($1, 'Packet Co', 'Nia', null, $2::jsonb, 'Nia Packet', 'receipt.pdf', 'application/pdf', 'YQ==')",
+      [hash, JSON.stringify(details)],
+    );
+    const [returned] = await asServer<{ onboarding_status: string; review_note: string | null }>(
+      "select c.onboarding_status, p.review_note from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+      [clientId],
+    );
+    expect(returned).toEqual({ onboarding_status: "pending_review", review_note: null });
+
+    await asServer("select public.accept_client_review($1)", [clientId]);
+    const [accepted] = await asServer<{ onboarding_status: string; review_note: string | null }>(
+      "select c.onboarding_status, p.review_note from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+      [clientId],
+    );
+    expect(accepted).toEqual({ onboarding_status: "approved", review_note: null });
+    await expect(asServer("select public.save_client_review($1, $2::text[], $3)", [clientId, ["basic"], "Too late"])).rejects.toThrow(/registration is not in review/);
+
+    const login = "00000000-0000-0000-0000-0000000000aa";
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${login}', 'packet-login@x.co')`);
+    await asServer("insert into public.roles (user_id, role, assigned_by) values ($1, 'client', $2)", [login, ADMIN]);
+    await asServer("select public.record_client_invite($1, $2)", [clientId, login]);
+    const [sent] = await asServer<{ onboarding_status: string; user_id: string; status: string }>(
+      "select onboarding_status, user_id, status from public.clients where id = $1",
+      [clientId],
+    );
+    expect(sent).toEqual({ onboarding_status: "invite_sent", user_id: login, status: "pending" });
+    await expect(asServer("select public.record_client_invite($1, $2)", [clientId, login])).rejects.toThrow(/client already has a login/);
+  });
+});
+

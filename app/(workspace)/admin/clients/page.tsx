@@ -11,7 +11,6 @@ import { ClientsTable } from "@/features/clients/components/clients-table";
 import { ClientsToolbar } from "@/features/clients/components/clients-toolbar";
 import { CLIENT_STATUS_LABELS } from "@/features/clients/contract";
 import { listClients } from "@/features/clients/dal";
-import { LeadTabs } from "@/features/leads/components/lead-tabs";
 import { requireRole } from "@/lib/auth/session";
 import { disabledFrom, filterFrom, listHref, pageFrom, searchFrom } from "../_components/search-params";
 
@@ -46,23 +45,6 @@ async function AdminClients({ searchParams }: Pick<PageProps<"/admin/clients">, 
       </div>
 
       <div className="grid gap-4">
-        <LeadTabs
-          label="Filter clients by status"
-          tabs={[
-            { href: listHref(appRoutes.adminClients, { q }), label: "All Clients", current: !status && !disabled, icon: "users" },
-            ...(
-              [
-                ["pending", "clock"],
-                ["active", "check-circle"],
-              ] as const
-            ).map(([value, icon]) => ({
-              href: listHref(appRoutes.adminClients, { status: value, q }),
-              label: CLIENT_STATUS_LABELS[value],
-              current: status === value,
-              icon,
-            })),
-          ]}
-        />
         <ClientsTable
           keepHeader
           clients={clients}

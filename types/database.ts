@@ -45,6 +45,7 @@ type ClientRow = {
   contact_email: string;
   contact_phone: string | null;
   status: Enum<"client_status">;
+  onboarding_status: Enum<"client_onboarding_status">;
   created_by: string;
   activated_at: string | null;
   notes: string | null;
@@ -96,6 +97,23 @@ type OnboardingLinkRow = {
   revoked_at: string | null;
 };
 
+type ClientPacketRow = {
+  client_id: string;
+  tenant_id: string;
+  token: string;
+  token_hash: string;
+  consent_name: string | null;
+  consent_signed_at: string | null;
+  payment_proof: string | null;
+  payment_proof_name: string | null;
+  payment_proof_type: string | null;
+  review_issues: string[];
+  review_note: string | null;
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type AssignmentRow = {
   id: string;
   client_id: string;
@@ -144,6 +162,7 @@ type StaffProfileRow = {
   return_note: string | null;
   invitation_sent_at: string;
   registration_completed_at: string | null;
+  time_format: "12" | "24";
   tenant_id: string;
   updated_at: string;
 };
@@ -230,6 +249,12 @@ export type Database = {
         Insert: InsertOf<ClientRow, "company_name" | "contact_name" | "contact_email" | "created_by">;
         Update: Optional<ClientRow>;
         Relationships: [ProfilesFk<"clients_user_id_fkey", "user_id">, ProfilesFk<"clients_created_by_fkey", "created_by">];
+      };
+      client_packets: {
+        Row: ClientPacketRow;
+        Insert: InsertOf<ClientPacketRow, "client_id" | "token" | "token_hash">;
+        Update: Optional<ClientPacketRow>;
+        Relationships: [];
       };
       client_notes: {
         Row: ClientNoteRow;
@@ -325,7 +350,6 @@ export type Database = {
         Args: { lead_id: string; body: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
         Returns: string;
       };
-      // Onboarding: executable by the secret key only.
       issue_onboarding_link: {
         Args: { client_id: string; issued_by: string; token_hash: string };
         Returns: { link_id: string; link_expires_at: string }[];
@@ -335,18 +359,36 @@ export type Database = {
         Args: { token_hash: string; contact_name: string; contact_phone: string; business: Json; billing: Json; consent: boolean };
         Returns: string;
       };
-      // Payments and activation: executable by the secret key only.
       record_manual_payment: {
         Args: { client_id: string; recorded_by: string; amount_cents: number; provider_ref: string | null; paid_on: string };
         Returns: string;
       };
       void_payment: { Args: { payment_id: string; voided_by: string }; Returns: undefined };
       activate_client: { Args: { client_id: string; user_id: string; activated_by: string }; Returns: undefined };
+      issue_client_onboarding_link: { Args: { client_id: string; token: string; token_hash: string }; Returns: undefined };
+      save_client_review: { Args: { client_id: string; issues: string[]; note: string }; Returns: undefined };
+      accept_client_review: { Args: { client_id: string }; Returns: undefined };
+      record_client_invite: { Args: { client_id: string; user_id: string }; Returns: undefined };
+      submit_client_packet: {
+        Args: {
+          token_hash: string;
+          company_name: string;
+          contact_name: string;
+          contact_phone?: string | null;
+          details: Json;
+          consent_name: string;
+          proof_name: string;
+          proof_type: string;
+          proof_base64: string;
+        };
+        Returns: string;
+      };
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";
       app_role: "client" | "va" | "closer" | "admin" | "super_admin";
       client_status: "pending" | "active" | "inactive";
+      client_onboarding_status: "ready" | "pending_customer" | "pending_review" | "changes_requested" | "approved" | "invite_sent";
       assignment_status: "active" | "ended";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
       lead_event_kind: "call" | "qualification" | "conversion" | "junk" | "note" | "remark";

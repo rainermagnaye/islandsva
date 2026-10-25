@@ -44,7 +44,7 @@ async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, 
           </h1>
           <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </Card>
-        <ClientStepper steps={clientRegistrationSteps(client.business)} />
+        <ClientStepper steps={clientRegistrationSteps({ onboardingStatus: client.onboardingStatus, accountStatus: client.status })} />
         <OnboardingPanel clientId={client.id} status={onboarding} canSend={client.status === "pending" && !client.disabledAt} />
         <ClientProfileView client={client} />
       </div>

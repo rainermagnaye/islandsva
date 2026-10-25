@@ -14,15 +14,19 @@ export const routes = {
 } as const;
 
 /** Sign-in and portal pages — per-user, never indexed (disallowed in robots.txt). */
+export const loginPath = "/login";
+export const setPasswordPath = "/set-password";
+export const dashboardPath = "/dashboard";
+
 export const appRoutes = {
-  login: "/login",
+  login: loginPath,
   forgotPassword: "/forgot-password",
-  setPassword: "/set-password",
+  setPassword: setPasswordPath,
   mfa: "/mfa",
   authConfirm: "/auth/confirm",
   acceptInvite: "/accept-invite",
   onboarding: "/onboarding",
-  dashboard: "/dashboard",
+  dashboard: dashboardPath,
   client: "/client",
   va: "/va",
   vaClients: "/va/clients",
@@ -30,9 +34,14 @@ export const appRoutes = {
   closer: "/closer",
   closerNewClient: "/closer/clients/new",
   admin: "/admin",
+  /** Public registration packet. The token is the access; the customer does not sign in. */
+  register: "/register",
   adminLeads: "/admin/leads",
   adminClients: "/admin/clients",
   adminUsers: "/admin/users",
+  adminSettings: "/admin/settings",
+  /** The signed-in person's own profile. Separate from a staff record in Teams. */
+  profile: "/profile",
 } as const;
 
 export type RoutePath = (typeof routes)[keyof typeof routes];
@@ -57,3 +66,9 @@ export const onboardingHref = (token: string) => `${appRoutes.onboarding}/${toke
 
 /** A Closer's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */
 export const closerClientHref = (id: string) => `${appRoutes.closer}/clients/${id}`;
+
+/** The payment file on a client. The id is a random UUID. */
+export const adminClientPaymentHref = (id: string) => `${adminClientHref(id)}/payment`;
+
+/** One registration packet. The token is unguessable and is not an id. */
+export const registrationHref = (token: string) => `${appRoutes.register}/${token}`;

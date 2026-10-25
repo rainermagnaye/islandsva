@@ -7,11 +7,16 @@ import { INDUSTRIES, PACKAGE_TIMEZONES, STAFF_COUNTS } from "@/features/leads/co
 import {
   CLIENT_BUSINESS_LIMITS,
   CLIENT_NOTE_LIMIT,
+  CLIENT_REVIEW_NOTE_LIMIT,
+  CLIENT_REVIEW_SECTIONS,
+  CREATE_CLIENT_LIMITS,
   NEW_CLIENT_LIMITS,
   type ClientBusiness,
   type ClientDetailField,
   type ClientNoteField,
+  type CreateClientField,
   type NewClientField,
+  type OnboardingField,
 } from "./contract";
 
 const CLIENT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
@@ -87,6 +92,83 @@ export const CLIENT_DETAIL_FIELDS = [
 /** Company details on the client profile. A bad client id is a tampered form. */
 export const parseClientDetails = (input: unknown) => parseWith(detailsSchema, input, CLIENT_DETAIL_FIELDS);
 
+const createSchema = z
+  .strictObject({
+    companyName: z
+      .string({ error: "Enter the company name." })
+      .trim()
+      .min(1, "Enter the company name.")
+      .max(CREATE_CLIENT_LIMITS.companyName, tooLong("the company name", CREATE_CLIENT_LIMITS.companyName))
+      .regex(NO_CONTROL_CHARS, tooLong("the company name", CREATE_CLIENT_LIMITS.companyName)),
+    contactName: z
+      .string({ error: "Enter the contact's name." })
+      .trim()
+      .min(1, "Enter the contact's name.")
+      .max(CREATE_CLIENT_LIMITS.contactName, tooLong("the name", CREATE_CLIENT_LIMITS.contactName))
+      .regex(NO_CONTROL_CHARS, tooLong("the name", CREATE_CLIENT_LIMITS.contactName)),
+    contactEmail: emailField(CREATE_CLIENT_LIMITS.contactEmail),
+    contactPhone: optionalLine(CREATE_CLIENT_LIMITS.contactPhone, "the phone number"),
+  })
+  .transform(({ contactPhone, ...client }) => ({ ...client, contactPhone: contactPhone || null }));
+
+export type CreateClientInput = z.output<typeof createSchema>;
+
+const CREATE_CLIENT_FIELDS = ["companyName", "contactName", "contactEmail", "contactPhone"] as const satisfies readonly CreateClientField[];
+
+/** A client added from the list, with no lead behind it. */
+export const parseCreateClient = (input: unknown) => parseWith(createSchema, input, CREATE_CLIENT_FIELDS);
+
+const requiredChoice = (options: readonly string[], empty: string) =>
+  z.string({ error: empty }).trim().refine((value) => options.includes(value), empty);
+
+const requiredLine = (limit: number, name: string, empty: string) =>
+  z
+    .string({ error: empty })
+    .trim()
+    .min(1, empty)
+    .max(limit, tooLong(name, limit))
+    .regex(NO_CONTROL_CHARS, tooLong(name, limit));
+
+const packetSchema = z
+  .strictObject({
+    token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, FORM_ERROR),
+    companyName: requiredLine(CLIENT_LIMITS.companyName, "the company name", "Enter the company name."),
+    contactName: requiredLine(CLIENT_LIMITS.contactName, "the name", "Enter the contact's name."),
+    contactPhone: optionalLine(CLIENT_LIMITS.contactPhone, "the phone number"),
+    industry: requiredChoice(INDUSTRIES, "Choose an industry."),
+    country: requiredChoice(COUNTRIES, "Choose a country."),
+    website: optionalLine(CLIENT_BUSINESS_LIMITS.website, "the website"),
+    jobTitle: optionalLine(CLIENT_BUSINESS_LIMITS.jobTitle, "the job title"),
+    street: optionalLine(CLIENT_BUSINESS_LIMITS.street, "the street"),
+    city: requiredLine(CLIENT_BUSINESS_LIMITS.city, "the city", "Enter the city."),
+    state: optionalLine(CLIENT_BUSINESS_LIMITS.state, "the state"),
+    zip: optionalLine(CLIENT_BUSINESS_LIMITS.zip, "the zip code"),
+    staffCount: choice(STAFF_COUNTS, "Choose a team size."),
+    about: z
+      .string({ error: "Describe the business." })
+      .trim()
+      .min(1, "Describe the business.")
+      .max(CLIENT_BUSINESS_LIMITS.about, tooLong("the description", CLIENT_BUSINESS_LIMITS.about))
+      .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the description", CLIENT_BUSINESS_LIMITS.about)),
+    signature: requiredLine(CLIENT_LIMITS.contactName, "the signature", "Type your name to sign."),
+    consent: z.literal("yes", { error: "Confirm the consent to continue." }),
+  })
+  .transform(({ token, contactPhone, companyName, contactName, signature, consent, ...business }) => ({
+    token,
+    companyName,
+    contactName,
+    contactPhone: contactPhone || null,
+    consentName: consent === "yes" ? signature : "",
+    business: business satisfies ClientBusiness,
+  }));
+
+export type OnboardingInput = z.output<typeof packetSchema>;
+
+const PACKET_FIELDS = [...CLIENT_DETAIL_FIELDS, "signature", "consent"] as const satisfies readonly OnboardingField[];
+
+/** The public registration packet. A bad token is not a field the customer can fix. */
+export const parseOnboarding = (input: unknown) => parseWith(packetSchema, input, PACKET_FIELDS);
+
 const idSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }) });
 
 export const parseClientId = (input: unknown) => parseWith(idSchema, input, []);
@@ -123,12 +205,12 @@ export function parseClientFlag(input: unknown) {
 const DAY = 86_400_000;
 const PACKAGE_SLUGS: readonly string[] = packages.map((item) => item.slug);
 const TIMEZONE_VALUES: readonly string[] = PACKAGE_TIMEZONES.map((zone) => zone.value);
-const requiredLine = (limit: number, missing: string, name: string) =>
+const requiredClientLine = (limit: number, missing: string, name: string) =>
   z.string({ error: missing }).trim().min(1, missing).max(limit, tooLong(name, limit)).regex(NO_CONTROL_CHARS, tooLong(name, limit));
 
 const newClientSchema = z.strictObject({
-  companyName: requiredLine(NEW_CLIENT_LIMITS.companyName, "Enter the company name.", "the company name"),
-  contactName: requiredLine(NEW_CLIENT_LIMITS.contactName, "Enter the contact's name.", "the name"),
+  companyName: requiredClientLine(NEW_CLIENT_LIMITS.companyName, "Enter the company name.", "the company name"),
+  contactName: requiredClientLine(NEW_CLIENT_LIMITS.contactName, "Enter the contact's name.", "the name"),
   contactEmail: emailField(NEW_CLIENT_LIMITS.contactEmail),
   contactPhone: optionalLine(NEW_CLIENT_LIMITS.contactPhone, "the phone number"),
   package: z.string({ error: "Choose a package." }).trim().refine((slug) => PACKAGE_SLUGS.includes(slug), "Choose a package."),
@@ -185,3 +267,18 @@ export function parseNewClient(input: unknown, now = new Date()) {
     } satisfies NewClientInput,
   };
 }
+
+const reviewSchema = z.strictObject({
+  clientId: z.uuid({ error: FORM_ERROR }),
+  sections: z.array(z.enum(CLIENT_REVIEW_SECTIONS)).min(1, "Choose a section to send back."),
+  note: z
+    .string()
+    .trim()
+    .max(CLIENT_REVIEW_NOTE_LIMIT, tooLong("the note", CLIENT_REVIEW_NOTE_LIMIT))
+    .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the note", CLIENT_REVIEW_NOTE_LIMIT)),
+});
+
+export type ClientReviewInput = z.output<typeof reviewSchema>;
+
+/** Sections to send back. At least one is required; the note is optional. */
+export const parseClientReview = (input: unknown) => parseWith(reviewSchema, input, ["note", "sections"] as const);

@@ -13,7 +13,7 @@ import { UsersTable } from "@/features/users/components/users-table";
 import { listUsers } from "@/features/users/dal";
 import { requireRole } from "@/lib/auth/session";
 
-export const metadata: Metadata = { title: "Admin" };
+export const metadata: Metadata = { title: "Dashboard" };
 
 const RECENT = 5;
 
@@ -36,7 +36,7 @@ async function AdminHome() {
   ]);
 
   return (
-    <Workspace title="Admin" lead="Leads, clients and your team at a glance.">
+    <Workspace title="Dashboard" lead="Leads, clients and your team at a glance.">
       <section aria-label="Totals" className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total leads" value={leadCounts.total} icon="inbox" href={appRoutes.adminLeads} />
         <StatCard label="New leads" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />

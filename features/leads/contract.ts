@@ -256,12 +256,7 @@ export type LeadDetail = LeadSummary & {
 
 export type LeadStatusField = "status";
 
-/** Limits for "Convert to client" — mirrored by CHECK constraints on clients. */
-export const CONVERT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
-
-export type ConvertField = "companyName" | "contactName" | "contactPhone";
-
-/** Time zones a converted package can run in. The same list is the clients.timezone check. */
+/** The time zones a package can be staffed in. Mirrored by the check on clients.timezone. */
 export const PACKAGE_TIMEZONES = [
   { value: "America/Los_Angeles", label: "Pacific — Los Angeles" },
   { value: "America/Denver", label: "Mountain — Denver" },
@@ -275,3 +270,8 @@ export const PACKAGE_TIMEZONES = [
   { value: "Australia/Sydney", label: "Australia — Sydney" },
   { value: "Pacific/Auckland", label: "New Zealand — Auckland" },
 ] as const;
+
+/** Limits for "Convert to client" — mirrored by CHECK constraints on clients. */
+export const CONVERT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
+
+export type ConvertField = "companyName" | "contactName" | "contactPhone";

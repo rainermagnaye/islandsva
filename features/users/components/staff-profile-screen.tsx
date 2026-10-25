@@ -26,7 +26,6 @@ export function StaffProfileScreen({
   user,
   actorId,
   details,
-  resumeType,
   steps,
   meta,
   hasHistory,
@@ -37,7 +36,6 @@ export function StaffProfileScreen({
   user: UserSummary;
   actorId: string;
   details: StaffDetails;
-  resumeType: string | null;
   steps: RegistrationStep[];
   meta: StaffProfileMeta;
   hasHistory: boolean;
@@ -132,14 +130,13 @@ export function StaffProfileScreen({
           userId={user.id}
           email={user.email}
           details={details}
-          resumeType={resumeType}
           meta={meta}
           profilePic={profilePic}
           onSaved={() => stopEditing(true)}
           onCancel={() => stopEditing(false)}
         />
       ) : (
-        <StaffProfileView userId={user.id} details={details} resumeType={resumeType} email={user.email} meta={meta} />
+        <StaffProfileView userId={user.id} details={details} email={user.email} meta={meta} />
       )}
     </div>
   );

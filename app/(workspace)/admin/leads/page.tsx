@@ -6,7 +6,6 @@ import { Pagination } from "@/components/ui/pagination";
 import { appRoutes } from "@/content/routes";
 import { LEAD_VIEWS } from "@/features/leads/contract";
 import { LeadSearch } from "@/features/leads/components/lead-search";
-import { LeadTabs } from "@/features/leads/components/lead-tabs";
 import { LeadsTable } from "@/features/leads/components/leads-table";
 import { LeadsToolbar } from "@/features/leads/components/leads-toolbar";
 import { listLeads } from "@/features/leads/dal";
@@ -43,23 +42,6 @@ async function AdminLeads({ searchParams }: Pick<PageProps<"/admin/leads">, "sea
       </div>
 
       <div className="grid gap-4">
-        <LeadTabs
-          label="Filter leads by status"
-          tabs={[
-            { href: listHref(appRoutes.adminLeads, { q }), label: "All Leads", current: !status && !disabled, icon: "inbox" },
-            ...(
-              [
-                ["contacted", "message"],
-                ["converted", "check-circle"],
-              ] as const
-            ).map(([value, icon]) => ({
-              href: listHref(appRoutes.adminLeads, { status: value, q }),
-              label: LEAD_VIEWS[value],
-              current: status === value,
-              icon,
-            })),
-          ]}
-        />
         <LeadsTable
           keepHeader
           leads={leads}
