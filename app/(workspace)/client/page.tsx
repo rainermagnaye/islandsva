@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { ComingSoon, Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { getActiveAssignment, getVaFirstName } from "@/features/clients/assignment-dal";
 import { ClientDashboard } from "@/features/clients/components/client-dashboard";
+import { getLatestDemo } from "@/features/demos/booking-dal";
+import { ClientDemoCard } from "@/features/demos/components/client-demo-card";
 import { getClient, getOwnClientId } from "@/features/clients/dal";
 import { requireRole } from "@/lib/auth/session";
 
@@ -30,10 +32,11 @@ async function ClientHome() {
   }
   const assignment = await getActiveAssignment(client.id);
   const va = assignment ? { firstName: await getVaFirstName(assignment.vaId), startedAt: assignment.startedAt } : null;
+  const demo = va ? null : await getLatestDemo(client.id);
 
   return (
     <Workspace title={`Welcome, ${client.companyName}`} lead="Your VA and your plan, in one place.">
-      <ClientDashboard client={client} va={va} />
+      <ClientDashboard client={client} va={va} beforeVa={<ClientDemoCard demo={demo} timeZone={client.timezone} />} />
     </Workspace>
   );
 }

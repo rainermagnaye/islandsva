@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SLOT_TIMES, demoState, manilaDate, manilaToIso } from "./contract";
-import { parseNewSlots, parseSlotId } from "./validation";
+import { SLOT_TIMES, bookableTimes, demoState, formatInZone, manilaDate, manilaToIso } from "./contract";
+import { parseBooking, parseBookingId, parseDecision, parseNewSlots, parseSlotId } from "./validation";
 
 const NOW = new Date("2026-11-02T00:00:00Z"); // 08:00 on 2 November in Manila
 
@@ -53,5 +53,41 @@ describe("demoState", () => {
     expect(demoState({ status: "confirmed", startsAt: at(-20), endsAt: at(10) }, NOW)).toBe("confirmed");
     expect(demoState({ status: "confirmed", startsAt: at(-30), endsAt: at(0) }, NOW)).toBe("completed");
     expect(demoState({ status: "rejected", startsAt: at(-60), endsAt: at(-30) }, NOW)).toBe("rejected");
+  });
+});
+
+describe("booking", () => {
+  const SLOT = "5d2f1c7e-8a4b-4c3d-9e1f-2a3b4c5d6e7f";
+  it("takes a slot and an optional, trimmed note", () => {
+    expect(parseBooking({ slotId: SLOT, note: "  Inbox first  " })).toEqual({ ok: true, value: { slotId: SLOT, note: "Inbox first" } });
+    expect(parseBooking({ slotId: SLOT, note: "   " })).toEqual({ ok: true, value: { slotId: SLOT, note: null } });
+    expect(parseBooking({ slotId: SLOT })).toEqual({ ok: true, value: { slotId: SLOT, note: null } });
+  });
+
+  it("asks for a time, and keeps the note within the limit", () => {
+    expect(parseBooking({ note: "" })).toMatchObject({ fieldErrors: { slotId: "Pick a time." } });
+    expect(parseBooking({ slotId: SLOT, note: "x".repeat(501) })).toMatchObject({ fieldErrors: { note: expect.stringContaining("500") } });
+    expect(parseBooking({ slotId: SLOT, clientId: SLOT })).toEqual({ ok: false, formError: expect.any(String) });
+  });
+
+  it("takes a VA's decision with an optional reason", () => {
+    expect(parseDecision({ bookingId: SLOT, decision: "rejected", reason: " Away that week " })).toEqual({ ok: true, value: { bookingId: SLOT, decision: "rejected", reason: "Away that week" } });
+    expect(parseDecision({ bookingId: SLOT, decision: "confirmed" })).toEqual({ ok: true, value: { bookingId: SLOT, decision: "confirmed", reason: null } });
+    expect(parseDecision({ bookingId: SLOT, decision: "maybe" })).toEqual({ ok: false, formError: expect.any(String) });
+    expect(parseDecision({ bookingId: SLOT, decision: "rejected", reason: "x".repeat(301) })).toMatchObject({ fieldErrors: { reason: expect.stringContaining("300") } });
+    expect(parseBookingId({ bookingId: "x" })).toEqual({ ok: false, formError: expect.any(String) });
+  });
+
+  it("offers one slot per time, the first one offered", () => {
+    expect(bookableTimes([{ id: "a", startsAt: "t1" }, { id: "b", startsAt: "t1" }, { id: "c", startsAt: "t2" }])).toEqual([
+      { slotId: "a", startsAt: "t1" },
+      { slotId: "c", startsAt: "t2" },
+    ]);
+  });
+
+  it("formats a time in the reader's zone, falling back to UTC for an unknown zone", () => {
+    expect(formatInZone("2026-11-03T14:30:00.000Z", "America/New_York")).toBe("Tue, Nov 3, 9:30 AM EST");
+    expect(formatInZone("2026-11-03T14:30:00.000Z", "Asia/Manila")).toBe("Tue, Nov 3, 10:30 PM GMT+8");
+    expect(formatInZone("2026-11-03T14:30:00.000Z", "Not/AZone")).toBe("Tue, Nov 3, 2:30 PM UTC");
   });
 });
