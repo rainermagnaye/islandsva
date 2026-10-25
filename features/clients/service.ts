@@ -10,7 +10,7 @@ import { sendAccountEmail, sendOnboardingEmail, sendOnboardingSubmittedEmail } f
 import { getClientCreator, getInvitation, issueOnboardingLink, markOnboardingEmailSent, revokeOnboardingLink, submitOnboarding } from "./onboarding-dal";
 import { createOnboardingToken, hashOnboardingToken } from "./onboarding-token";
 import type { OnboardingInput } from "./onboarding-validation";
-import { insertClient, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
+import { getClient, getOwnClientId, insertClient, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
 import type { ClientDetailsInput, ClientNoteInput, NewClientInput } from "./validation";
 
 /** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
@@ -146,4 +146,10 @@ export async function resendClientAccountEmail(client: Pick<ClientDetail, "id" |
   if (!link.ok) return { ok: false as const, reason: link.reason === "missing" ? ("not_found" as const) : ("rate" as const) };
   const emailed = await sendAccountEmail({ to: link.email, contactName: login.name, companyName: client.companyName, link: signInLink(link.tokenHash, "recovery") });
   return { ok: true as const, emailed };
+}
+
+/** The client record a client login belongs to (RLS: a client reads only their own), or null. */
+export async function findOwnClient(userId: string) {
+  const clientId = await getOwnClientId(userId);
+  return clientId ? getClient(clientId) : null;
 }

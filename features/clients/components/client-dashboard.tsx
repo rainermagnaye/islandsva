@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Card, Panel } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { formatPrice, packages, terms } from "@/content/packages";
@@ -5,8 +6,8 @@ import type { ClientDetail } from "../contract";
 
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" });
 
-/** The client's dashboard: their VA (or that one is on the way) and their package. Server-rendered, no client JS. */
-export function ClientDashboard({ client, va }: { client: ClientDetail; va: { firstName: string | null; startedAt: string } | null }) {
+/** The client's dashboard: their VA (or, before one, their demo call) and their package. Server-rendered. */
+export function ClientDashboard({ client, va, beforeVa }: { client: ClientDetail; va: { firstName: string | null; startedAt: string } | null; beforeVa: ReactNode }) {
   const pkg = packages.find((item) => item.slug === client.packageCode);
   const term = terms.find((item) => item.months === client.termMonths);
 
@@ -24,12 +25,7 @@ export function ClientDashboard({ client, va }: { client: ClientDetail; va: { fi
             </div>
           </div>
         ) : (
-          <div className="grid gap-1">
-            <span className="type-label">No VA yet</span>
-            <p className="m-0 type-body-sm text-ink-muted">
-              We&apos;re matching you with a VA who fits your work. Your package covers one VA and up to three projects. You&apos;ll be able to book a short demo call here soon.
-            </p>
-          </div>
+          beforeVa
         )}
       </Panel>
 
