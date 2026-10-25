@@ -2,8 +2,7 @@
 
 import { refresh } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
-import { UpstreamError } from "@/lib/upstream-error";
-import { FORM_ERROR, formEntries, toSubmitResult } from "@/lib/validation";
+import { FORM_ERROR, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { SlotField } from "./contract";
 import { deleteSlot, insertSlots } from "./dal";
@@ -11,14 +10,6 @@ import { parseNewSlots, parseSlotId } from "./validation";
 
 // VA calendar actions. The session is checked first (a VA), then RLS on demo_slots decides: only an open VA's
 // own future slots are added or deleted.
-
-const OUTAGE = "That didn't go through just now. Please try again in a moment.";
-
-function outage(error: unknown, what: string): { ok: false; message: string } {
-  if (!(error instanceof UpstreamError)) throw error;
-  console.error(`${what} failed`, { service: error.service, error: error.message });
-  return { ok: false, message: OUTAGE };
-}
 
 /** "Add slots": a date and checked times. Times the VA already offers are kept as they are. */
 export async function addDemoSlots(formData: FormData): Promise<SubmitResult<SlotField>> {
@@ -34,7 +25,7 @@ export async function addDemoSlots(formData: FormData): Promise<SubmitResult<Slo
       };
     }
   } catch (error) {
-    return outage(error, "Adding slots");
+    return outageResult(error, "Adding slots");
   }
   refresh();
   return { ok: true };
@@ -50,7 +41,7 @@ export async function deleteDemoSlot(slotId: unknown): Promise<SubmitResult> {
       return { ok: false, message: "That slot is booked or already passed, so it stays. Refresh the page." };
     }
   } catch (error) {
-    return outage(error, "Deleting a slot");
+    return outageResult(error, "Deleting a slot");
   }
   refresh();
   return { ok: true };
