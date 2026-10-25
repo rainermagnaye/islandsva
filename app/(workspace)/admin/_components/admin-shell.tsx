@@ -4,13 +4,13 @@ import { appRoutes, routes } from "@/content/routes";
 import { countNewLeads } from "@/features/leads/dal";
 import { getSessionUser, needsSecondFactor } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
-import { AdminNav } from "./admin-nav";
+import { WorkspaceNav } from "@/components/layout/workspace-nav";
 
 /** The admin menu beside the page. Shared by the admin section and My Profile. */
 export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-[inherit] md:grid-cols-[76px_minmax(0,1fr)] lg:grid-cols-[264px_minmax(0,1fr)]">
-      <AdminNav
+      <WorkspaceNav label="Admin"
         items={[
           { href: appRoutes.admin, label: "Overview", icon: "home", exact: true },
           {
