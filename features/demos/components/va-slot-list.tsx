@@ -1,18 +1,11 @@
-import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { DEMO_STATUS_LABELS, VA_TIME_ZONE, demoState, manilaDate, type DemoStatus, type VaSlot } from "../contract";
+import { VA_TIME_ZONE, demoState, manilaDate, type VaSlot } from "../contract";
+import { DemoStatusBadge } from "./demo-status-badge";
 import { DeleteSlotButton } from "./delete-slot-button";
 
 const dayHeading = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: VA_TIME_ZONE });
 const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: VA_TIME_ZONE });
-const TONES: Record<DemoStatus, BadgeTone> = {
-  pending: "warning",
-  confirmed: "success",
-  rejected: "neutral",
-  cancelled: "neutral",
-  completed: "neutral",
-  expired: "neutral",
-};
 
 /** The VA's upcoming slots by Manila day: open ones can be removed, booked ones show the client and the state. */
 export function VaSlotList({ slots }: { slots: readonly VaSlot[] }) {
@@ -37,9 +30,7 @@ export function VaSlotList({ slots }: { slots: readonly VaSlot[] }) {
                   <span className="w-20 type-label tabular-nums">{label}</span>
                   {slot.booking && state ? (
                     <>
-                      <Badge tone={TONES[state]} size="sm">
-                        {DEMO_STATUS_LABELS[state]}
-                      </Badge>
+                      <DemoStatusBadge state={state} />
                       <span className="min-w-0 flex-1 truncate text-ink-muted">{slot.booking.companyName}</span>
                     </>
                   ) : (

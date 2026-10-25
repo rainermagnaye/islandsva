@@ -86,14 +86,20 @@ export function bookableTimes(slots: readonly { id: string; startsAt: string }[]
   return times;
 }
 
+/** A time zone Intl knows, or UTC: stored zones are checked at entry, but a bad one must never break a page or an email. */
+export function safeTimeZone(zone: string | null) {
+  if (!zone) return "UTC";
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: zone }).resolvedOptions().timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
 /** A moment in a time zone, for emails and screens ("Tue, Nov 3, 9:30 AM EST"). Falls back to UTC for a bad zone. */
 export function formatInZone(iso: string, timeZone: string | null) {
   const options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" };
-  try {
-    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: timeZone ?? "UTC" }).format(new Date(iso));
-  } catch {
-    return new Intl.DateTimeFormat("en-US", { ...options, timeZone: "UTC" }).format(new Date(iso));
-  }
+  return new Intl.DateTimeFormat("en-US", { ...options, timeZone: safeTimeZone(timeZone) }).format(new Date(iso));
 }
 
 /** The admin list's filters: open ones by what they are now (a past request isn't "requested" any more). */

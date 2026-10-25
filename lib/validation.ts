@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { UpstreamError } from "@/lib/upstream-error";
 import type { SubmitResult } from "@/types/form";
 
 // Building blocks for every feature's validation.ts, so all inputs are checked and reported the same way.
@@ -65,3 +66,15 @@ export function toSubmitResult<Field extends string>(failure: Exclude<Parsed<unk
 
 /** FormData as a plain object for parseWith. Files stay File objects, so string schemas reject them. */
 export const formEntries = (formData: FormData): Record<string, unknown> => Object.fromEntries(formData);
+
+export const OUTAGE_MESSAGE = "That didn't go through just now. Please try again in a moment.";
+
+/**
+ * A Server Action's answer when a service it calls is unreachable: logs the UpstreamError (its service and
+ * message, no user data) and returns the "try again" result. Anything else is a bug and is rethrown.
+ */
+export function outageResult(error: unknown, what: string): { ok: false; message: string } {
+  if (!(error instanceof UpstreamError)) throw error;
+  console.error(`${what} failed`, { service: error.service, error: error.message });
+  return { ok: false, message: OUTAGE_MESSAGE };
+}

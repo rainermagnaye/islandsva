@@ -11,7 +11,7 @@ import { getActiveAssignment } from "@/features/clients/assignment-dal";
 import { getClient, getOwnClientId } from "@/features/clients/dal";
 import { getLatestDemo, listOpenSlots } from "@/features/demos/booking-dal";
 import { BookDemoForm, type TimeGroup } from "@/features/demos/components/book-demo-form";
-import { bookableTimes, demoState, isOpenDemo } from "@/features/demos/contract";
+import { bookableTimes, demoState, isOpenDemo, safeTimeZone } from "@/features/demos/contract";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Book a demo call" };
@@ -24,16 +24,6 @@ export default function ClientDemoPage() {
   );
 }
 
-/** A zone the browser and Node know, or UTC (a stored zone is validated at entry, but fail safe). */
-function safeZone(zone: string | null) {
-  try {
-    if (zone) return new Intl.DateTimeFormat("en-US", { timeZone: zone }).resolvedOptions().timeZone;
-  } catch {
-    // An unknown zone falls through to UTC.
-  }
-  return "UTC";
-}
-
 async function ClientDemo() {
   const user = await requireRole(["client"]);
   // RLS: a client reads only their own record, its assignment, its bookings and the slots they may book.
@@ -43,7 +33,7 @@ async function ClientDemo() {
   const [assignment, latest] = await Promise.all([getActiveAssignment(client.id), getLatestDemo(client.id)]);
   if (assignment || (latest && isOpenDemo(demoState(latest)))) redirect(appRoutes.client);
 
-  const zone = safeZone(client.timezone);
+  const zone = safeTimeZone(client.timezone);
   const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: zone });
   const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: zone });
   const groups: TimeGroup[] = [];
