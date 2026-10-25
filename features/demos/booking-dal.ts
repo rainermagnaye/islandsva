@@ -88,3 +88,30 @@ export const decideDemo = (bookingId: string, actor: string, decision: "confirme
   call<DecidedDemo>("decide_demo", { booking_id: bookingId, actor, decision, reason }, "Deciding a demo");
 
 export const cancelDemo = (bookingId: string, actor: string) => call<CancelledDemo>("cancel_demo", { booking_id: bookingId, actor }, "Cancelling a demo");
+
+export type VaDemo = { id: string; status: DemoStatus; startsAt: string; companyName: string; clientTimezone: string | null; note: string | null };
+
+/**
+ * The VA's open demos still ahead: pending requests to answer and confirmed calls, soonest first. RLS returns
+ * only the VA's own bookings; the va_id filter keeps it to them even for a reader with more access.
+ */
+export async function listVaDemos(vaId: string): Promise<VaDemo[]> {
+  if (!isUuid(vaId)) return [];
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("demo_bookings")
+    .select("id, status, starts_at, ends_at, company_name, client_timezone, client_note")
+    .eq("va_id", vaId)
+    .or(`and(status.eq.pending,starts_at.gt.${now}),and(status.eq.confirmed,ends_at.gt.${now})`)
+    .order("starts_at");
+  if (error) throw new UpstreamError("supabase", `Listing the VA's demos failed (${error.code})`);
+  return data.map((row) => ({
+    id: row.id,
+    status: row.status,
+    startsAt: row.starts_at,
+    companyName: row.company_name,
+    clientTimezone: row.client_timezone,
+    note: row.client_note,
+  }));
+}

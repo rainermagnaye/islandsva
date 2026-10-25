@@ -11,6 +11,8 @@ import { StatCard } from "@/components/ui/stat-card";
 import { appRoutes } from "@/content/routes";
 import { listAssignedClients } from "@/features/clients/assignment-dal";
 import { AssignedClientsTable } from "@/features/clients/components/assigned-clients-table";
+import { listVaDemos } from "@/features/demos/booking-dal";
+import { VaDemoList } from "@/features/demos/components/va-demo-list";
 import { LazyVaRegistration } from "@/features/users/components/lazy-va-registration";
 import { staffAccessBadge } from "@/features/users/contract";
 import { loadVaAccess } from "@/features/users/service";
@@ -63,17 +65,25 @@ async function VaHome() {
 
 const RECENT = 5;
 
-/** The approved VA's dashboard: how many clients and weekly hours, and the newest assignments. */
+/** The approved VA's dashboard: demo requests to answer, upcoming calls, clients and weekly hours. */
 async function VaDashboard({ vaId }: { vaId: string }) {
-  const clients = await listAssignedClients(vaId);
+  // Independent reads, in parallel; both run as the signed-in VA, so RLS applies.
+  const [clients, demos] = await Promise.all([listAssignedClients(vaId), listVaDemos(vaId)]);
+  const requests = demos.filter((demo) => demo.status === "pending").length;
   const hours = clients.reduce((sum, client) => sum + (client.hoursPerWeek ?? 0), 0);
 
   return (
-    <Workspace title="Dashboard" lead="Your clients and hours at a glance.">
-      <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2">
+    <Workspace title="Dashboard" lead="Demo requests, your clients and hours at a glance.">
+      <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Demo requests" value={requests} icon="bell" caption="Waiting for your answer" />
+        <StatCard label="Upcoming demos" value={demos.length - requests} icon="calendar" href={appRoutes.vaCalendar} />
         <StatCard label="Active clients" value={clients.length} icon="briefcase" href={appRoutes.vaClients} />
         <StatCard label="Hours per week" value={hours} unit="h" icon="clock" caption="Agreed across your clients" />
       </section>
+
+      <Panel title="Demo calls" action={<Link href={appRoutes.vaCalendar} className="type-label">Calendar</Link>}>
+        <VaDemoList demos={demos} />
+      </Panel>
 
       <Panel
         title="Your clients"
