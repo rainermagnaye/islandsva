@@ -54,7 +54,7 @@ features/<feature>/   one business area (today: auth, leads, clients, users)
   dal.ts              [server] queries for this feature's tables
   actions.ts          [server] Server Actions ('use server'); only actions are exported
   email.ts · api-client.ts · components/   outbound email [server] · browser calls to /api/v1 [client] · feature UI
-components/           shared UI: ui/ (design system) · layout/ (shell, nav, footer) · marketing/ (sections)
+components/           shared UI: ui/ (design system) · layout/ (shell, nav, footer) · marketing/ (sections) · blog/ (blog parts; no blog pages in the MVP)
 hooks/                [client] shared browser hooks, `use-x.ts` (today: use-current-path)
 lib/                  shared infrastructure only
   api/                [server] createHandler, ApiError, ok/fail, Turnstile, IP hash

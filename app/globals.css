@@ -64,6 +64,13 @@
   font-weight: 500;
 }
 
+@utility type-micro {
+  /* .iva-sched__evm, .iva-sched__shift: the schedule grid's smallest labels */
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  line-height: 0.875rem;
+}
+
 @utility type-body-md {
   /* .iva-alert__text, .iva-card__list, .iva-footer__contact */
   font-family: var(--font-sans);

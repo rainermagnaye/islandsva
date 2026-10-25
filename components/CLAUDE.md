@@ -6,15 +6,16 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 
 ## Folders
 
-- `ui/` — design-system primitives (Button, Form, TextField, FileField, Modal, Badge, Alert, EmptyState, Card, Panel, StatCard, DataTable, Pagination, Breadcrumbs, SearchField, FilterMenu, StepList, …). No data fetching, no feature imports.
+- `ui/` — design-system primitives (Button, Form, TextField, FileField, Modal, Badge, Alert, EmptyState, Card, Panel, StatCard + Sparkline, DataTable, Pagination, Breadcrumbs, SearchField, FilterMenu, StepList, Stepper, Tabs, DropdownMenu, Tooltip, Toast, Skeleton, ProgressBar, Avatar, TagChip, TaskList, ProfileCard, Calendar, DatePicker, TimeSlotPicker, ScheduleCalendar). No data fetching, no feature imports. Date logic lives in `date-math.ts` (ISO strings, never `Date` objects across the network); category tones and chart colours in `tone.ts`.
 - `layout/` — site shell, nav, footer, logo, portal `Workspace`.
-- `marketing/` — public-page sections (Hero, Section, FAQ, testimonials, CTA band, package cards).
+- `marketing/` — public-page sections (Hero, Section, FAQ, testimonials, CTA band, package cards, WaveDivider).
+- `blog/` — PostCard, PostGrid, FeaturedPost, BlogSidebar, BlogLayout, CommentThread. Ready for a blog; the blog itself is outside the MVP, so no page uses them yet.
 
 ## Tokens and styling
 
 - `design/tokens.json` → `npm run tokens` → `app/tokens.css` (generated — never edit it or hard-code hex).
 - Tailwind only with brand tokens: `bg-surface-card`, `text-ink`, `rounded-lg`, `type-*` text styles, `elevation-*` shadows; 4px spacing scale.
-- Sizes the design system uses inside its components without publishing a token are named once in `app/globals.css`: `type-button` (15/20 semibold), `type-menu` (15/20 medium), `type-body-md` (15/22), `type-stat` (32/38 display) and `border-control` (1.5px). New code uses these, not raw `text-[…]` sizes or `border-[…]` widths.
+- Sizes the design system uses inside its components without publishing a token are named once in `app/globals.css`: `type-button` (15/20 semibold), `type-menu` (15/20 medium), `type-micro` (11/14, the schedule grid's smallest labels), `type-body-md` (15/22), `type-stat` (32/38 display) and `border-control` (1.5px). New code uses these, not raw `text-[…]` sizes or `border-[…]` widths.
 - Alegreya for display text, h1 and h2; Figtree for everything else (`next/font`).
 - Theme follows the visitor's OS (`prefers-color-scheme`): token classes adapt; otherwise `dark:`. No toggle, no theme cookie.
 - Plain CSS in `app/globals.css` only where utilities can't express it (e.g. `DataTable`'s phone card layout with container queries).
@@ -39,4 +40,4 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 
 ## Synced with the design system
 
-Last synced 2026-10-13: tokens, icons, portal components and the landing page; tokens again 2026-10-17 (the `shift-*` colours). Calendar, DatePicker, TimeSlotPicker and ScheduleCalendar (design system 2026-10-14) wait for M5 demo booking. Intentional differences: no theme toggle, a tab row instead of a drawer for short phone menus, no Toast until an action needs one; no blog, comments or newsletter (outside the MVP).
+Last synced 2026-10-26: every component of the design system is in the codebase (tokens 2026-10-17). Toast needs a `ToastProvider` around the client subtree that uses it; none is mounted yet. Intentional differences: no theme toggle, a tab row instead of a drawer for short phone menus; FaqAccordion is `marketing/faq-list`, DashboardShell is the admin and VA shells, PricingTable lives with the pricing page; blog and comment components exist but no blog pages (outside the MVP); no newsletter.
