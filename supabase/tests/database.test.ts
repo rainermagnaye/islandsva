@@ -1315,6 +1315,29 @@ describe("client onboarding", () => {
     );
     expect(sent).toEqual({ onboarding_status: "invite_sent", user_id: login, status: "pending" });
     await expect(asServer("select public.record_client_invite($1, $2)", [clientId, login])).rejects.toThrow(/client already has a login/);
+
+    // The login's first sign-in activates the client; a later one changes nothing.
+    await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() where id = '${login}'`);
+    const [active] = await asServer<{ status: string; activated: boolean }>("select status, activated_at is not null as activated from public.clients where id = $1", [clientId]);
+    expect(active).toEqual({ status: "active", activated: true });
+    const [{ at }] = await asServer<{ at: string }>("select activated_at::text as at from public.clients where id = $1", [clientId]);
+    await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() + interval '1 day' where id = '${login}'`);
+    expect((await asServer<{ at: string }>("select activated_at::text as at from public.clients where id = $1", [clientId]))[0].at).toBe(at);
+  });
+
+  it("activates on sign-in only a client whose invite went out, and never a disabled one", async () => {
+    const make = async (name: string, login: string, onboarding: string, disabled = false) => {
+      await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${login}', '${name}@x.co')`);
+      await asServer("insert into public.roles (user_id, role, assigned_by) values ($1, 'client', $2)", [login, ADMIN]);
+      const [{ id }] = await asServer<{ id: string }>(
+        "insert into public.clients (company_name, contact_name, contact_email, created_by, user_id, onboarding_status, disabled_at) values ($1, 'C', $2, $3, $4, $5, $6) returning id",
+        [name, `${name}-c@x.co`, CLOSER, login, onboarding, disabled ? new Date().toISOString() : null],
+      );
+      await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() where id = '${login}'`);
+      return (await asServer<{ status: string }>("select status from public.clients where id = $1", [id]))[0].status;
+    };
+    expect(await make("approved-only", "00000000-0000-0000-0000-0000000000ab", "approved")).toBe("pending");
+    expect(await make("disabled-sent", "00000000-0000-0000-0000-0000000000ac", "invite_sent", true)).toBe("pending");
   });
 });
 
