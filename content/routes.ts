@@ -38,6 +38,7 @@ export const appRoutes = {
   register: "/register",
   adminLeads: "/admin/leads",
   adminClients: "/admin/clients",
+  adminDemos: "/admin/demos",
   adminUsers: "/admin/users",
   adminSettings: "/admin/settings",
   /** The signed-in person's own profile. Separate from a staff record in Teams. */

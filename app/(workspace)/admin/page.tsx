@@ -5,6 +5,8 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Panel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { countOpenRequests } from "@/features/demos/admin-dal";
+import { listHref } from "./_components/search-params";
 import { appRoutes } from "@/content/routes";
 import { countClients } from "@/features/clients/dal";
 import { LeadsTable } from "@/features/leads/components/leads-table";
@@ -28,19 +30,21 @@ export default function AdminHomePage() {
 async function AdminHome() {
   await requireRole(["admin"]);
   // Independent reads, fetched in parallel. Each runs as the signed-in admin, so RLS applies too.
-  const [leadCounts, clientCount, recentLeads, recentUsers] = await Promise.all([
+  const [leadCounts, clientCount, openRequests, recentLeads, recentUsers] = await Promise.all([
     countLeads(),
     countClients(),
+    countOpenRequests(),
     listLeads({ pageSize: RECENT }),
     listUsers(RECENT),
   ]);
 
   return (
     <Workspace title="Dashboard" lead="Leads, clients and your team at a glance.">
-      <section aria-label="Totals" className="grid gap-4 sm:grid-cols-3">
+      <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total leads" value={leadCounts.total} icon="inbox" href={appRoutes.adminLeads} />
         <StatCard label="New leads" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />
         <StatCard label="Total clients" value={clientCount} icon="briefcase" href={appRoutes.adminClients} />
+        <StatCard label="Demo requests" value={openRequests} icon="calendar" href={listHref(appRoutes.adminDemos, { status: "requested" })} caption="Waiting for a VA" />
       </section>
 
       <Panel title="Latest leads" action={<ViewAll href={appRoutes.adminLeads}>All leads</ViewAll>}>

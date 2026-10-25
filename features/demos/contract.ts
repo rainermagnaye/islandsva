@@ -95,3 +95,22 @@ export function formatInZone(iso: string, timeZone: string | null) {
     return new Intl.DateTimeFormat("en-US", { ...options, timeZone: "UTC" }).format(new Date(iso));
   }
 }
+
+/** The admin list's filters: open ones by what they are now (a past request isn't "requested" any more). */
+export const ADMIN_DEMO_FILTERS = { requested: "Requested", confirmed: "Confirmed", rejected: "Declined", cancelled: "Cancelled" } as const;
+export type AdminDemoFilter = keyof typeof ADMIN_DEMO_FILTERS;
+
+/** One row of the admin list. */
+export type AdminDemo = {
+  id: string;
+  clientId: string;
+  companyName: string;
+  clientTimezone: string | null;
+  vaName: string;
+  status: DemoStatus;
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+};
+
+export type AdminDemoPage = { demos: AdminDemo[]; total: number; page: number; pageCount: number };
