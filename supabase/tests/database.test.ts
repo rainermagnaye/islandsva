@@ -1341,3 +1341,281 @@ describe("client onboarding", () => {
   });
 });
 
+describe("demo scheduling", () => {
+  // VA is an approved VA; VA2 is not (invited, no review). OWNER logs in for Demo Co (active, no VA); OTHER for
+  // Other Co. VA_X is an approved VA in the second tenant (see "tenants").
+  const OWNER = "00000000-0000-0000-0000-0000000000d1";
+  const OTHER = "00000000-0000-0000-0000-0000000000d2";
+  const VA_X = "00000000-0000-0000-0000-0000000000d3";
+  const asOwner = token(OWNER, ["client"]);
+  const asOther = token(OTHER, ["client"]);
+  const HALF_HOUR = 30 * 60 * 1000;
+  /** An aligned slot start, `hours` from now (rounded up to the next :00 or :30). */
+  const at = (hours: number) => new Date(Math.ceil((Date.now() + hours * 3600 * 1000) / HALF_HOUR) * HALF_HOUR).toISOString();
+  const end = (start: string) => new Date(new Date(start).getTime() + HALF_HOUR).toISOString();
+  let demoCo = "";
+  let otherCo = "";
+  let pendingCo = "";
+
+  const addSlot = async (claims: Claims, va: string, start: string, finish = end(start)) =>
+    (await asUser<{ id: string }>(claims, "insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) returning id", [va, start, finish]))[0]?.id;
+  const book = (client: string, slot: string, actor: string, note: string | null = null) =>
+    asServer<{ r: Record<string, string> }>("select public.book_demo($1, $2, $3, $4) as r", [client, slot, actor, note]);
+  const decide = (booking: string, actor: string, decision: string, reason: string | null = null) =>
+    asServer<{ r: Record<string, string> }>("select public.decide_demo($1, $2, $3, $4) as r", [booking, actor, decision, reason]);
+  const cancel = (booking: string, actor: string) => asServer<{ r: Record<string, string> }>("select public.cancel_demo($1, $2) as r", [booking, actor]);
+  const statusOf = async (booking: string) => (await asServer<{ status: string }>("select status from public.demo_bookings where id = $1", [booking]))[0].status;
+  const newActiveClient = async (name: string, login: string | null, status = "active") =>
+    (await asServer<{ id: string }>(
+      `insert into public.clients (company_name, contact_name, contact_email, created_by, user_id, status, activated_at,
+         package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone)
+       values ($1, 'Pat', $2, $3, $4, $5, ${status === "active" ? "now()" : "null"}, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id`,
+      [name, `${name.toLowerCase().replace(/\s+/g, "")}@demo.co`, CLOSER, login, status],
+    ))[0].id;
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${OWNER}', 'owner@demo.co'), ('${OTHER}', 'other@demo.co'), ('${VA_X}', 'va-x@demo.co')`);
+    await asServer("update public.profiles set status = 'active', tenant_id = (select id from public.tenants where slug = 'other-agency') where id = $1", [VA_X]);
+    await asServer("insert into public.roles (user_id, role) values ($1, 'va')", [VA_X]);
+    await asServer(`insert into public.roles (user_id, role) values ('${OWNER}', 'client'), ('${OTHER}', 'client')`);
+    await asServer("update public.profiles set full_name = 'Vera Cruz', status = 'active' where id = $1", [VA]);
+    await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+    demoCo = await newActiveClient("Demo Co", OWNER);
+    otherCo = await newActiveClient("Other Co", OTHER);
+    pendingCo = await newActiveClient("Pending Co", null, "pending");
+  });
+
+  describe("slots", () => {
+    it("an approved VA adds, reads and deletes their own open slot", async () => {
+      const slot = await addSlot(asVa, VA, at(30));
+      expect(ids(await asUser<{ id: string }>(asVa, "select id from public.demo_slots where id = $1", [slot]))).toEqual([slot]);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [slot])).toHaveLength(1);
+    });
+
+    it("refuses a slot for another VA, in the past, misaligned, the wrong length or over 30 days ahead", async () => {
+      await expect(addSlot(asVa, VA2, at(30))).rejects.toThrow(/row-level security/);
+      await expect(addSlot(asVa, VA, at(-2))).rejects.toThrow(/row-level security/);
+      const misaligned = new Date(new Date(at(30)).getTime() + 10 * 60 * 1000).toISOString();
+      await expect(addSlot(asVa, VA, misaligned)).rejects.toThrow(/demo_slots_aligned/);
+      await expect(addSlot(asVa, VA, at(30), end(end(at(30))))).rejects.toThrow(/demo_slots_length/);
+      await expect(addSlot(asVa, VA, at(24 * 31))).rejects.toThrow(/row-level security/);
+    });
+
+    it("refuses slots from a VA who isn't approved or is deactivated, and from other roles", async () => {
+      await expect(addSlot(asVa2, VA2, at(30))).rejects.toThrow(/row-level security/);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [VA]);
+      await expect(addSlot(asVa, VA, at(31))).rejects.toThrow(/row-level security|not an active user/);
+      await asServer("update public.profiles set status = 'active' where id = $1", [VA]);
+      await expect(addSlot(asOwner, VA, at(30))).rejects.toThrow(/row-level security/);
+      await expect(addSlot(asAdmin, VA, at(30))).rejects.toThrow(/row-level security/);
+      await expect(as("anon", {}, "select id from public.demo_slots")).rejects.toThrow(/permission denied/);
+    });
+
+    it("a VA sees only their own slots; a client only bookable ones; an admin needs two-factor", async () => {
+      const mine = await addSlot(asVa, VA, at(40));
+      const soon = await addSlot(asVa, VA, at(1)); // under 4 hours' notice: not bookable
+      expect(await asUser(asVa2, "select id from public.demo_slots")).toEqual([]);
+      const seen = ids(await asUser<{ id: string }>(asOwner, "select id from public.demo_slots"));
+      expect(seen).toContain(mine);
+      expect(seen).not.toContain(soon);
+      expect(await asUser(asCloser, "select id from public.demo_slots")).toEqual([]);
+      expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.demo_slots")).toEqual([]);
+      expect(ids(await asUser<{ id: string }>(asAdmin, "select id from public.demo_slots"))).toEqual(expect.arrayContaining([mine, soon]));
+      await asServer("delete from public.demo_slots where id in ($1, $2)", [mine, soon]);
+    });
+
+    it("hides slots of a VA who isn't open, and slots in another tenant", async () => {
+      const slot = await addSlot(asVa, VA, at(42));
+      await asServer("update public.staff_profiles set review_status = 'pending' where user_id = $1", [VA]);
+      expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.demo_slots"))).not.toContain(slot);
+      await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+      const [{ id: inB }] = await asServer<{ id: string }>("insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) returning id", [VA_X, at(44), end(at(44))]);
+      expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.demo_slots"))).not.toContain(inB);
+      await expect(book(demoCo, inB, OWNER)).rejects.toMatchObject({ code: "IVA18" });
+      await asServer("delete from public.demo_slots where id in ($1, $2)", [slot, inB]);
+    });
+  });
+
+  describe("bookings", () => {
+    it("only the server books, decides or cancels — and nobody writes bookings directly", async () => {
+      const slot = await addSlot(asVa, VA, at(50));
+      await expect(asUser(asOwner, "select public.book_demo($1, $2, $3, null)", [demoCo, slot, OWNER])).rejects.toThrow(/permission denied for function/);
+      await expect(asUser(asVa, "select public.decide_demo($1, $2, 'confirmed', null)", [slot, VA])).rejects.toThrow(/permission denied for function/);
+      await expect(as("anon", {}, "select public.cancel_demo($1, $2)", [slot, OWNER])).rejects.toThrow(/permission denied for function/);
+      await expect(
+        asUser(asOwner, "insert into public.demo_bookings (client_id, va_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, 'X', 'Y')", [demoCo, VA, at(50), end(at(50)), OWNER]),
+      ).rejects.toThrow(/permission denied/);
+      await expect(asUser(asVa, "update public.demo_bookings set status = 'confirmed'")).rejects.toThrow(/permission denied/);
+      await asServer("delete from public.demo_slots where id = $1", [slot]);
+    });
+
+    it("books, shows the right rows to each role, then confirms; the slot is then used and can't be deleted", async () => {
+      const slot = await addSlot(asVa, VA, at(52));
+      const [{ r }] = await book(demoCo, slot, OWNER, "  Inbox triage  ");
+      expect(r).toMatchObject({ va_email: "va@x.co", company_name: "Demo Co", client_timezone: "America/New_York", client_note: "Inbox triage" });
+      const [row] = await asServer<{ va_name: string; status: string; client_note: string }>("select va_name, status, client_note from public.demo_bookings where id = $1", [r.id]);
+      expect(row).toEqual({ va_name: "Vera", status: "pending", client_note: "Inbox triage" });
+
+      expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.demo_bookings"))).toEqual([r.id]);
+      expect(await asUser(asOther, "select id from public.demo_bookings")).toEqual([]);
+      expect(ids(await asUser<{ id: string }>(asVa, "select id from public.demo_bookings"))).toEqual([r.id]);
+      expect(await asUser(asVa2, "select id from public.demo_bookings")).toEqual([]);
+      expect(ids(await asUser<{ id: string }>(asCloser, "select id from public.demo_bookings"))).toEqual([r.id]);
+      expect(await asUser(asCloser2, "select id from public.demo_bookings")).toEqual([]);
+      expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.demo_bookings")).toEqual([]);
+      expect(ids(await asUser<{ id: string }>(asAdmin, "select id from public.demo_bookings"))).toContain(r.id);
+      expect(ids(await asUser<{ id: string }>(asOther, "select id from public.demo_slots"))).not.toContain(slot);
+
+      await expect(decide(r.id, VA2, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
+      await expect(decide(r.id, VA, "maybe")).rejects.toThrow(/confirmed or rejected/);
+      const [{ r: decided }] = await decide(r.id, VA, "confirmed", "ignored");
+      expect(decided).toMatchObject({ status: "confirmed", client_email: "owner@demo.co", contact_name: "Pat", va_name: "Vera", reject_reason: null });
+      expect(await statusOf(r.id)).toBe("confirmed");
+      await expect(decide(r.id, VA, "rejected")).rejects.toMatchObject({ code: "IVA20" });
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [slot])).toEqual([]);
+    });
+
+    it("holds the 1-call rule: one open demo per client, so a second booking is refused", async () => {
+      const slot = await addSlot(asVa, VA, at(54));
+      await expect(book(demoCo, slot, OWNER)).rejects.toMatchObject({ code: "IVA17" });
+      // The index holds it even past the function (e.g. two requests at once).
+      await expect(
+        asServer("insert into public.demo_bookings (client_id, va_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, 'Demo Co', 'Vera')", [demoCo, VA, at(54), end(at(54)), OWNER]),
+      ).rejects.toThrow(/demo_bookings_one_open_per_client/);
+      await asServer("delete from public.demo_slots where id = $1", [slot]);
+    });
+
+    it("lets the client cancel, frees the slot, and lets another client book it", async () => {
+      const [{ id: open }] = await asServer<{ id: string }>("select id from public.demo_bookings where client_id = $1 and status = 'confirmed'", [demoCo]);
+      await expect(cancel(open, OTHER)).rejects.toMatchObject({ code: "IVA14" });
+      await expect(cancel(open, VA)).rejects.toMatchObject({ code: "IVA14" });
+      const [{ r }] = await cancel(open, OWNER);
+      expect(r).toMatchObject({ previous_status: "confirmed", va_email: "va@x.co", company_name: "Demo Co" });
+      await expect(cancel(open, OWNER)).rejects.toMatchObject({ code: "IVA20" });
+      const [{ slot_id: freed }] = await asServer<{ slot_id: string }>("select slot_id from public.demo_bookings where id = $1", [open]);
+      expect(ids(await asUser<{ id: string }>(asOther, "select id from public.demo_slots"))).toContain(freed);
+      const [{ r: again }] = await book(otherCo, freed, OTHER);
+      expect(await statusOf(again.id)).toBe("pending");
+    });
+
+    it("refuses a used slot; a rejected slot stays used, and the client may book again after a reject", async () => {
+      const [{ id: taken, slot_id: used }] = await asServer<{ id: string; slot_id: string }>("select id, slot_id from public.demo_bookings where client_id = $1 and status = 'pending'", [otherCo]);
+      await expect(book(demoCo, used, OWNER)).rejects.toMatchObject({ code: "IVA18" });
+      const [{ r }] = await decide(taken, VA, "rejected", "  Fully booked that week  ");
+      expect(r).toMatchObject({ status: "rejected", reject_reason: "Fully booked that week" });
+      await expect(book(demoCo, used, OWNER)).rejects.toMatchObject({ code: "IVA18" });
+      const next = await addSlot(asVa, VA, at(56));
+      const [{ r: rebooked }] = await book(otherCo, next, OTHER);
+      expect(await statusOf(rebooked.id)).toBe("pending");
+    });
+
+    it("settles stale bookings before booking: an unanswered past request expires, a past confirmed demo completes", async () => {
+      const past = at(-30);
+      await asServer("update public.demo_bookings set status = 'expired', decided_at = null where client_id = $1 and status = 'pending'", [otherCo]);
+      const [{ id: stale }] = await asServer<{ id: string }>(
+        "insert into public.demo_bookings (client_id, va_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, 'Other Co', 'Vera') returning id",
+        [otherCo, VA, past, end(past), OTHER],
+      );
+      const slot = await addSlot(asVa, VA, at(58));
+      await book(otherCo, slot, OTHER);
+      expect(await statusOf(stale)).toBe("expired");
+      await expect(decide(stale, VA, "confirmed")).rejects.toMatchObject({ code: "IVA20" });
+    });
+
+    it("refuses too soon, too far ahead, unknown slots and clients, a client with a VA, a pending or disabled client", async () => {
+      const soon = await addSlot(asVa, VA, at(2));
+      const far = await addSlot(asVa, VA, at(24 * 20));
+      const fine = await addSlot(asVa, VA, at(60));
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [demoCo]);
+      await expect(book(demoCo, soon, OWNER)).rejects.toMatchObject({ code: "IVA19" });
+      await expect(book(demoCo, far, OWNER)).rejects.toMatchObject({ code: "IVA19" });
+      await expect(book(demoCo, "00000000-0000-0000-0000-00000000dead", OWNER)).rejects.toMatchObject({ code: "IVA18" });
+      await expect(book("00000000-0000-0000-0000-00000000dead", fine, OWNER)).rejects.toMatchObject({ code: "IVA01" });
+      await expect(book(demoCo, fine, OTHER)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [demoCo, VA]);
+      await expect(book(demoCo, fine, OWNER)).rejects.toMatchObject({ code: "IVA16" });
+      await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1", [demoCo]);
+      await expect(book(pendingCo, fine, OWNER)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.clients set disabled_at = now() where id = $1", [demoCo]);
+      await expect(book(demoCo, fine, OWNER)).rejects.toMatchObject({ code: "IVA07" });
+      await asServer("update public.clients set disabled_at = null where id = $1", [demoCo]);
+      await expect(decide("00000000-0000-0000-0000-00000000dead", VA, "confirmed")).rejects.toMatchObject({ code: "IVA01" });
+      await asServer("delete from public.demo_slots where id in ($1, $2, $3)", [soon, far, fine]);
+    });
+
+    it("refuses a deactivated client login, and a VA who lost the role or the approval", async () => {
+      const slot = await addSlot(asVa, VA, at(64));
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [demoCo]);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [OWNER]);
+      await expect(book(demoCo, slot, OWNER)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'active' where id = $1", [OWNER]);
+      const [{ r }] = await book(demoCo, slot, OWNER);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [OWNER]);
+      await expect(cancel(r.id, OWNER)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'active' where id = $1", [OWNER]);
+      await asServer("update public.staff_profiles set review_status = 'pending' where user_id = $1", [VA]);
+      await expect(decide(r.id, VA, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [VA]);
+      await expect(decide(r.id, VA, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'active' where id = $1", [VA]);
+    });
+
+    it("refuses deciding or cancelling a pending request once its start has passed", async () => {
+      const past = at(-1);
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [demoCo]);
+      const [{ id: late }] = await asServer<{ id: string }>(
+        "insert into public.demo_bookings (client_id, va_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, 'Demo Co', 'Vera') returning id",
+        [demoCo, VA, past, end(past), OWNER],
+      );
+      await expect(decide(late, VA, "confirmed")).rejects.toMatchObject({ code: "IVA20" });
+      await expect(cancel(late, OWNER)).rejects.toMatchObject({ code: "IVA20" });
+      await asServer("update public.demo_bookings set status = 'expired' where id = $1", [late]);
+    });
+
+    it("a VA can't delete another VA's slot, a past slot, or a booked one — nor update any slot", async () => {
+      const mine = await addSlot(asVa, VA, at(66));
+      await asServer("update public.profiles set status = 'active' where id = $1", [VA2]);
+      expect(await asUser(asVa2, "delete from public.demo_slots where id = $1 returning id", [mine])).toEqual([]);
+      await asServer("update public.profiles set status = 'invited' where id = $1", [VA2]);
+      await expect(asUser(asVa, "update public.demo_slots set starts_at = starts_at where id = $1", [mine])).rejects.toThrow(/permission denied/);
+      const [{ id: past }] = await asServer<{ id: string }>("insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) returning id", [VA, at(-3), end(at(-3))]);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [past])).toEqual([]);
+      // Booked: hidden from the VA's delete, and refused by the trigger even for the server.
+      const [{ r }] = await book(demoCo, mine, OWNER);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [mine])).toEqual([]);
+      await expect(asServer("delete from public.demo_slots where id = $1", [mine])).rejects.toMatchObject({ code: "IVA20" });
+      // Once cancelled, the slot can go and the booking keeps its time without it.
+      await cancel(r.id, OWNER);
+      expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [mine])).toHaveLength(1);
+      expect(await asServer("select slot_id, starts_at from public.demo_bookings where id = $1", [r.id])).toEqual([{ slot_id: null, starts_at: expect.anything() }]);
+      await asServer("delete from public.demo_slots where id = $1", [past]);
+    });
+
+    it("the slot index holds even past the function: one non-cancelled booking per slot", async () => {
+      const slot = await addSlot(asVa, VA, at(68));
+      const [{ r }] = await book(demoCo, slot, OWNER);
+      await asServer("update public.demo_bookings set status = 'cancelled', cancelled_at = now() where client_id = $1 and status in ('pending', 'confirmed')", [otherCo]);
+      await expect(
+        asServer("insert into public.demo_bookings (client_id, va_id, slot_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, $6, 'Other Co', 'Vera')", [otherCo, VA, slot, at(68), end(at(68)), OTHER]),
+      ).rejects.toThrow(/demo_bookings_slot_once/);
+      await cancel(r.id, OWNER);
+    });
+
+    it("keeps slots and bookings inside their tenant", async () => {
+      const [{ tenant_id: tenant }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [demoCo]);
+      const rows = await asServer<{ tenant_id: string }>("select distinct tenant_id from public.demo_bookings where client_id = $1", [demoCo]);
+      expect(rows).toEqual([{ tenant_id: tenant }]);
+      const [{ id: slotB }] = await asServer<{ id: string }>("insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) returning id", [VA_X, at(62), end(at(62))]);
+      // The second tenant's admin (two-factor) sees only that tenant's slot, and none of this tenant's bookings.
+      const asAdminB = token("00000000-0000-0000-0000-0000000000b1", ["admin"], "aal2");
+      expect(ids(await asUser<{ id: string }>(asAdminB, "select id from public.demo_slots"))).toEqual([slotB]);
+      expect(await asUser(asAdminB, "select id from public.demo_bookings")).toEqual([]);
+      expect(ids(await asUser<{ id: string }>(asAdmin, "select id from public.demo_slots"))).not.toContain(slotB);
+      await expect(
+        asServer("insert into public.demo_bookings (client_id, va_id, slot_id, starts_at, ends_at, booked_by, company_name, va_name) values ($1, $2, $3, $4, $5, $6, 'Demo Co', 'B')", [demoCo, VA_X, slotB, at(62), end(at(62)), OWNER]),
+      ).rejects.toThrow(/foreign key/);
+      await asServer("delete from public.demo_slots where id = $1", [slotB]);
+    });
+  });
+});
