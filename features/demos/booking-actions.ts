@@ -5,8 +5,7 @@ import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { appRoutes } from "@/content/routes";
 import { requireRole } from "@/lib/auth/session";
-import { UpstreamError } from "@/lib/upstream-error";
-import { FORM_ERROR, formEntries, toSubmitResult } from "@/lib/validation";
+import { FORM_ERROR, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { BookingRefusal } from "./booking-dal";
 import type { BookField } from "./contract";
@@ -26,14 +25,6 @@ const REFUSED: Record<BookingRefusal, string> = {
   too_late: "This demo has already started or been answered, so it can't change now.",
   inactive: "Your account isn't active, so a demo can't be booked. Please contact your Islands VA contact.",
 };
-const OUTAGE = "That didn't go through just now. Please try again in a moment.";
-
-function outage(error: unknown, what: string): { ok: false; message: string } {
-  if (!(error instanceof UpstreamError)) throw error;
-  console.error(`${what} failed`, { service: error.service, error: error.message });
-  return { ok: false, message: OUTAGE };
-}
-
 /** "Book this time": books the chosen slot, tells the VA, and returns the client to their dashboard. */
 export async function bookDemoAction(formData: FormData): Promise<SubmitResult<BookField>> {
   const user = await requireRole(["client"]);
@@ -49,7 +40,7 @@ export async function bookDemoAction(formData: FormData): Promise<SubmitResult<B
       await notifyDemoRequested(result.value);
     });
   } catch (error) {
-    return outage(error, "Booking a demo");
+    return outageResult(error, "Booking a demo");
   }
   redirect(appRoutes.client);
 }
@@ -66,7 +57,7 @@ export async function cancelDemoAction(bookingId: unknown): Promise<SubmitResult
       await notifyDemoCancelled(result.value);
     });
   } catch (error) {
-    return outage(error, "Cancelling a demo");
+    return outageResult(error, "Cancelling a demo");
   }
   refresh();
   return { ok: true };
@@ -84,7 +75,7 @@ export async function decideDemoAction(formData: FormData): Promise<SubmitResult
       await notifyDemoDecided(result.value);
     });
   } catch (error) {
-    return outage(error, "Answering a demo request");
+    return outageResult(error, "Answering a demo request");
   }
   refresh();
   return { ok: true };

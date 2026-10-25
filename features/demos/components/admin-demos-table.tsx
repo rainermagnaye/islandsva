@@ -1,19 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
 import { adminClientHref } from "@/content/routes";
-import { DEMO_STATUS_LABELS, VA_TIME_ZONE, demoState, formatInZone, type AdminDemo, type DemoStatus } from "../contract";
+import { VA_TIME_ZONE, demoState, formatInZone, type AdminDemo } from "../contract";
+import { DemoStatusBadge } from "./demo-status-badge";
 
 const booked = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
-const TONES: Record<DemoStatus, BadgeTone> = {
-  pending: "warning",
-  confirmed: "success",
-  rejected: "neutral",
-  cancelled: "neutral",
-  completed: "info",
-  expired: "neutral",
-};
 
 const columns: Column<AdminDemo>[] = [
   {
@@ -31,18 +23,7 @@ const columns: Column<AdminDemo>[] = [
     ),
   },
   { key: "va", label: "VA", render: (demo) => <span className="block truncate">{demo.vaName}</span> },
-  {
-    key: "status",
-    label: "Status",
-    render: (demo) => {
-      const state = demoState(demo);
-      return (
-        <Badge tone={TONES[state]} size="sm">
-          {DEMO_STATUS_LABELS[state]}
-        </Badge>
-      );
-    },
-  },
+  { key: "status", label: "Status", render: (demo) => <DemoStatusBadge state={demoState(demo)} /> },
   { key: "booked", label: "Booked", render: (demo) => <span className="whitespace-nowrap text-ink-muted">{booked.format(new Date(demo.createdAt))}</span> },
 ];
 

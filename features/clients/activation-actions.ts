@@ -2,8 +2,7 @@
 
 import { refresh } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
-import { UpstreamError } from "@/lib/upstream-error";
-import { formEntries, toSubmitResult } from "@/lib/validation";
+import { formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { ActivationResult, PaymentField } from "./activation-contract";
 import type { ActivationRefusal } from "./activation-dal";
@@ -28,14 +27,6 @@ const REFUSED: Record<ActivationRefusal | "rate", string> = {
   rate: "Too many account emails were sent just now. Please try again in a few minutes.",
 };
 const TAMPERED = "Something went wrong with the form. Please refresh the page and try again.";
-const OUTAGE = "That didn't go through just now. Please try again in a moment.";
-
-function outage(error: unknown, what: string): { ok: false; message: string } {
-  if (!(error instanceof UpstreamError)) throw error;
-  console.error(`${what} failed`, { service: error.service, error: error.message });
-  return { ok: false, message: OUTAGE };
-}
-
 /** "Mark as paid": a payment received outside the app. */
 export async function recordClientPayment(formData: FormData): Promise<SubmitResult<PaymentField>> {
   const user = await requireRole(["closer", "admin"]);
@@ -46,7 +37,7 @@ export async function recordClientPayment(formData: FormData): Promise<SubmitRes
     const result = await markClientPaid(parsed.value, user.id);
     if (!result.ok) return { ok: false, message: REFUSED[result.reason] };
   } catch (error) {
-    return outage(error, "Recording a payment");
+    return outageResult(error, "Recording a payment");
   }
   refresh();
   return { ok: true };
@@ -62,7 +53,7 @@ export async function voidClientPaymentAction(clientId: unknown, paymentId: unkn
     const result = await voidClientPayment(parsed.value.clientId, parsed.value.paymentId, user.id);
     if (!result.ok) return { ok: false, message: REFUSED[result.reason] };
   } catch (error) {
-    return outage(error, "Voiding a payment");
+    return outageResult(error, "Voiding a payment");
   }
   refresh();
   return { ok: true };
@@ -81,7 +72,7 @@ export async function activateClient(clientId: unknown): Promise<ActivationResul
     refresh();
     return result;
   } catch (error) {
-    return outage(error, "Activating a client");
+    return outageResult(error, "Activating a client");
   }
 }
 
@@ -97,6 +88,6 @@ export async function resendClientAccount(clientId: unknown): Promise<Activation
     if (!result.ok) return { ok: false, message: REFUSED[result.reason] };
     return result;
   } catch (error) {
-    return outage(error, "Resending the account email");
+    return outageResult(error, "Resending the account email");
   }
 }

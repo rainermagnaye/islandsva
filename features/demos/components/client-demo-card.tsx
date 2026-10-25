@@ -1,8 +1,8 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { appRoutes } from "@/content/routes";
-import { DEMO_STATUS_LABELS, demoState, formatInZone, isOpenDemo, type ClientDemo } from "../contract";
+import { demoState, formatInZone, isOpenDemo, type ClientDemo } from "../contract";
 import { CancelDemoButton } from "./cancel-demo-button";
+import { DemoStatusBadge } from "./demo-status-badge";
 
 /**
  * The client's demo call while they have no VA: book one, wait for the VA's answer, or pick another time after
@@ -37,9 +37,7 @@ export function ClientDemoCard({ demo, timeZone }: { demo: ClientDemo | null; ti
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="type-label">Your demo call</span>
-        <Badge tone={state === "confirmed" ? "success" : "warning"} size="sm">
-          {DEMO_STATUS_LABELS[state]}
-        </Badge>
+        <DemoStatusBadge state={state} />
       </div>
       <p className="m-0 type-body text-ink">{formatInZone(demo.startsAt, timeZone)}</p>
       <p className="m-0 type-body-sm text-ink-muted">
