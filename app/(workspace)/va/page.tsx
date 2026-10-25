@@ -11,7 +11,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { appRoutes } from "@/content/routes";
 import { listAssignedClients } from "@/features/clients/assignment-dal";
 import { AssignedClientsTable } from "@/features/clients/components/assigned-clients-table";
-import { VaRegistration } from "@/features/users/components/va-registration";
+import { LazyVaRegistration } from "@/features/users/components/lazy-va-registration";
 import { staffAccessBadge } from "@/features/users/contract";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
@@ -56,7 +56,7 @@ async function VaHome() {
           {access.profile.returnNote}
         </Alert>
       )}
-      <VaRegistration user={access.account} profile={access.profile} />
+      <LazyVaRegistration user={access.account} profile={access.profile} />
     </Container>
   );
 }
