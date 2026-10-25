@@ -27,6 +27,7 @@ export const appRoutes = {
   acceptInvite: "/accept-invite",
   dashboard: dashboardPath,
   client: "/client",
+  clientDemo: "/client/demo",
   va: "/va",
   vaClients: "/va/clients",
   vaCalendar: "/va/calendar",
@@ -37,6 +38,7 @@ export const appRoutes = {
   register: "/register",
   adminLeads: "/admin/leads",
   adminClients: "/admin/clients",
+  adminDemos: "/admin/demos",
   adminUsers: "/admin/users",
   adminSettings: "/admin/settings",
   /** The signed-in person's own profile. Separate from a staff record in Teams. */

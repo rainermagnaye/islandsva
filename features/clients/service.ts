@@ -5,7 +5,7 @@ import { applyOpenSections, openClientSections, type ClientBusiness } from "./co
 import { acceptClientReview, getPublicOnboarding, getPublicPaymentProof, issueClientOnboardingLink, recordClientInvite, saveClientReview, submitClientPacket } from "./onboarding-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
-import { getClient, insertClient, insertPendingClient, listClients, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
+import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
 import type { ClientDetailsInput, ClientNoteInput, ClientReviewInput, CreateClientInput, NewClientInput, OnboardingInput } from "./validation";
 
 /** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
@@ -127,4 +127,10 @@ export async function sendClientActivation(clientId: string, invitedBy: string, 
     throw error;
   }
   return { ok: true as const };
+}
+
+/** The client record a client login belongs to (RLS: a client reads only their own), or null. */
+export async function findOwnClient(userId: string) {
+  const clientId = await getOwnClientId(userId);
+  return clientId ? getClient(clientId) : null;
 }

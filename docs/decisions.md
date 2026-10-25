@@ -14,6 +14,7 @@ Architecture decisions and why they were made. Change one by PR, updating the ru
 | PGlite for database tests | Real Postgres without Docker; runs in CI | If tests need Supabase services beyond Postgres |
 | Static CSP without nonces | Keeps public pages static | Portal pages, if a script-injection risk appears there |
 | Theme follows the OS, no toggle | No script or cookie; public pages stay static | — |
+| Demo scheduling: VA-published fixed 30-minute slots, pooled per tenant, in the app (no calendar sync); the client picks a time, not a person; 1-call rule = one open demo per client (partial unique index); stale bookings settled at the next booking, no cron | The smallest scheduler that enforces the rule in the database; no scheduled job or extra service | When VAs need recurring availability, reminders, no-show handling or external calendars |
 | Rate limiting in Vercel Firewall | No extra service | When per-user limits are needed |
 | `features/` + shared `lib/` | Each business area in one place as the app grows | — |
 | Invite-only accounts; deactivate, never delete | B2B: staff are invited, Closers create clients; restrict foreign keys keep history resolvable | — |
