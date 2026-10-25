@@ -119,27 +119,35 @@ export async function saveLeadStep(formData: FormData): Promise<SubmitResult<Lea
   return { ok: true };
 }
 
-/** Convert, with the remarks stored on the timeline in the same transaction. */
-export async function convertLeadNoted(formData: FormData): Promise<SubmitResult<ConvertNotedField>> {
+export type ConvertNotedResult =
+  | { ok: true; clientId: string; onboardingUrl: string | null }
+  | Exclude<SubmitResult<ConvertNotedField>, { ok: true }>;
+
+/** Convert, with the remarks stored on the timeline in the same transaction. The registration link is created with it. */
+export async function convertLeadNoted(formData: FormData): Promise<ConvertNotedResult> {
   await requireRole(["admin"]);
   const parsed = parseConvertNoted(formEntries(formData));
-  if (!parsed.ok) return toSubmitResult(parsed);
+  if (!parsed.ok) {
+    const failed = toSubmitResult(parsed);
+    if (failed.ok) return { ok: false, message: "Something went wrong with the form. Please refresh the page and try again." };
+    return failed;
+  }
 
   try {
     const result = await convertLeadWithRemarks(parsed.value);
     if (!result.ok) {
       if (result.reason === "unavailable") return { ok: false, message: STEP_REFUSED.unavailable };
       if (result.reason === "package") return { ok: false, message: "Choose a package from the list." };
+      if (result.reason === "country") return { ok: false, message: "Choose a country on the lead before converting." };
       return { ok: false, message: REFUSED[result.reason] };
     }
+    refresh();
+    return { ok: true, clientId: result.clientId, onboardingUrl: result.onboardingUrl };
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Lead conversion failed", { service: error.service, error });
     return { ok: false, message: "We couldn't convert this lead just now. Please try again in a moment." };
   }
-
-  refresh();
-  return { ok: true };
 }
 
 export async function saveLeadDetails(formData: FormData): Promise<SubmitResult<LeadEditField>> {

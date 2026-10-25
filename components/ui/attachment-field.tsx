@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { cx } from "@/lib/cx";
-import { AttachmentPreview } from "./attachment-preview";
 import { describedBy, Field } from "./field";
 
 /**
@@ -115,7 +114,15 @@ export function AttachmentField({
         )}
       </div>
       {file && <input type="hidden" name={nameField} value={title} />}
-      {file && preview && visual && <AttachmentPreview href={preview} name={shown} type={file.type} />}
+      {file && preview && visual && (
+        file.type.startsWith("image/") ? (
+          // A local preview of the file just chosen. next/image does not apply to a blob URL.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="" className="max-h-48 w-full rounded-md border border-border object-contain" />
+        ) : (
+          <audio controls src={preview} className="w-full" />
+        )
+      )}
     </Field>
   );
 }

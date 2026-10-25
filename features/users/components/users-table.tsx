@@ -34,6 +34,7 @@ const COLUMNS: Column<UserSummary>[] = [
   {
     key: "status",
     label: "Status",
+    nowrap: true,
     render: (user) => {
       const access = staffAccessBadge(accessOf(user));
       return (
@@ -52,6 +53,7 @@ export function UsersTable({ users, headingLevel = 2 }: { users: readonly UserSu
       columns={COLUMNS}
       rows={users}
       rowKey={(user) => user.id}
+      rowLabel={(user) => user.fullName || user.email}
       empty={<EmptyState compact headingLevel={headingLevel} title="No accounts yet" description="Invite your first team member and they'll appear here." />}
     />
   );

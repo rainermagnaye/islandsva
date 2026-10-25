@@ -8,7 +8,6 @@ import {
   CONTACT_METHODS,
   CONTACT_TIMES,
   CONVERT_LIMITS,
-  PACKAGE_TIMEZONES,
   HIRING_TIMELINES,
   INDUSTRIES,
   LEAD_EVENT_LIMIT,
@@ -289,7 +288,6 @@ export function parseLeadEdit(input: unknown) {
 }
 
 const DAY = 86_400_000;
-const TIMEZONE_VALUES: readonly string[] = PACKAGE_TIMEZONES.map((zone) => zone.value);
 
 const packageSetupSchema = z.strictObject({
   package: z
@@ -299,12 +297,9 @@ const packageSetupSchema = z.strictObject({
   hoursPerWeek: z.enum(["20", "40", "80"], { error: "Choose the hours for this package." }),
   termMonths: z.enum(["1", "6", "12"], { error: "Choose how long they'll commit." }),
   startsOn: z.string({ error: "Choose a start date." }).regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a start date."),
-  timezone: z
-    .string({ error: "Choose their time zone." })
-    .refine((zone) => TIMEZONE_VALUES.includes(zone), "Choose their time zone."),
 });
 
-const SETUP_FIELDS = ["package", "hoursPerWeek", "termMonths", "startsOn", "timezone"] as const;
+const SETUP_FIELDS = ["package", "hoursPerWeek", "termMonths", "startsOn"] as const;
 
 export type ConvertNotedInput = ConvertInput & {
   remarks: string;
@@ -312,7 +307,6 @@ export type ConvertNotedInput = ConvertInput & {
   hoursPerWeek: 20 | 40 | 80;
   termMonths: 1 | 6 | 12;
   startsOn: string;
-  timezone: string;
 };
 export type ConvertNotedField = ConvertField | "remarks" | (typeof SETUP_FIELDS)[number];
 
@@ -338,8 +332,9 @@ export function parseConvertNoted(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false as const, formError: FORM_ERROR };
   const record = input as Record<string, unknown>;
   const { remarks, package: packageSlug, hoursPerWeek, termMonths, startsOn, timezone, ...rest } = record;
+  void timezone;
   const converted = parseConvert(rest);
-  const setup = parseWith(packageSetupSchema, { package: packageSlug, hoursPerWeek, termMonths, startsOn, timezone }, SETUP_FIELDS);
+  const setup = parseWith(packageSetupSchema, { package: packageSlug, hoursPerWeek, termMonths, startsOn }, SETUP_FIELDS);
   const note = remark.safeParse(remarks);
 
   const fieldErrors: Partial<Record<ConvertNotedField, string>> = {};
@@ -374,7 +369,6 @@ export function parseConvertNoted(input: unknown) {
       hoursPerWeek: Number(setup.value.hoursPerWeek) as 20 | 40 | 80,
       termMonths: Number(setup.value.termMonths) as 1 | 6 | 12,
       startsOn: setup.value.startsOn,
-      timezone: setup.value.timezone,
     },
   };
 }

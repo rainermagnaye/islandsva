@@ -17,10 +17,11 @@ export function VaRegistration({ user, profile }: { user: UserSummary; profile: 
     invitationSentAt: profile?.invitationSentAt ?? user.createdAt,
     registrationCompletedAt: status === "completed" ? (profile?.registrationCompletedAt ?? null) : null,
     progress: steps.find((item) => item.current)?.label ?? "Invitation sent",
+    timeFormat: profile?.timeFormat ?? "12",
   };
 
   if (review === "pending_review") {
-    return <StaffProfileView userId={user.id} details={details} resumeType={profile?.resumeType ?? null} email={user.email} meta={meta} />;
+    return <StaffProfileView userId={user.id} details={details} email={user.email} meta={meta} />;
   }
 
   return (
@@ -28,7 +29,6 @@ export function VaRegistration({ user, profile }: { user: UserSummary; profile: 
       userId={user.id}
       email={user.email}
       details={details}
-      resumeType={profile?.resumeType ?? null}
       meta={meta}
       profilePic={null}
       mode="review"

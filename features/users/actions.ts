@@ -6,10 +6,10 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { emailField, FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { emptyStaffDetails, openReviewSections, registrationStatus, REVIEW_SECTION_LABELS, REVIEW_SECTIONS, reviewSectionFilled, STAFF_LIMITS, USER_LIMITS, staffSections, type InviteField, type ReviewSection, type StaffDetailField, type StaffDetails, type UserSummary } from "./contract";
+import { emptyStaffDetails, openReviewSections, registrationStatus, REVIEW_SECTION_LABELS, REVIEW_SECTIONS, reviewSectionFilled, STAFF_LIMITS, USER_LIMITS, staffSections, type InviteField, type MyProfileField, type ReviewSection, type StaffDetailField, type StaffDetails, type UserSummary } from "./contract";
 import { getStaffProfile, getUser, saveStaffProfile, setStaffReview, updateStaffEmail } from "./dal";
 import { confirmStaffProfile, deactivateStaff, inviteStaff as invite, removeStaff, returnStaffProfile, submitStaffForReview } from "./service";
-import { parseEmployers, parseInvite, parseReferences, parseReviewReturn, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
+import { parseEmployers, parseInvite, parseMyProfile, parseReferences, parseReviewReturn, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
 import { parseResumeText, resumeText } from "./resume-text";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
@@ -81,6 +81,43 @@ export async function removeStaffMember(userId: string): Promise<{ ok: true } | 
 }
 
 const AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** Saves the signed-in person's phone, time format and picture. Name and email stay as they are. */
+export async function saveMyProfile(formData: FormData): Promise<SubmitResult<MyProfileField>> {
+  const user = await requireRole(["admin", "va", "closer"]);
+  const entries = formEntries(formData);
+  delete entries.avatar;
+  delete entries.email;
+  const parsed = parseMyProfile(entries);
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  let avatar: { type: string; bytes: Uint8Array } | undefined;
+  const photo = formData.get("avatar");
+  if (photo instanceof File && photo.size > 0) {
+    if (!AVATAR_TYPES.has(photo.type)) return { ok: false, message: "Upload a JPEG, PNG or WebP picture." };
+    if (photo.size > STAFF_LIMITS.avatarBytes) return { ok: false, message: "Keep the profile picture under 512 KB." };
+    avatar = { type: photo.type, bytes: new Uint8Array(await photo.arrayBuffer()) };
+  }
+
+  try {
+    const account = await getUser(user.id);
+    if (!account) return { ok: false, message: "That account couldn't be found." };
+    const current = await getStaffProfile(user.id);
+    const details = {
+      ...(current?.details ?? emptyStaffDetails(account.fullName)),
+      fullName: current?.details.fullName || account.fullName,
+      mobileNumber: parsed.value.mobileNumber,
+    };
+    await saveStaffProfile(account.id, account.createdAt, details, undefined, avatar, parsed.value.timeFormat);
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("My profile save failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't save the profile. Please try again." };
+  }
+
+  refresh();
+  return { ok: true };
+}
 
 const RESUME_TYPES: Record<string, string> = {
   "application/pdf": "application/pdf",

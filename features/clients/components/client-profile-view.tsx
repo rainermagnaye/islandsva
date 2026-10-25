@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
+import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { formatPrice, packages, terms } from "@/content/packages";
-import { PACKAGE_TIMEZONES } from "@/features/leads/contract";
+import { formatPackagePrice } from "@/content/currencies";
+import { packages, terms } from "@/content/packages";
+import { adminClientPaymentHref } from "@/content/routes";
+import { timezoneForCountry } from "@/content/timezones";
 import { CLIENT_STATUS_LABELS, type ClientDetail, type ClientRegistrationStep, type ClientStatus } from "../contract";
 
 const TONES: Record<ClientStatus, BadgeTone> = { pending: "warning", active: "success", inactive: "neutral" };
@@ -61,7 +64,7 @@ export function ClientProfileView({ client }: { client: ClientDetail }) {
   const business = client.business;
   const pkg = packages.find((item) => item.slug === client.packageCode);
   const term = terms.find((item) => item.months === client.termMonths);
-  const zone = PACKAGE_TIMEZONES.find((item) => item.value === client.timezone)?.label ?? client.timezone;
+  const zone = timezoneForCountry(business.country)?.label ?? null;
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -92,7 +95,7 @@ export function ClientProfileView({ client }: { client: ClientDetail }) {
           <Field label="Package" value={pkg?.name ?? null} />
           <Field label="Hours" value={pkg?.hoursPerWeek ?? null} />
           <Field label="Term" value={term?.label ?? null} />
-          <Field label="Monthly price" value={client.monthlyCents ? formatPrice(client.monthlyCents) : null} />
+          <Field label="Monthly price" value={client.monthlyCents ? formatPackagePrice(client.monthlyCents, business.country) : null} />
           <Field label="Start date" value={client.startsOn ? day.format(new Date(`${client.startsOn.slice(0, 10)}T00:00:00Z`)) : null} />
           <Field label="Time zone" value={zone} />
         </DetailsCard>
@@ -101,14 +104,50 @@ export function ClientProfileView({ client }: { client: ClientDetail }) {
   );
 }
 
-/** A list that will hold every consent this client signs. None exist until that form is built. */
-export function ClientConsents() {
-  return <EmptyState compact title="No consents yet" description="Signed consent forms for this client will be listed here." />;
+const signed = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+
+/** The consent signed on the registration link. */
+export function ClientConsents({ consent }: { consent: { name: string; signedAt: string | null } | null }) {
+  if (!consent) return <EmptyState compact title="No consents yet" description="A signed consent appears here once the customer submits their registration." />;
+  return (
+    <Card as="section" padding="md" className="grid gap-2">
+      <h2 className="m-0 type-label">Registration consent</h2>
+      <p className="m-0 type-body-sm">Signed by {consent.name}{consent.signedAt ? ` on ${signed.format(new Date(consent.signedAt))}` : ""}.</p>
+    </Card>
+  );
 }
 
-/** A list that will hold every invoice for this client. None exist until that form is built. */
-export function ClientInvoices() {
-  return <EmptyState compact title="No invoices yet" description="Invoices for this client's package will be listed here." />;
+/** Payment proof uploaded with the registration. Invoices themselves come later. */
+export function ClientInvoices({
+  clientId,
+  proofName,
+  proofType,
+  amount,
+  country,
+}: {
+  clientId: string;
+  proofName: string | null;
+  proofType: string | null;
+  amount: number | null;
+  country?: string;
+}) {
+  if (!proofName) return <EmptyState compact title="No invoices yet" description="Payment proof appears here once the customer submits their registration." />;
+  return (
+    <Card as="section" padding="md" className="grid gap-2">
+      <h2 className="m-0 type-label">Payment proof</h2>
+      {amount ? <p className="m-0 type-body-sm">{formatPackagePrice(amount, country ?? "")} a month.</p> : null}
+      <AttachmentPreview href={adminClientPaymentHref(clientId)} name={proofName} type={proofType ?? typeFromName(proofName)} />
+    </Card>
+  );
+}
+
+function typeFromName(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  return "application/octet-stream";
 }
 
 function DetailsCard({ title, children }: { title: string; children: ReactNode }) {

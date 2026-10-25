@@ -71,6 +71,16 @@ export type StaffSection = (typeof STAFF_SECTIONS)[number];
 /** Inputs on the staff profile form that can show a field error (lists and the résumé report form-level). */
 export type StaffDetailField = Exclude<keyof StaffDetails, "employers" | "references" | "resumeName">;
 
+/** Inputs on My Profile. Name and email stay as saved; the staff profile is where the name changes. */
+export type MyProfileField = "mobileNumber" | "timeFormat";
+
+export const TIME_FORMATS = ["12", "24"] as const;
+export type TimeFormat = (typeof TIME_FORMATS)[number];
+export const TIME_FORMAT_LABELS: Record<TimeFormat, string> = {
+  "12": "12 hour (am/pm)",
+  "24": "24 hour",
+};
+
 export type StaffDetails = {
   fullName: string;
   dateOfBirth: string;

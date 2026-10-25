@@ -1,5 +1,5 @@
 import { COUNTRIES } from "@/content/countries";
-import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type StaffGender } from "./staff-fields";
+import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type StaffGender, type TimeFormat } from "./contract";
 
 export { COUNTRIES };
 
@@ -62,6 +62,7 @@ export type StaffProfileMeta = {
   invitationSentAt: string;
   registrationCompletedAt: string | null;
   progress: string;
+  timeFormat: TimeFormat;
 };
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });

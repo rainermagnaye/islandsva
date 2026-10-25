@@ -1,5 +1,7 @@
-import type { Key, ReactNode } from "react";
+import { useId, type Key, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
+import { Checkbox } from "./checkbox";
+import { TableSelection } from "./table-selection";
 
 export type Column<Row> = {
   /** Unique within the table. */
@@ -8,6 +10,8 @@ export type Column<Row> = {
   render: (row: Row) => ReactNode;
   /** Numbers and actions sit at the end (right-aligned, tabular figures). */
   align?: "end";
+  /** Show the whole value. Status badges must not be cut off with an ellipsis. */
+  nowrap?: boolean;
   /** Hide the label visually (e.g. an actions column) — it's still read out and shown on phone cards. */
   hideLabel?: boolean;
 };
@@ -26,27 +30,52 @@ type DataTableProps<Row> = {
   keepHeader?: boolean;
   /** Drop the table's own border and radius when a parent card already draws them. */
   attached?: boolean;
+  /** Name read with each row's checkbox. Defaults on for record lists. */
+  selectable?: boolean;
+  rowLabel?: (row: Row) => string;
 };
 
+function keyOf<Row>(row: Row, rowKey: (row: Row) => Key) {
+  return String(rowKey(row));
+}
+
 /**
- * A read-only records table: sticky header on surface-sunken, rows tint on hover, numbers right-aligned.
- * Under 600px of container width every row becomes a card (first column as its title, the rest as
- * label–value pairs). Server-rendered; long lists paginate server-side with Pagination. Styles: the
+ * A read-only records table: a selection checkbox, sticky header on surface-sunken, rows tint on hover,
+ * numbers right-aligned. Under 600px of container width every row becomes a card. Styles: the
  * `.data-table` block in app/globals.css.
  */
-export function DataTable<Row>({ caption, showCaption, columns, rows, rowKey, empty, keepHeader = false, attached = false }: DataTableProps<Row>) {
+export function DataTable<Row>({
+  caption,
+  showCaption,
+  columns,
+  rows,
+  rowKey,
+  empty,
+  keepHeader = false,
+  attached = false,
+  selectable = true,
+  rowLabel,
+}: DataTableProps<Row>) {
+  const tableId = useId();
+
   if (rows.length === 0 && !keepHeader && !attached) return <>{empty}</>;
   const [first, ...rest] = columns;
+  const span = columns.length + (selectable ? 1 : 0);
 
   return (
-    <div className="data-table">
+    <TableSelection className="data-table">
       <div className={cx("data-table__scroll", attached && "data-table__scroll--plain")}>
         <table>
           <caption className={showCaption ? undefined : "sr-only"}>{caption}</caption>
           <thead>
             <tr>
+              {selectable && (
+                <th scope="col" className="data-table__check">
+                  <Checkbox id={`${tableId}-all`} hideLabel label="Select all" disabled={rows.length === 0} />
+                </th>
+              )}
               {columns.map((column) => (
-                <th key={column.key} scope="col" className={cx(column.align === "end" && "data-table__end")}>
+                <th key={column.key} scope="col" className={cx(column.align === "end" && "data-table__end", column.nowrap && "data-table__nowrap")}>
                   {column.hideLabel ? <span className="sr-only">{column.label}</span> : column.label}
                 </th>
               ))}
@@ -55,26 +84,34 @@ export function DataTable<Row>({ caption, showCaption, columns, rows, rowKey, em
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="data-table__empty">
+                <td colSpan={span} className="data-table__empty">
                   {empty}
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={rowKey(row)}>
-                  <th scope="row">{first.render(row)}</th>
-                  {rest.map((column) => (
-                    <td key={column.key} data-label={column.hideLabel ? undefined : column.label} className={cx(column.align === "end" && "data-table__end")}>
-                      {column.render(row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              rows.map((row) => {
+                const id = keyOf(row, rowKey);
+                return (
+                  <tr key={id}>
+                    {selectable && (
+                      <td className="data-table__check">
+                        <Checkbox id={`${tableId}-${id}`} hideLabel label={`Select ${rowLabel?.(row) ?? "row"}`} />
+                      </td>
+                    )}
+                    <th scope="row">{first.render(row)}</th>
+                    {rest.map((column) => (
+                      <td key={column.key} data-label={column.hideLabel ? undefined : column.label} className={cx(column.align === "end" && "data-table__end", column.nowrap && "data-table__nowrap")}>
+                        {column.render(row)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </TableSelection>
   );
 }
 

@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
-import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
+import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, TIME_FORMAT_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
 import { formatProfileDate, type StaffProfileMeta } from "../profile-fields";
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
@@ -19,7 +18,7 @@ function shownDate(value: string) {
 }
 
 /** Read-only profile sections. Editing replaces each value with a field and keeps these cards. */
-export function StaffProfileView({ userId, details, resumeType, email, meta }: { userId: string; details: StaffDetails; resumeType: string | null; email: string; meta: StaffProfileMeta }) {
+export function StaffProfileView({ userId, details, email, meta }: { userId: string; details: StaffDetails; email: string; meta: StaffProfileMeta }) {
   const emergency = [details.emergencyName, details.emergencyRelationship, details.emergencyPhone].map((part) => part.trim()).filter(Boolean);
   const jobs = details.employers.filter((job) => job.company.trim() || job.position.trim() || job.duration.trim());
   const people = details.references.filter((person) => person.name.trim() || person.phone.trim() || person.relationship.trim() || person.company.trim() || person.email.trim());
@@ -44,7 +43,9 @@ export function StaffProfileView({ userId, details, resumeType, email, meta }: {
           <div className="min-w-0 sm:col-span-2">
             <p className="m-0 type-caption text-ink-muted">Résumé</p>
             {details.resumeName ? (
-              <AttachmentPreview href={`/admin/users/${userId}/resume`} name={details.resumeName} type={resumeType ?? "application/pdf"} />
+              <a href={`/admin/users/${userId}/resume`} className="type-body-sm text-link">
+                {details.resumeName}
+              </a>
             ) : (
               <p className="m-0 type-body-sm text-ink-muted">Not provided</p>
             )}
@@ -93,6 +94,7 @@ export function StaffProfileView({ userId, details, resumeType, email, meta }: {
           <Field label="Progress tracker" value={meta.progress} />
           <Field label="Date of invitation sent" value={formatProfileDate(meta.invitationSentAt)} />
           <Field label="Date of registration completed" value={formatProfileDate(meta.registrationCompletedAt)} />
+          <Field label="Time format" value={TIME_FORMAT_LABELS[meta.timeFormat]} />
         </DetailsCard>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import type { Json } from "@/types/database";
-import { registrationStatus, reviewSections, staffSections, type RegistrationStatus, type ReviewSection, type StaffDetails, type StaffEmployer, type StaffReference, type StaffReviewStatus, type StaffSection, type UserSummary } from "./contract";
+import { registrationStatus, reviewSections, staffSections, type RegistrationStatus, type ReviewSection, type StaffDetails, type StaffEmployer, type StaffReference, type StaffReviewStatus, type StaffSection, type TimeFormat, type UserSummary } from "./contract";
 import { classifyInviteError } from "./invite-result";
 
 /**
@@ -22,6 +22,20 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
 
   const extras = await staffExtras(data.map((row) => row.id));
   return data.map((row) => toSummary(row, extras.get(row.id)));
+}
+
+/** A few accounts matching a name or email, newest first. Read as the signed-in admin, so RLS applies. */
+export async function searchProfiles(search: string, limit: number) {
+  const supabase = await createClient();
+  const pattern = `%${search}%`;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .or(`full_name.ilike."${pattern}",email.ilike."${pattern}"`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new UpstreamError("supabase", `Searching accounts failed: ${error.message}`, { cause: error });
+  return data.map((row) => ({ id: row.id, fullName: row.full_name, email: row.email }));
 }
 
 /** How many accounts the signed-in admin can see. Head-only count: no rows are transferred. */
@@ -115,7 +129,7 @@ export async function deleteAuthUser(userId: string) {
 }
 
 const PROFILE_COLUMNS =
-  "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_line2, current_city, current_province, current_postal_code, current_country, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, job_references, key_responsibilities, achievements, resume_name, resume_type, registration_status, review_status, returned_sections, return_note, invitation_sent_at, registration_completed_at";
+  "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_line2, current_city, current_province, current_postal_code, current_country, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, job_references, key_responsibilities, achievements, resume_name, resume_type, registration_status, review_status, returned_sections, return_note, invitation_sent_at, registration_completed_at, time_format";
 
 export type StaffProfileRecord = {
   details: StaffDetails;
@@ -126,6 +140,7 @@ export type StaffProfileRecord = {
   returnNote: string | null;
   invitationSentAt: string;
   registrationCompletedAt: string | null;
+  timeFormat: TimeFormat;
   sections: Record<StaffSection, boolean>;
 };
 
@@ -145,6 +160,7 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
     returnNote: data.return_note,
     invitationSentAt: data.invitation_sent_at,
     registrationCompletedAt: data.registration_completed_at,
+    timeFormat: data.time_format === "24" ? "24" : "12",
     sections: staffSections(details),
   };
 }
@@ -175,6 +191,16 @@ export async function getStaffResume(userId: string): Promise<{ name: string; ty
   return { name: data.resume_name, type: data.resume_type, bytes: decodeBytea(data.resume_bytes) };
 }
 
+/**
+ * Whether this person has a picture. The bytes are not granted to the API, so the header checks the type
+ * column with the secret key after the caller has confirmed the id is the signed-in user.
+ */
+export async function staffHasAvatar(userId: string) {
+  const { data, error } = await createAdminClient().from("staff_profiles").select("avatar_type").eq("user_id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading profile picture ${userId} failed: ${error.message}`, { cause: error });
+  return Boolean(data?.avatar_type);
+}
+
 export async function getStaffAvatar(userId: string): Promise<{ type: string; bytes: Uint8Array } | null> {
   const { data, error } = await createAdminClient().from("staff_profiles").select("avatar_type, avatar_bytes").eq("user_id", userId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading profile picture ${userId} failed: ${error.message}`, { cause: error });
@@ -202,6 +228,7 @@ export async function saveStaffProfile(
   details: StaffDetails,
   resume?: { name: string; type: string; bytes: Uint8Array },
   avatar?: { type: string; bytes: Uint8Array },
+  timeFormat?: TimeFormat,
 ) {
   const admin = createAdminClient();
   const { data: existing, error: readError } = await admin
@@ -251,6 +278,7 @@ export async function saveStaffProfile(
     ...(avatar
       ? { avatar_type: avatar.type, avatar_bytes: `\\x${Buffer.from(avatar.bytes).toString("hex")}` }
       : {}),
+    ...(timeFormat ? { time_format: timeFormat } : {}),
   };
 
   // Profile first: it's the write that can fail (up to 2 MB of résumé, CHECK constraints). The name follows

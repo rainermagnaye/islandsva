@@ -1,4 +1,5 @@
 import "server-only";
+import { timezoneForCountry } from "@/content/timezones";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import {
@@ -57,7 +58,7 @@ export async function listClients({
   const from = (page - 1) * pageSize;
   let query = supabase
     .from("clients")
-    .select("id, company_name, contact_name, contact_email, status, disabled_at, created_at, creator:profiles!clients_created_by_fkey(full_name, email)", { count: "exact" });
+    .select("id, company_name, contact_name, contact_email, status, onboarding_status, disabled_at, created_at, creator:profiles!clients_created_by_fkey(full_name, email)", { count: "exact" });
   if (status && !disabled) query = query.eq("status", status);
   if (search) query = query.or(clientSearch(search));
   const { data, error, count } = await (disabled ? query.not("disabled_at", "is", null) : query.is("disabled_at", null))
@@ -79,6 +80,7 @@ export async function listClients({
       contactName: row.contact_name,
       contactEmail: row.contact_email,
       status: row.status,
+      onboardingStatus: row.onboarding_status,
       disabledAt: row.disabled_at,
       // The creator's profile is always readable by an admin; "—" covers callers who can't see it.
       createdBy: row.creator?.full_name || row.creator?.email || "—",
@@ -91,7 +93,7 @@ export async function listClients({
 }
 
 const DETAIL_COLUMNS =
-  "id, company_name, contact_name, contact_email, contact_phone, status, created_at, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone, business, disabled_at, creator:profiles!clients_created_by_fkey(full_name, email)";
+  "id, company_name, contact_name, contact_email, contact_phone, status, onboarding_status, created_at, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone, business, disabled_at, creator:profiles!clients_created_by_fkey(full_name, email)";
 
 /** One client for the profile, or null when the id is unknown or not visible. */
 export async function getClient(id: string): Promise<ClientDetail | null> {
@@ -107,6 +109,7 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
     contactEmail: data.contact_email,
     contactPhone: data.contact_phone,
     status: data.status,
+    onboardingStatus: data.onboarding_status,
     createdBy: data.creator?.full_name || data.creator?.email || "—",
     createdAt: data.created_at,
     packageCode: data.package_code,
@@ -162,13 +165,18 @@ export async function insertClient(row: {
 /** Writes the business details gathered from the lead. Contact columns stay as conversion set them. */
 export async function saveClientBusiness(clientId: string, business: ClientBusiness) {
   const supabase = await createClient();
-  const { error } = await supabase.from("clients").update({ business: clientBusinessToJson(business) }).eq("id", clientId);
+  const zone = timezoneForCountry(business.country);
+  const { error } = await supabase
+    .from("clients")
+    .update({ business: clientBusinessToJson(business), ...(zone ? { timezone: zone.value } : {}) })
+    .eq("id", clientId);
   if (error) throw new UpstreamError("supabase", `Saving client ${clientId} details failed: ${error.message}`, { cause: error });
 }
 
 /** Company details edited on the profile. */
 export async function saveClientDetails(input: ClientDetailsInput) {
   const supabase = await createClient();
+  const zone = timezoneForCountry(input.business.country);
   const { data, error } = await supabase
     .from("clients")
     .update({
@@ -176,6 +184,7 @@ export async function saveClientDetails(input: ClientDetailsInput) {
       contact_name: input.contactName,
       contact_phone: input.contactPhone,
       business: clientBusinessToJson(input.business),
+      ...(zone ? { timezone: zone.value } : {}),
     })
     .eq("id", input.clientId)
     .select("id");
@@ -252,6 +261,19 @@ function decodeBytea(value: string) {
   const hex = value.startsWith("\\x") ? value.slice(2) : /^[0-9a-fA-F]+$/.test(value) ? value : "";
   if (hex && hex.length % 2 === 0) return Uint8Array.from(Buffer.from(hex, "hex"));
   return Uint8Array.from(Buffer.from(value, "base64"));
+}
+
+/** A pending client with no package yet. The signed-in admin is the creator, so RLS and the tenant trigger apply. */
+export async function insertPendingClient(input: { companyName: string; contactName: string; contactEmail: string; contactPhone: string | null }, createdBy: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("clients").insert({
+    company_name: input.companyName,
+    contact_name: input.contactName,
+    contact_email: input.contactEmail,
+    contact_phone: input.contactPhone,
+    created_by: createdBy,
+  });
+  if (error) throw new UpstreamError("supabase", `Creating a client failed: ${error.message}`, { cause: error });
 }
 
 /** Hides the client from the list, or puts them back. The record stays. */

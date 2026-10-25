@@ -275,6 +275,13 @@ body:has(nav.portal-nav) .portal-header {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.data-table th.data-table__nowrap,
+.data-table td.data-table__nowrap {
+  width: 12.5rem;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
 .data-table td.data-table__empty {
   overflow: visible;
   padding: var(--space-10) var(--space-4);
@@ -324,6 +331,18 @@ body:has(nav.portal-nav) .portal-header {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.data-table .data-table__check {
+  position: relative;
+  z-index: 1;
+  width: 3.25rem;
+  padding: 0;
+  text-align: center;
+  overflow: visible;
+  text-overflow: clip;
+}
+.data-table tbody tr:has(.data-table__check input:checked) {
+  background: var(--surface-sunken);
+}
 @container (max-width: 599px) {
   .data-table__scroll {
     overflow: visible;
@@ -338,6 +357,10 @@ body:has(nav.portal-nav) .portal-header {
     overflow: visible;
     text-overflow: clip;
     white-space: normal;
+  }
+  .data-table th.data-table__nowrap,
+  .data-table td.data-table__nowrap {
+    width: auto;
   }
   .data-table thead {
     position: absolute;
@@ -399,6 +422,13 @@ body:has(nav.portal-nav) .portal-header {
     text-align: center;
   }
   .data-table td.data-table__empty::before {
+    content: none;
+  }
+  .data-table td.data-table__check {
+    justify-content: flex-start;
+    padding-bottom: var(--space-2);
+  }
+  .data-table td.data-table__check::before {
     content: none;
   }
 }

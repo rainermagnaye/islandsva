@@ -36,6 +36,12 @@ export async function signOut(): Promise<AuthOutcome> {
   return outcome((await supabase.auth.signOut({ scope: "local" })).error);
 }
 
+/** Ends every session for this account, including the browser that asked. */
+export async function signOutEverywhere(): Promise<AuthOutcome> {
+  const supabase = await createClient();
+  return outcome((await supabase.auth.signOut({ scope: "global" })).error);
+}
+
 /** Emails a reset link built by the "Reset password" template (→ /auth/confirm?type=recovery). */
 export async function sendPasswordReset(email: string): Promise<AuthOutcome> {
   const supabase = await createClient();
@@ -89,4 +95,13 @@ export async function enrollTotp() {
 export async function verifyTotp(factorId: string, code: string): Promise<AuthOutcome> {
   const supabase = await createClient();
   return outcome((await supabase.auth.mfa.challengeAndVerify({ factorId, code })).error);
+}
+
+/** The signed-in person's name. Their own profile row is readable; a missing name is null. */
+export async function getOwnProfileName(userId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", "Reading the signed-in profile failed", { cause: error });
+  const name = data?.full_name?.trim();
+  return name || null;
 }

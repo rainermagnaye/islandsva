@@ -19,8 +19,8 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as AccountStatus[]).map((valu
  * The team list: the title on the left, then search beside Filter and Create new. Create new opens the
  * invite form. Search and status run on the list already loaded for this admin.
  */
-export function TeamBoard({ users, total }: { users: readonly UserSummary[]; total: number }) {
-  const [query, setQuery] = useState("");
+export function TeamBoard({ users, total, initialQuery = "" }: { users: readonly UserSummary[]; total: number; initialQuery?: string }) {
+  const [query, setQuery] = useState(initialQuery);
   const [status, setStatus] = useState<AccountStatus | undefined>();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);

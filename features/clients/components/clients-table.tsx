@@ -1,14 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { adminClientHref } from "@/content/routes";
-import { CLIENT_STATUS_LABELS, type ClientStatus, type ClientSummary } from "../contract";
+import { clientBadge, type ClientSummary } from "../contract";
 
 const created = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
-
-// Pending = waiting on onboarding (a decision is due), active = done, inactive = no action needed.
-const TONES: Record<ClientStatus, BadgeTone> = { pending: "warning", active: "success", inactive: "neutral" };
 
 /** Long values stay on one line; the cell clips them and the title shows the rest on hover. */
 function clipped(value: string) {
@@ -35,16 +32,15 @@ const columns = (hrefFor: (id: string) => string): Column<ClientSummary>[] => [
   {
     key: "status",
     label: "Status",
-    render: (client) =>
-      client.disabledAt ? (
-        <Badge tone="neutral" size="sm" dot>
-          Disabled
+    nowrap: true,
+    render: (client) => {
+      const badge = clientBadge(client);
+      return (
+        <Badge tone={badge.tone} size="sm" dot={badge.dot}>
+          {badge.label}
         </Badge>
-      ) : (
-        <Badge tone={TONES[client.status]} size="sm" dot={TONES[client.status] === "neutral"}>
-          {CLIENT_STATUS_LABELS[client.status]}
-        </Badge>
-      ),
+      );
+    },
   },
   { key: "created", label: "Created", render: (client) => <span className="whitespace-nowrap text-ink-muted">{created.format(new Date(client.createdAt))}</span> },
 ];
@@ -61,5 +57,15 @@ export function ClientsTable({
   keepHeader?: boolean;
   hrefFor?: (id: string) => string;
 }) {
-  return <DataTable caption="Clients" columns={columns(hrefFor)} rows={clients} rowKey={(client) => client.id} keepHeader={keepHeader} empty={empty} />;
+  return (
+    <DataTable
+      caption="Clients"
+      columns={columns(hrefFor)}
+      rows={clients}
+      rowKey={(client) => client.id}
+      rowLabel={(client) => client.companyName}
+      keepHeader={keepHeader}
+      empty={empty}
+    />
+  );
 }

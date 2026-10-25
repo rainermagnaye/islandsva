@@ -1,9 +1,10 @@
 import "server-only";
 import { packages } from "@/content/packages";
+import { timezoneForCountry } from "@/content/timezones";
 import { businessFromEnquiry } from "@/features/clients/contract";
-import { openClientRegistration } from "@/features/clients/service";
+import { openClientRegistration, openOnboardingLink } from "@/features/clients/service";
 import { LEAD_STATUSES, nextStatuses } from "./contract";
-import { convertLeadNoted, convertLeadToClient, deleteLead, getLead, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, setLeadDisabled, updateLeadDetails, updateLeadStatus } from "./dal";
+import { convertLeadNoted, convertLeadToClient, deleteLead, getLead, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, searchLeads, setLeadDisabled, updateLeadDetails, updateLeadStatus } from "./dal";
 import { sendLeadNotification } from "./email";
 import type { ConvertInput, ConvertNotedInput, LeadEditInput, LeadInput, LeadStatusInput, LeadStepInput } from "./validation";
 
@@ -65,12 +66,14 @@ export async function logLeadFile(kind: "call" | "note", leadId: string, body: s
 export async function convertLeadWithRemarks(input: ConvertNotedInput) {
   const pkg = packages.find((item) => item.slug === input.packageSlug && item.weeklyHours === input.hoursPerWeek);
   if (!pkg) return { ok: false as const, reason: "package" as const };
-  const result = await convertLeadNoted({ ...input, monthlyCents: pkg.monthlyPrice[input.termMonths] });
+  const lead = await getLead(input.leadId);
+  const zone = timezoneForCountry(lead?.country ?? "");
+  if (!zone) return { ok: false as const, reason: "country" as const };
+  const result = await convertLeadNoted({ ...input, timezone: zone.value, monthlyCents: pkg.monthlyPrice[input.termMonths] });
   if (!result.ok) return result;
 
   // The client row already exists. Copying the lead's details must not undo the conversion.
   try {
-    const lead = await getLead(input.leadId);
     await openClientRegistration(result.clientId, businessFromEnquiry({
       industry: lead?.industry ?? null,
       country: lead?.country ?? null,
@@ -85,7 +88,15 @@ export async function convertLeadWithRemarks(input: ConvertNotedInput) {
   } catch (error) {
     console.error("Client registration setup failed", { clientId: result.clientId, error });
   }
-  return result;
+
+  let onboardingUrl: string | null = null;
+  try {
+    const link = await openOnboardingLink(result.clientId);
+    if (link.ok) onboardingUrl = link.url;
+  } catch (error) {
+    console.error("Registration link failed", { clientId: result.clientId, error });
+  }
+  return { ok: true as const, clientId: result.clientId, onboardingUrl };
 }
 
 export async function editLead(input: LeadEditInput) {
@@ -98,4 +109,9 @@ export async function pauseLead(leadId: string, disabled: boolean) {
 
 export async function removeLead(leadId: string) {
   return deleteLead(leadId);
+}
+
+/** Name, email, and company matches for the header search. */
+export async function findLeads(search: string, limit: number) {
+  return searchLeads(search, limit);
 }
