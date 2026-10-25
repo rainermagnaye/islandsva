@@ -6,8 +6,11 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card } from "@/components/ui/card";
 import { appRoutes } from "@/content/routes";
 import { ClientProfileView, ClientStatusBadge, ClientStepper } from "@/features/clients/components/client-profile-view";
+import { OnboardingLinkCard } from "@/features/clients/components/onboarding-link";
 import { clientRegistrationSteps } from "@/features/clients/contract";
 import { getClient } from "@/features/clients/dal";
+import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
+import { getRegistrationToken } from "@/features/clients/onboarding-dal";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
 
@@ -28,6 +31,10 @@ async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, 
   // RLS: a Closer reads only the clients they created, so anyone else's id is a 404.
   const client = await getClient(id);
   if (!client) notFound();
+  // The token is server-only; read it only now that RLS has shown this Closer the client.
+  const awaitingRegistration = client.status === "pending" && !client.disabledAt;
+  const token = awaitingRegistration ? await getRegistrationToken(id) : null;
+  const url = token ? onboardingUrl(token, await registrationOrigin()) : null;
 
   return (
     <Workspace
@@ -43,6 +50,7 @@ async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, 
           <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </Card>
         <ClientStepper steps={clientRegistrationSteps({ onboardingStatus: client.onboardingStatus, accountStatus: client.status })} />
+        {awaitingRegistration && <OnboardingLinkCard clientId={client.id} url={url} />}
         <ClientProfileView client={client} />
       </div>
     </Workspace>
