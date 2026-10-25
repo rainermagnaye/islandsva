@@ -776,6 +776,20 @@ describe("tenants", () => {
     );
   });
 
+  it("assign_tenant names every table that uses it (profiles and leads take the default on purpose)", async () => {
+    // Guards against a redefinition that drops a case: that table's rows would silently land in the default tenant.
+    // Read as the test superuser: the catalog lookup needs the private schema, which no API role can use.
+    const tables = (
+      await db.query<{ name: string }>(
+        "select c.relname as name from pg_trigger t join pg_class c on c.oid = t.tgrelid where t.tgfoid = 'private.assign_tenant()'::regprocedure order by 1",
+      )
+    ).rows;
+    const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.assign_tenant()'::regprocedure")).rows;
+    const missing = tables.map((t) => t.name).filter((name) => !["profiles", "leads"].includes(name) && !src.includes(`when '${name}'`));
+    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links"]));
+    expect(missing).toEqual([]);
+  });
+
   it("every row inherits a tenant: users the default, clients their creator's, assignments their client's", async () => {
     const tenantOf = async (sql: string) => (await asServer<{ tenant_id: string }>(sql))[0].tenant_id;
     expect(await tenantOf(`select tenant_id from public.profiles where id = '${ADMIN}'`)).toBe(tenantA);
