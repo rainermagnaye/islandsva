@@ -68,34 +68,6 @@ export type ClientSummary = {
 export const NEW_CLIENT_LIMITS = { companyName: 160, contactName: 120, contactEmail: 254, contactPhone: 40 } as const;
 export type NewClientField = "companyName" | "contactName" | "contactEmail" | "contactPhone" | "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
 
-/** Where the onboarding form stands, from the latest link and the client record. */
-export type OnboardingState = "not_sent" | "sent" | "expired" | "withdrawn" | "submitted";
-
-export const ONBOARDING_STATE_LABELS: Record<OnboardingState, string> = {
-  not_sent: "Not sent",
-  sent: "Sent",
-  expired: "Expired",
-  withdrawn: "Withdrawn",
-  submitted: "Submitted",
-};
-
-/** The latest link's dates, as the Closer and admins may read them (never the token or its hash). */
-export type OnboardingLink = { createdAt: string; expiresAt: string; submittedAt: string | null; revokedAt: string | null };
-
-export type OnboardingStatus = { state: OnboardingState; link: OnboardingLink | null; submittedAt: string | null; emailedAt: string | null };
-
-/** A submitted form wins; otherwise the latest link decides. */
-export function onboardingState(link: OnboardingLink | null, submittedAt: string | null, now = new Date()): OnboardingState {
-  if (submittedAt) return "submitted";
-  if (!link) return "not_sent";
-  if (link.submittedAt) return "submitted";
-  if (link.revokedAt) return "withdrawn";
-  return new Date(link.expiresAt) <= now ? "expired" : "sent";
-}
-
-/** What sending returns: the link, shown once so it can be copied, and whether the email went out. */
-export type OnboardingSendResult = { ok: true; link: string; expiresAt: string; emailed: boolean } | { ok: false; message: string };
-
 /** A page of clients, newest first. */
 export type ClientPage = { clients: ClientSummary[]; total: number; page: number; pageCount: number };
 

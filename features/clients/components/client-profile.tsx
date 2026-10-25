@@ -6,28 +6,25 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { adminClientHref } from "@/content/routes";
-import { CLIENT_PROFILE_TABS, CLIENT_REVIEW_SECTION_LABELS, clientBadge, clientRegistrationSteps, type ClientDetail, type ClientNote, type ClientPacketSummary, type ClientProfileTab, type OnboardingStatus } from "../contract";
+import { CLIENT_PROFILE_TABS, CLIENT_REVIEW_SECTION_LABELS, clientBadge, clientRegistrationSteps, type ClientDetail, type ClientNote, type ClientPacketSummary, type ClientProfileTab } from "../contract";
 import { OnboardingLinkCard } from "./onboarding-link";
 import { SendActivation } from "./client-activation";
 import { ClientReviewActions } from "./client-review-actions";
 import { ClientActions } from "./client-actions";
 import { ClientCompanyForm } from "./client-company-form";
 import { ClientNotes } from "./client-notes";
-import { OnboardingPanel } from "./onboarding-panel";
 import { ClientConsents, ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
 
 /** The client profile: registration progress, then overview, notes, consents, or invoices. */
 export function ClientProfile({
   client,
   notes,
-  onboarding,
   packet,
   tab,
   editing,
 }: {
   client: ClientDetail;
   notes: readonly ClientNote[];
-  onboarding: OnboardingStatus;
   packet: ClientPacketSummary;
   tab: ClientProfileTab;
   editing: boolean;
@@ -77,7 +74,6 @@ export function ClientProfile({
         </Alert>
       )}
       <ClientStepper steps={steps} />
-      <OnboardingPanel clientId={client.id} status={onboarding} canSend={client.status === "pending" && !client.disabledAt} />
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
         <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />

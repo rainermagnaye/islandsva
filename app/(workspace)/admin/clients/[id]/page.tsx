@@ -8,7 +8,7 @@ import { clientProfileTab } from "@/features/clients/contract";
 import { ClientProfile } from "@/features/clients/components/client-profile";
 import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
 import { getClient, listClientNotes } from "@/features/clients/dal";
-import { getClientPacket, getOnboardingStatus } from "@/features/clients/onboarding-dal";
+import { getClientPacket } from "@/features/clients/onboarding-dal";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
 
@@ -26,8 +26,8 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
   await requireRole(["admin"]);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (!parseClientId({ clientId: id }).ok) notFound();
-  const [client, notes, onboarding] = await Promise.all([getClient(id), listClientNotes(id), getOnboardingStatus(id)]);
-  if (!client || !onboarding) notFound();
+  const [client, notes] = await Promise.all([getClient(id), listClientNotes(id)]);
+  if (!client) notFound();
   // The packet table is server-only. Read it only after this admin can see the client.
   const stored = await getClientPacket(id);
   const packet = {
@@ -53,7 +53,7 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
         />
       }
     >
-      <ClientProfile client={client} notes={notes} onboarding={onboarding} packet={packet} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
+      <ClientProfile client={client} notes={notes} packet={packet} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
     </Workspace>
   );
 }
