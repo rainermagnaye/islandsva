@@ -120,9 +120,13 @@ export async function setClientPaused(formData: FormData): Promise<SubmitResult>
   return { ok: true };
 }
 
-/** Creates the registration link for a client that does not have one yet. */
+/**
+ * Creates the registration link for a client that does not have one yet. The client's Closer may too:
+ * openOnboardingLink reads the client under RLS first (a Closer sees only the clients they created), and only
+ * then stores the link with the secret key.
+ */
 export async function generateOnboardingLink(formData: FormData): Promise<SubmitResult> {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "closer"]);
   const parsed = parseClientId(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
 

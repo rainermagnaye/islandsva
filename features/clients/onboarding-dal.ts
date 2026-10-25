@@ -49,6 +49,18 @@ export async function getClientPacket(clientId: string) {
   };
 }
 
+/**
+ * Only the registration token, for the Closer's copy of the link (they don't see the signature or payment file).
+ * The token isn't granted to the signed-in role, so this uses the secret key; the caller has already read the
+ * client under RLS, so a Closer reaches here only for a client they created.
+ */
+export async function getRegistrationToken(clientId: string) {
+  if (!isUuid(clientId)) return null;
+  const { data, error } = await createAdminClient().from("client_packets").select("token").eq("client_id", clientId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading the registration link for ${clientId} failed (${error.code})`);
+  return data?.token ?? null;
+}
+
 /** Payment-file bytes. Not granted to the signed-in role; the caller has already confirmed they can read the client. */
 export async function getClientPaymentProof(clientId: string) {
   if (!isUuid(clientId)) return null;
