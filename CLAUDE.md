@@ -48,7 +48,7 @@ app/                  routes only — thin pages and endpoints
   auth/confirm/       email-link landing (token hash → session)
   onboarding/[token]  a client's onboarding form from an emailed link (public, noindex, no referrer; the token is the key)
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
-features/<feature>/   one business area (today: auth, leads, clients, users)
+features/<feature>/   one business area (today: auth, leads, clients, users, demos)
   contract.ts         [shared] payload/response types, labels, limits — no Zod, safe for client imports
   validation.ts       [server] Zod schemas + parseX()
   service.ts          [server] use cases — the business logic routes and actions call (simple CRUD skips it)

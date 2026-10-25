@@ -33,6 +33,7 @@ export const appRoutes = {
   admin: "/admin",
   adminLeads: "/admin/leads",
   adminClients: "/admin/clients",
+  adminDemos: "/admin/demos",
   adminUsers: "/admin/users",
 } as const;
 
