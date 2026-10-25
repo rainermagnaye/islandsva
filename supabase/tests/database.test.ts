@@ -1247,6 +1247,15 @@ describe("demo scheduling", () => {
       expect(await asUser(asVa, "delete from public.demo_slots where id = $1 returning id", [slot])).toHaveLength(1);
     });
 
+    it("skips a time the VA already offers (insert … on conflict do nothing, as the calendar sends it)", async () => {
+      const start = at(32);
+      const upsert = () =>
+        asUser<{ id: string }>(asVa, "insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) on conflict (va_id, starts_at) do nothing returning id", [VA, start, end(start)]);
+      const [first] = await upsert();
+      expect(await upsert()).toEqual([]);
+      await asServer("delete from public.demo_slots where id = $1", [first.id]);
+    });
+
     it("refuses a slot for another VA, in the past, misaligned, the wrong length or over 30 days ahead", async () => {
       await expect(addSlot(asVa, VA2, at(30))).rejects.toThrow(/row-level security/);
       await expect(addSlot(asVa, VA, at(-2))).rejects.toThrow(/row-level security/);
