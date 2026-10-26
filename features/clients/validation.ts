@@ -11,12 +11,14 @@ import {
   CLIENT_REVIEW_SECTIONS,
   CREATE_CLIENT_LIMITS,
   NEW_CLIENT_LIMITS,
+  PAYMENT_RECEIVED_LIMITS,
   type ClientBusiness,
   type ClientDetailField,
   type ClientNoteField,
   type CreateClientField,
   type NewClientField,
   type OnboardingField,
+  type PaymentReceivedField,
 } from "./contract";
 
 const CLIENT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
@@ -287,3 +289,45 @@ export type ClientReviewInput = z.output<typeof reviewSchema>;
 
 /** Sections to send back. At least one is required; the note is optional. */
 export const parseClientReview = (input: unknown) => parseWith(reviewSchema, input, ["note", "sections"] as const);
+
+const MONEY = /^\d{1,7}(\.\d{1,2})?$/;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const cents = (value: string) => Math.round(Number(value) * 100);
+
+/**
+ * "Confirm registration": the payment received, which the sales summary totals. Amount and fee are USD with up to
+ * two decimals; the fee (bank or transfer) defaults to 0 and can't exceed the amount; the date is today or earlier
+ * (UTC, as the database checks). `today` is a parameter so the rule is testable.
+ */
+export function parsePaymentReceived(input: unknown, today = new Date().toISOString().slice(0, 10)) {
+  const schema = z
+    .strictObject({
+      clientId: z.uuid({ error: FORM_ERROR }),
+      amount: z.string({ error: "Enter the amount received." }).trim().regex(MONEY, "Enter the amount received, like 855.00.").transform(cents),
+      fee: z
+        .string()
+        .trim()
+        .optional()
+        .transform((value) => value || "0")
+        .pipe(z.string().regex(MONEY, "Enter the fee, like 15.00, or leave it empty."))
+        .transform(cents),
+      paidOn: z
+        .string({ error: "Enter the date the payment arrived." })
+        .regex(ISO_DAY, "Enter the date the payment arrived.")
+        .refine((day) => !Number.isNaN(Date.parse(`${day}T00:00:00Z`)) && day <= today, "The date can't be in the future."),
+      reference: z
+        .string()
+        .trim()
+        .max(PAYMENT_RECEIVED_LIMITS.reference, tooLong("the reference", PAYMENT_RECEIVED_LIMITS.reference))
+        .regex(NO_CONTROL_CHARS, "Remove any unusual characters from the reference.")
+        .optional()
+        .transform((value) => value || null),
+    })
+    .superRefine((value, ctx) => {
+      if (value.amount < 1 || value.amount > PAYMENT_RECEIVED_LIMITS.maxAmountCents) ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter an amount above 0." });
+      else if (value.fee > value.amount) ctx.addIssue({ code: "custom", path: ["fee"], message: "The fee can't be more than the amount." });
+    });
+  return parseWith<typeof schema, PaymentReceivedField>(schema, input, ["amount", "fee", "paidOn", "reference"]);
+}
+
+export type PaymentReceivedInput = Extract<ReturnType<typeof parsePaymentReceived>, { ok: true }>["value"];

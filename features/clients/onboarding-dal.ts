@@ -200,9 +200,26 @@ export function saveClientReview(clientId: string, issues: string[], note: strin
   );
 }
 
-/** Accepts a clear packet and moves it to pending activation. Same access rule as saveClientReview. */
-export function acceptClientReview(clientId: string) {
-  return callReview(() => createAdminClient().rpc("accept_client_review", { client_id: clientId }), `Accepting the review for ${clientId} failed`);
+/**
+ * Accepts a clear packet and records the payment received, in one transaction (accept_client_review_paid), so a
+ * packet is never approved without its payment. Secret key: the function is server-only and checks the actor is an
+ * admin of the client's agency; the caller has already checked the session and read the client under RLS.
+ */
+export async function acceptClientReviewPaid(input: { clientId: string; actor: string; amountCents: number; feeCents: number; paidOn: string; reference: string | null }) {
+  const { error } = await createAdminClient().rpc("accept_client_review_paid", {
+    client_id: input.clientId,
+    actor: input.actor,
+    amount_cents: input.amountCents,
+    fee_cents: input.feeCents,
+    paid_on: input.paidOn,
+    reference: input.reference,
+  });
+  if (!error) return { ok: true as const };
+  if (error.code === "IVA14") return { ok: false as const, reason: "not_allowed" as const };
+  if (error.code === "IVA21") return { ok: false as const, reason: "invalid" as const };
+  const refusal = packetRefusal(error.code ?? "");
+  if (refusal) return { ok: false as const, reason: refusal };
+  throw new UpstreamError("supabase", `Confirming the registration for ${input.clientId} failed (${error.code})`);
 }
 
 /** Links the new login after the invite email. Same access rule as saveClientReview. */

@@ -25,6 +25,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           },
           { href: appRoutes.adminClients, label: "Clients", icon: "briefcase" },
           { href: appRoutes.adminDemos, label: "Demos", icon: "calendar" },
+          { href: appRoutes.adminSales, label: "Sales", icon: "chart" },
           { href: appRoutes.adminUsers, label: "Team", icon: "users" },
         ]}
         footer={{ href: routes.home, label: "View site", icon: "external" }}

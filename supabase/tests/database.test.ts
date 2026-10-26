@@ -1642,3 +1642,68 @@ describe("demo scheduling", () => {
     });
   });
 });
+
+describe("payment at review (sales)", () => {
+  // An admin approves a registration packet and records the payment received, in one transaction.
+  const details = { industry: "Legal", country: "United States", city: "Austin", about: "Inbox", website: "", jobTitle: "", street: "", state: "", zip: "", staffCount: "" };
+  const linkToken = (n: string) => `${"s".repeat(42)}${n}`;
+  const hash = (n: string) => `${n}`.padEnd(64, "a");
+  let inReview = "";
+  let notInReview = "";
+
+  const packetInReview = async (name: string, n: string) => {
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone) values ($1, 'Nia', $2, $3, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id",
+      [name, `${name.toLowerCase().replace(/\s+/g, "")}@sales.co`, CLOSER],
+    );
+    await asServer("select public.issue_client_onboarding_link($1, $2, $3)", [id, linkToken(n), hash(n)]);
+    await asServer("select public.submit_client_packet($1, $2, 'Nia', null, $3::jsonb, 'Nia Packet', 'receipt.pdf', 'application/pdf', 'YQ==')", [hash(n), name, JSON.stringify(details)]);
+    return id;
+  };
+  const approve = (client: string, actor: string, amount = 85500, fee = 1500, paidOn = "2026-10-20", ref: string | null = " TRX-9 ") =>
+    asServer<{ id: string }>("select public.accept_client_review_paid($1, $2, $3, $4, $5, $6) as id", [client, actor, amount, fee, paidOn, ref]);
+  const paymentsOf = (client: string) => asServer<{ amount_cents: number; fee_cents: number }>("select amount_cents, fee_cents from public.payments where client_id = $1", [client]);
+  const stageOf = async (client: string) => (await asServer<{ s: string }>("select onboarding_status::text as s from public.clients where id = $1", [client]))[0].s;
+
+  beforeAll(async () => {
+    inReview = await packetInReview("Sales Co", "1");
+    const [{ id }] = await asServer<{ id: string }>("insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Fresh Co', 'F', 'fresh@sales.co', $1) returning id", [CLOSER]);
+    notInReview = id;
+  });
+
+  it("only the server may call it", async () => {
+    await expect(asUser(asAdmin, "select public.accept_client_review_paid($1, $2, 1, 0, current_date, null)", [inReview, ADMIN])).rejects.toThrow(/permission denied for function/);
+    await expect(as("anon", {}, "select public.accept_client_review_paid($1, $2, 1, 0, current_date, null)", [inReview, ADMIN])).rejects.toThrow(/permission denied for function/);
+  });
+
+  it("refuses a non-admin actor, a bad amount, fee or date, and a packet not in review — storing nothing", async () => {
+    await expect(approve(inReview, CLOSER)).rejects.toMatchObject({ code: "IVA14" });
+    await expect(approve(inReview, ADMIN, 0)).rejects.toMatchObject({ code: "IVA21" });
+    await expect(approve(inReview, ADMIN, 1000, 1001)).rejects.toMatchObject({ code: "IVA21" });
+    await expect(approve(inReview, ADMIN, 1000, -1)).rejects.toMatchObject({ code: "IVA21" });
+    await expect(approve(inReview, ADMIN, 1000, 0, "2999-01-01")).rejects.toMatchObject({ code: "IVA21" });
+    await expect(approve(notInReview, ADMIN)).rejects.toMatchObject({ code: "IVA08" });
+    expect(await paymentsOf(inReview)).toEqual([]);
+    expect(await paymentsOf(notInReview)).toEqual([]);
+    expect(await stageOf(inReview)).toBe("pending_review");
+  });
+
+  it("approves the packet and stores the payment with its fee and trimmed reference; admins with 2FA read it", async () => {
+    const [{ id }] = await approve(inReview, ADMIN);
+    expect(await stageOf(inReview)).toBe("approved");
+    const [row] = await asServer<{ amount_cents: number; fee_cents: number; provider_ref: string; recorded_by: string; status: string; term_months: number }>(
+      "select amount_cents, fee_cents, provider_ref, recorded_by, status, term_months from public.payments where id = $1",
+      [id],
+    );
+    expect(row).toEqual({ amount_cents: 85500, fee_cents: 1500, provider_ref: "TRX-9", recorded_by: ADMIN, status: "paid", term_months: 6 });
+    expect(await asUser(asAdmin, "select fee_cents from public.payments where id = $1", [id])).toEqual([{ fee_cents: 1500 }]);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.payments where id = $1", [id])).toEqual([]);
+    // A second approval is refused (no longer in review) and adds no payment.
+    await expect(approve(inReview, ADMIN)).rejects.toMatchObject({ code: "IVA08" });
+    expect(await paymentsOf(inReview)).toHaveLength(1);
+  });
+
+  it("keeps a fee from exceeding the amount even outside the function", async () => {
+    await expect(asServer("update public.payments set fee_cents = amount_cents + 1 where client_id = $1", [inReview])).rejects.toThrow(/payments_fee_within_amount/);
+  });
+});

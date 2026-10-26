@@ -2,11 +2,11 @@ import "server-only";
 import { packages } from "@/content/packages";
 import { inviteClient, rollbackInvite } from "@/features/users/service";
 import { applyOpenSections, openClientSections, type ClientBusiness } from "./contract";
-import { acceptClientReview, getPublicOnboarding, getPublicPaymentProof, issueClientOnboardingLink, recordClientInvite, saveClientReview, submitClientPacket } from "./onboarding-dal";
+import { acceptClientReviewPaid, getPublicOnboarding, getPublicPaymentProof, issueClientOnboardingLink, recordClientInvite, saveClientReview, submitClientPacket } from "./onboarding-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
 import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
-import type { ClientDetailsInput, ClientNoteInput, ClientReviewInput, CreateClientInput, NewClientInput, OnboardingInput } from "./validation";
+import type { ClientDetailsInput, ClientNoteInput, ClientReviewInput, CreateClientInput, NewClientInput, OnboardingInput, PaymentReceivedInput } from "./validation";
 
 /** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
 export async function createClientProfile(input: NewClientInput, createdBy: string) {
@@ -84,13 +84,13 @@ export async function pauseClient(clientId: string, disabled: boolean) {
   return setClientDisabled(clientId, disabled);
 }
 
-/** Accepts a clear packet. The caller is an admin; this still checks they can see the client. */
-export async function confirmClientReview(clientId: string) {
-  const client = await getClient(clientId);
+/** Accepts a clear packet and records the payment received. The caller is an admin; this still checks they can see the client. */
+export async function confirmClientReviewPaid(input: PaymentReceivedInput, actor: string) {
+  const client = await getClient(input.clientId);
   if (!client || client.disabledAt || client.status !== "pending" || client.onboardingStatus !== "pending_review") {
     return { ok: false as const, reason: "not_found" as const };
   }
-  return acceptClientReview(clientId);
+  return acceptClientReviewPaid({ clientId: input.clientId, actor, amountCents: input.amount, feeCents: input.fee, paidOn: input.paidOn, reference: input.reference });
 }
 
 /** Sends the registration back to the sections that need a change. */
