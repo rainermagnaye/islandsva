@@ -17,8 +17,8 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | clients · client_packets · client_notes | Company and package; registration; notes | Built |
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined). Accept creates the assignment | Built (M10) |
 | client_va_assignments | Client ↔ VA, several active VAs, one active row per pair | Built |
-| tasks · task_comments | Client, VA, title, deadline, status, comments | In the migration (built in the app; the audit trigger still waits on audit_log) |
-| audit_log | Append-only: actor (user, Google sync or system), action, record type + id, owning Lead Gen / client, before → after (changed fields only, no PII), at | New (M8) |
+| tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments) |
+| audit_log | Append-only who-did-what: actor (user or system; Google sync in M9), action, record type + id, owning Lead Gen / client, changed fields (values only for safe columns), at | Built (M8; rules in `supabase/CLAUDE.md`) |
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
 | client_onboarding_links · payments | Replaced by the registration packet | Drop |
 
@@ -66,10 +66,10 @@ One model for every call; one Google integration; one history.
 
 ## Audit log
 
-- Written by database triggers on leads, meetings, clients, assignments, shortlists, tasks and roles — so nothing that changes a row can skip it, whether it's the app, an admin or Google sync.
-- Append-only: no update or delete grant for anyone, the secret key included in app code.
-- Records changed field names and safe values (statuses, times, ids); free text and contact details stay out.
-- The timelines (`lead_events`, `meeting_events`, `client_notes`) stay the readable story; the audit log is the who-did-what record behind them.
+- Built for leads, meetings, clients, assignments, tasks, shortlists, roles and account status: `supabase/CLAUDE.md` (access model and the actor rule). Google sync (M9) adds a `google` actor kind.
+- Readers: admins with 2FA, and the owning Lead Gen for leads, calls, clients and assignments (task and shortlist entries are admins only). Whether clients and VAs see entries for their own records is decided with the activity screens (M8 slice 9).
+- **Not audited for now:** payments (recorded by an admin through `accept_client_review_paid`, with `recorded_by` on the row), discovery times, VA working hours, and the timelines (`lead_events`, `meeting_events`, `client_notes`, `task_comments`), which stay the readable story behind the audit log.
+- Before launch (follow-up `db/audit-actors`): the remaining secret-key writes that show as System today — the registration-packet functions (`save_client_review`, `record_client_invite`, `issue_client_onboarding_link`), `accept_client_review_paid`, the admin's "add lead", and removing an employee account (`removeEmployeeAccount` → `deleteAuthUser`: its roles cascade is logged as System and the profile deletion isn't logged) — take an actor and set `app.actor`. The app's deactivation moves to `set_account_status` in its own PR once `audit_log` is live.
 
 ## Metrics
 
