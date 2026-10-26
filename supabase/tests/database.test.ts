@@ -2761,3 +2761,527 @@ describe("VA match", () => {
     });
   });
 });
+
+describe("audit log", () => {
+  // Users from earlier blocks: CLOSER_B and ADMIN_B in the second tenant, SUPER (Super Admin, default tenant), and
+  // the discovery block's Lead Gen LG_A. Discovery times are still set (discovery block).
+  const ADMIN_B = "00000000-0000-0000-0000-0000000000b1";
+  const CLOSER_B = "00000000-0000-0000-0000-0000000000b3";
+  const SUPER = "00000000-0000-0000-0000-000000000010";
+  const LG_A = "00000000-0000-0000-0000-0000000000f1";
+  const AUDIT_USER = "00000000-0000-0000-0000-0000000000a1"; // a fresh account, deactivated below
+  const GONE = "00000000-0000-0000-0000-0000000000a2"; // an invite rolled back (auth user deleted)
+  const SIGN_IN = "00000000-0000-0000-0000-0000000000a3"; // a client login that signs in for the first time
+  let tenantA = "";
+  let tenantB = "";
+
+  type Entry = { actor_kind: string; actor_id: string | null; action: string; owner_id: string | null; client_id: string | null; tenant_id: string; changes: Record<string, unknown> };
+  /** Entries for one record, oldest first, read as the database owner (no RLS). */
+  const entries = async (type: string, id: string) =>
+    (await db.query<Entry>(
+      "select actor_kind::text as actor_kind, actor_id, action::text as action, owner_id, client_id, tenant_id, changes from public.audit_log where record_type = $1 and record_id = $2 order by at, action",
+      [type, id],
+    )).rows;
+  const last = async (type: string, id: string) => (await entries(type, id)).at(-1);
+  const newLead = async (email: string, extra = "") =>
+    (await asServer<{ id: string }>(`insert into public.leads (full_name, email, message, package_code, ip_hash${extra ? ", " + extra.split("=")[0] : ""}) values ('Ana Cruz', $1, 'Call me', 'executive', $2${extra ? ", $3" : ""}) returning id`,
+      extra ? [email, "e".repeat(64), extra.split("=")[1]] : [email, "e".repeat(64)]))[0].id;
+  /** No token on this session: what a direct login (SQL editor, Supabase Auth) or the secret key starts with. */
+  const clearClaims = () => db.query("select set_config('request.jwt.claims', '', false)");
+  /** Runs `sql` in one transaction after `setup` (role and settings set locally), as PostgREST does. */
+  const tx = async <T = Record<string, unknown>>(setup: string, sql: string, params: unknown[] = []) => {
+    await db.exec("begin");
+    try {
+      await db.exec(setup);
+      const rows = (await db.query<T>(sql, params)).rows;
+      await db.exec("commit");
+      return rows;
+    } catch (error) {
+      await db.exec("rollback");
+      throw error;
+    } finally {
+      await db.exec("reset role");
+    }
+  };
+
+  beforeAll(async () => {
+    [{ id: tenantA }] = await asServer<{ id: string }>("select id from public.tenants where is_default");
+    [{ id: tenantB }] = await asServer<{ id: string }>("select id from public.tenants where slug = 'other-agency'");
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${AUDIT_USER}', 'audit@x.co'), ('${GONE}', 'gone@x.co'), ('${SIGN_IN}', 'sign-in@audit.co')`);
+  });
+
+  describe("what is recorded", () => {
+    it("a contact-form lead is a system insert: values only for allow-listed columns, contact details by name", async () => {
+      const lead = await newLead("record@audit.co");
+      const [entry] = await entries("leads", lead);
+      expect(entry).toMatchObject({ action: "insert", actor_kind: "system", actor_id: null, owner_id: null, client_id: null, tenant_id: tenantA });
+      expect(entry.changes).toMatchObject({ status: "new", package_code: "executive", full_name: null, email: null, message: null, ip_hash: null, profile: null });
+      for (const key of ["id", "created_at", "updated_at", "tenant_id", "notified_at", "closer_id", "disabled_at"]) expect(entry.changes).not.toHaveProperty(key);
+      expect(JSON.stringify(entry.changes)).not.toMatch(/record@audit|Ana Cruz|Call me|eeee/);
+    });
+
+    it("an admin's update is theirs: changed fields only, [old, new] for allowed columns, names for the rest", async () => {
+      const lead = await newLead("update@audit.co");
+      await asUser(asAdmin, "update public.leads set status = 'contacted', full_name = 'Ana C.' where id = $1", [lead]);
+      expect(await last("leads", lead)).toMatchObject({ action: "update", actor_kind: "user", actor_id: ADMIN, changes: { status: ["new", "contacted"], full_name: null } });
+      expect(Object.keys((await last("leads", lead))!.changes).sort()).toEqual(["full_name", "status"]);
+    });
+
+    it("an update touching only bookkeeping columns writes nothing", async () => {
+      const lead = await newLead("ignored@audit.co");
+      await asServer("update public.leads set notified_at = now() where id = $1", [lead]);
+      await asServer("update public.leads set status = status where id = $1", [lead]);
+      expect(await entries("leads", lead)).toHaveLength(1);
+    });
+
+    it("a delete is recorded with the admin as actor", async () => {
+      const lead = await newLead("delete@audit.co");
+      expect(await asUser(asAdmin, "delete from public.leads where id = $1 returning id", [lead])).toHaveLength(1);
+      expect(await last("leads", lead)).toMatchObject({ action: "delete", actor_kind: "user", actor_id: ADMIN, changes: { status: "new", email: null } });
+    });
+
+    it("a column not on the allow-list is recorded by name only (default deny)", async () => {
+      await db.exec("alter table public.leads add column secret text");
+      try {
+        const lead = await newLead("secret@audit.co", "secret=s3cr3t-value");
+        await asServer("update public.leads set secret = 'other-s3cr3t' where id = $1", [lead]);
+        const all = await entries("leads", lead);
+        expect(all[0].changes).toMatchObject({ secret: null });
+        expect(all[1].changes).toEqual({ secret: null });
+        expect(JSON.stringify(all)).not.toMatch(/s3cr3t/);
+      } finally {
+        await db.exec("alter table public.leads drop column secret");
+      }
+    });
+
+    it("profiles: only the account status, never email or name", async () => {
+      await as("supabase_auth_admin", {}, `update auth.users set email = 'audit2@x.co' where id = '${AUDIT_USER}'`);
+      expect(await entries("profiles", AUDIT_USER)).toEqual([]);
+      // A first sign-in changes status (and signed_in_at) together: only the status is recorded.
+      await asServer("insert into public.roles (user_id, role) values ($1, 'closer')", [AUDIT_USER]);
+      await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now(), email = 'audit3@x.co' where id = '${AUDIT_USER}'`);
+      expect(await entries("profiles", AUDIT_USER)).toEqual([expect.objectContaining({ action: "update", actor_kind: "system", changes: { status: ["invited", "active"] } })]);
+    });
+
+    it("roles, clients and assignments carry their owner and client; the row's 'by' column names the actor on insert", async () => {
+      const [{ id: role }] = await asServer<{ id: string }>("select id from public.roles where user_id = $1 and role = 'closer'", [AUDIT_USER]);
+      expect(await last("roles", role)).toMatchObject({ action: "insert", actor_kind: "system", owner_id: null, changes: { role: "closer", user_id: AUDIT_USER } });
+      const [{ id: granted }] = await asServer<{ id: string }>("insert into public.roles (user_id, role, assigned_by) values ($1, 'client', $2) returning id", [AUDIT_USER, ADMIN]);
+      expect(await last("roles", granted)).toMatchObject({ actor_kind: "user", actor_id: ADMIN, changes: { assigned_by: ADMIN } });
+
+      const [{ id: client }] = await asServer<{ id: string }>(
+        "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Audit Co', 'Pat', 'pat@audit.co', $1) returning id",
+        [CLOSER],
+      );
+      expect(await last("clients", client)).toMatchObject({ actor_kind: "user", actor_id: CLOSER, owner_id: CLOSER, client_id: client, changes: { status: "pending", company_name: null, contact_email: null } });
+      // A later update isn't the creator's: the secret key alone is system.
+      await asServer("update public.clients set notes = 'x' where id = $1", [client]);
+      expect(await last("clients", client)).toMatchObject({ action: "update", actor_kind: "system", changes: { notes: null } });
+
+      const [{ id: assignment }] = await asServer<{ id: string }>("insert into public.client_va_assignments (client_id, va_id, assigned_by) values ($1, $2, $3) returning id", [client, VA, ADMIN]);
+      expect(await last("client_va_assignments", assignment)).toMatchObject({ actor_id: ADMIN, owner_id: CLOSER, client_id: client, changes: { va_id: VA, status: "active" } });
+      await asUser(asAdmin, "update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [assignment]);
+      expect(await last("client_va_assignments", assignment)).toMatchObject({ action: "update", actor_id: ADMIN, changes: { status: ["active", "ended"] } });
+    });
+
+    it("discovery calls: the visitor's request is system; the Lead Gen's confirm is theirs, and the meeting is theirs before the lead is", async () => {
+      const [{ s: start }] = await asServer<{ s: string }>("select public.open_discovery_slots() as s limit 1");
+      const [{ id: lead }] = await asServer<{ id: string }>(
+        "select public.request_discovery_call('Ana', 'confirm@audit.co', null, null, null, 'hi', null, null, null, $1) as id",
+        [start],
+      );
+      const [{ id: meeting }] = await asServer<{ id: string }>("select id from public.meetings where lead_id = $1", [lead]);
+      expect(await entries("meetings", meeting)).toEqual([expect.objectContaining({ action: "insert", actor_kind: "system", owner_id: null })]);
+      await asServer("select public.decide_discovery_call($1, $2, 'scheduled', null)", [meeting, LG_A]);
+      expect(await last("meetings", meeting)).toMatchObject({ action: "update", actor_id: LG_A, owner_id: LG_A, changes: { status: ["requested", "scheduled"], organizer_id: [null, LG_A] } });
+      expect(await last("leads", lead)).toMatchObject({ action: "update", actor_id: LG_A, owner_id: LG_A, changes: { closer_id: [null, LG_A] } });
+    });
+
+    it("a trigger's write inside an admin's update is the admin's (closing a lead settles its request)", async () => {
+      const [{ s: start }] = await asServer<{ s: string }>("select public.open_discovery_slots() as s limit 1");
+      const [{ id: lead }] = await asServer<{ id: string }>(
+        "select public.request_discovery_call('Ana', 'nested@audit.co', null, null, null, 'hi', null, null, null, $1) as id",
+        [start],
+      );
+      const [{ id: meeting }] = await asServer<{ id: string }>("select id from public.meetings where lead_id = $1", [lead]);
+      await asUser(asAdmin, "update public.leads set status = 'closed' where id = $1", [lead]);
+      expect(await last("meetings", meeting)).toMatchObject({ action: "update", actor_kind: "user", actor_id: ADMIN, changes: { status: ["requested", "expired"] } });
+    });
+  });
+
+  describe("who acted", () => {
+    it("a signed-in user is always themselves: app.actor is ignored", async () => {
+      const lead = await newLead("spoof@audit.co");
+      await tx(
+        `select set_config('request.jwt.claims', '${JSON.stringify(asAdmin)}', true); set local role authenticated; select set_config('app.actor', '${CLOSER}', true);`,
+        "update public.leads set status = 'contacted' where id = $1",
+        [lead],
+      );
+      expect(await last("leads", lead)).toMatchObject({ actor_id: ADMIN });
+    });
+
+    it("a visitor (anon) is system, whatever the token says", async () => {
+      await db.exec(`
+        create function public.tmp_anon_lead() returns uuid language sql security definer set search_path = '' as
+          $$ insert into public.leads (full_name, email, message) values ('Anon', 'anon@audit.co', 'hi') returning id $$;
+        grant execute on function public.tmp_anon_lead() to anon;`);
+      try {
+        const [{ id }] = await as<{ id: string }>("anon", asAdmin, "select public.tmp_anon_lead() as id");
+        expect(await last("leads", id)).toMatchObject({ actor_kind: "system", actor_id: null });
+      } finally {
+        await db.exec("drop function public.tmp_anon_lead()");
+      }
+    });
+
+    it("the API role survives into security-definer triggers (what the rule relies on)", async () => {
+      await db.exec(`
+        create function public.tmp_role() returns text language sql security definer set search_path = '' as $$ select current_setting('role') $$;
+        grant execute on function public.tmp_role() to authenticated, service_role;`);
+      try {
+        expect(await asUser(asClient, "select public.tmp_role() as r")).toEqual([{ r: "authenticated" }]);
+        expect(await asServer("select public.tmp_role() as r")).toEqual([{ r: "service_role" }]);
+        expect(await tx("select set_config('role', 'service_role', true);", "select public.tmp_role() as r")).toEqual([{ r: "service_role" }]);
+      } finally {
+        await db.exec("drop function public.tmp_role()");
+      }
+    });
+
+    it("the secret key: app.actor when a function sets it (PostgREST-style), else system", async () => {
+      const lead = await newLead("server@audit.co");
+      await tx(`select set_config('role', 'service_role', true); select set_config('app.actor', '${ADMIN}', true);`, "update public.leads set status = 'contacted' where id = $1", [lead]);
+      expect(await last("leads", lead)).toMatchObject({ actor_kind: "user", actor_id: ADMIN });
+      // The secret key alone (no function naming an actor) is system.
+      await asServer("update public.leads set status = 'qualified' where id = $1", [lead]);
+      expect(await last("leads", lead)).toMatchObject({ actor_kind: "system", actor_id: null });
+    });
+
+    it("app.actor lasts for its transaction only", async () => {
+      await tx(`select set_config('app.actor', '${ADMIN}', true);`, "select 1");
+      expect((await db.query<{ a: string | null }>("select nullif(current_setting('app.actor', true), '') as a")).rows).toEqual([{ a: null }]);
+    });
+
+    it("refuses an app.actor that isn't a user id, or names someone of another agency — the write fails", async () => {
+      const lead = await newLead("bad-actor@audit.co");
+      await expect(tx("set local role service_role; select set_config('app.actor', 'nope', true);", "update public.leads set status = 'contacted' where id = $1", [lead])).rejects.toThrow(/not a user id/);
+      await expect(tx(`set local role service_role; select set_config('app.actor', '${CLOSER_B}', true);`, "update public.leads set status = 'contacted' where id = $1", [lead])).rejects.toThrow(/not a user of this agency/);
+      await clearClaims();
+      await expect(tx(`select set_config('app.actor', '${CLOSER_B}', true);`, "update public.leads set status = 'contacted' where id = $1", [lead])).rejects.toThrow(/not a user of this agency/);
+      expect(await asServer("select status from public.leads where id = $1", [lead])).toEqual([{ status: "new" }]);
+    });
+
+    it("accepts a Super Admin as actor in any agency", async () => {
+      const [{ id }] = await tx<{ id: string }>(
+        `set local role service_role; select set_config('app.actor', '${SUPER}', true);`,
+        "insert into public.leads (full_name, email, message, tenant_id) values ('B', 'b@audit.co', 'hi', $1) returning id",
+        [tenantB],
+      );
+      expect(await last("leads", id)).toMatchObject({ actor_id: SUPER, tenant_id: tenantB });
+    });
+
+    it("a direct session (SQL editor, Supabase Auth): app.actor if set, else the 'by' column, else system — never its token", async () => {
+      const lead = await newLead("direct@audit.co");
+      // A token on a direct session is just a setting anyone there can write: not trusted.
+      await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify(asAdmin)]);
+      await db.query("update public.leads set status = 'contacted' where id = $1", [lead]);
+      expect(await last("leads", lead)).toMatchObject({ actor_kind: "system", actor_id: null });
+
+      await clearClaims();
+      await tx(`select set_config('app.actor', '${ADMIN}', true);`, "update public.leads set status = 'qualified' where id = $1", [lead]);
+      expect(await last("leads", lead)).toMatchObject({ actor_id: ADMIN });
+
+      await clearClaims();
+      const [{ id: role }] = (await db.query<{ id: string }>("insert into public.roles (user_id, role, assigned_by) values ($1, 'va', $2) returning id", [AUDIT_USER, ADMIN])).rows;
+      expect(await last("roles", role)).toMatchObject({ actor_id: ADMIN });
+      await db.query("delete from public.roles where id = $1", [role]);
+      expect(await last("roles", role)).toMatchObject({ action: "delete", actor_kind: "system" });
+    });
+  });
+
+  describe("core writes never fail on the audit", () => {
+    it("a client login's first sign-in activates the client (Supabase Auth's trigger chain), recorded as system", async () => {
+      await asServer("insert into public.roles (user_id, role) values ($1, 'client')", [SIGN_IN]);
+      const [{ id: client }] = await asServer<{ id: string }>(
+        "insert into public.clients (company_name, contact_name, contact_email, created_by, user_id, onboarding_status) values ('Sign Co', 'S', 's@audit.co', $1, $2, 'invite_sent') returning id",
+        [CLOSER, SIGN_IN],
+      );
+      await clearClaims();
+      await as("supabase_auth_admin", {}, `update auth.users set last_sign_in_at = now() where id = '${SIGN_IN}'`);
+      expect(await asServer("select status from public.clients where id = $1", [client])).toEqual([{ status: "active" }]);
+      expect(await last("clients", client)).toMatchObject({ action: "update", actor_kind: "system", changes: { status: ["pending", "active"] } });
+    });
+
+    it("rolling back an invite deletes the auth user and cascades its roles, recorded as system deletes", async () => {
+      const [{ id: role }] = await asServer<{ id: string }>("insert into public.roles (user_id, role, assigned_by) values ($1, 'va', $2) returning id", [GONE, ADMIN]);
+      await as("supabase_auth_admin", {}, `delete from auth.users where id = '${GONE}'`);
+      expect(await asServer("select id from public.profiles where id = $1", [GONE])).toEqual([]);
+      expect(await last("roles", role)).toMatchObject({ action: "delete", actor_kind: "system", changes: { role: "va" } });
+    });
+
+    it("the widest client row fits: long text and jsonb are names only", async () => {
+      const filled = (n: number) => JSON.stringify(Object.fromEntries(Array.from({ length: n }, (_, i) => [`field${i}`, "x".repeat(90)])));
+      const [{ id }] = await asServer<{ id: string }>(
+        `insert into public.clients (company_name, contact_name, contact_email, contact_phone, notes, created_by, business, billing, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone)
+         values ($1, $2, 'wide@audit.co', $3, $4, $5, $6::jsonb, $7::jsonb, 'day-and-night', 80, 12, 270000, '2026-11-02', 'America/Los_Angeles') returning id`,
+        ["W".repeat(160), "N".repeat(120), "1".repeat(40), "n".repeat(5000), CLOSER, filled(38), filled(18)],
+      );
+      const [entry] = await entries("clients", id);
+      expect(entry.changes).toMatchObject({ notes: null, business: null, billing: null, monthly_cents: 270000 });
+      expect(JSON.stringify(entry.changes).length).toBeLessThan(4000);
+      await expect(asServer("delete from public.clients where id = $1 returning id", [id])).resolves.toHaveLength(1);
+    });
+  });
+
+  describe("set_account_status", () => {
+    const deactivate = (user: string, actor: string, status = "inactive") =>
+      asServer("select public.set_account_status($1, $2, $3::public.account_status)", [user, actor, status]);
+
+    it("refuses an unknown account, the actor's own account, a non-admin, another agency's admin or reactivation", async () => {
+      await expect(deactivate("00000000-0000-0000-0000-00000000dead", ADMIN)).rejects.toMatchObject({ code: "IVA01" });
+      await expect(deactivate(ADMIN, ADMIN)).rejects.toMatchObject({ code: "IVA14" });
+      await expect(deactivate(AUDIT_USER, CLOSER)).rejects.toMatchObject({ code: "IVA14" });
+      await expect(deactivate(AUDIT_USER, ADMIN_B)).rejects.toMatchObject({ code: "IVA14" });
+      await expect(deactivate(AUDIT_USER, ADMIN, "active")).rejects.toThrow(/only deactivation/);
+      expect(await asServer("select status from public.profiles where id = $1", [AUDIT_USER])).toEqual([{ status: "active" }]);
+    });
+
+    it("is for the server only", async () => {
+      await expect(asUser(asAdmin, "select public.set_account_status($1, $2, 'inactive')", [AUDIT_USER, ADMIN])).rejects.toThrow(/permission denied for function/);
+      await expect(as("anon", {}, "select public.set_account_status($1, $2, 'inactive')", [AUDIT_USER, ADMIN])).rejects.toThrow(/permission denied for function/);
+    });
+
+    it("an admin of the account's agency deactivates it, recorded as theirs; a deactivated admin can't", async () => {
+      await deactivate(AUDIT_USER, ADMIN);
+      expect(await asServer("select status from public.profiles where id = $1", [AUDIT_USER])).toEqual([{ status: "inactive" }]);
+      expect(await last("profiles", AUDIT_USER)).toMatchObject({ actor_kind: "user", actor_id: ADMIN, changes: { status: ["active", "inactive"] } });
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [ADMIN_B]);
+      await expect(deactivate(CLOSER_B, ADMIN_B)).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'invited' where id = $1", [ADMIN_B]);
+    });
+
+    it("an admin's or Super Admin's account is changed only by a Super Admin", async () => {
+      const OTHER_ADMIN = "00000000-0000-0000-0000-0000000000f4"; // an admin of the default tenant (discovery block)
+      await expect(deactivate(OTHER_ADMIN, ADMIN)).rejects.toMatchObject({ code: "IVA14" });
+      await expect(deactivate(SUPER, ADMIN)).rejects.toMatchObject({ code: "IVA14" });
+      expect(await asServer("select status from public.profiles where id in ($1, $2) and status = 'inactive'", [OTHER_ADMIN, SUPER])).toEqual([]);
+      await deactivate(OTHER_ADMIN, SUPER);
+      expect(await last("profiles", OTHER_ADMIN)).toMatchObject({ actor_kind: "user", actor_id: SUPER, changes: { status: [expect.any(String), "inactive"] } });
+      await asServer("update public.profiles set status = 'invited' where id = $1", [OTHER_ADMIN]);
+    });
+
+    it("a Super Admin may deactivate in any agency", async () => {
+      await asServer("insert into public.roles (user_id, role) values ($1, 'closer') on conflict do nothing", [CLOSER_B]);
+      await deactivate(CLOSER_B, SUPER);
+      expect(await last("profiles", CLOSER_B)).toMatchObject({ actor_id: SUPER, tenant_id: tenantB });
+      await asServer("update public.profiles set status = 'invited' where id = $1", [CLOSER_B]);
+    });
+  });
+
+  describe("who reads it", () => {
+    it("an admin with two-factor reads their agency's entries; without it, nothing", async () => {
+      const seen = await asUser<{ tenant_id: string }>(asAdmin, "select distinct tenant_id from public.audit_log");
+      expect(seen).toEqual([{ tenant_id: tenantA }]);
+      expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.audit_log")).toEqual([]);
+    });
+
+    it("a Lead Gen reads only entries for records they own", async () => {
+      const owners = await asUser<{ owner_id: string }>(asCloser, "select distinct owner_id from public.audit_log");
+      expect(owners).toEqual([{ owner_id: CLOSER }]);
+      expect(await asUser(asCloser, "select id from public.audit_log where record_id = $1", [clientC])).toEqual([]);
+      expect((await asUser(asCloser2, "select id from public.audit_log where record_id = $1", [clientC])).length).toBeGreaterThan(0);
+    });
+
+    it("VAs, clients and visitors read nothing; another agency's admin only theirs; a Super Admin with two-factor all", async () => {
+      expect(await asUser(asVa, "select id from public.audit_log")).toEqual([]);
+      expect(await asUser(asClient, "select id from public.audit_log")).toEqual([]);
+      await expect(as("anon", {}, "select id from public.audit_log")).rejects.toThrow(/permission denied/);
+      const asAdminB = token(ADMIN_B, ["admin"], "aal2");
+      expect(await asUser(asAdminB, "select distinct tenant_id from public.audit_log")).toEqual([{ tenant_id: tenantB }]);
+      expect((await asUser<{ tenant_id: string }>(token(SUPER, ["super_admin"], "aal2"), "select distinct tenant_id from public.audit_log")).map((r) => r.tenant_id)).toEqual(
+        expect.arrayContaining([tenantA, tenantB]),
+      );
+    });
+  });
+
+  describe("integrity", () => {
+    it("nobody writes, changes or removes entries — not the API, not the secret key, not the database owner", async () => {
+      const [{ id }] = (await db.query<{ id: string }>("select id from public.audit_log limit 1")).rows;
+      const insert = "insert into public.audit_log (tenant_id, actor_kind, action, record_type, record_id, changes) values ($1, 'system', 'insert', 'leads', $1, '{}')";
+      await expect(asUser(asAdmin, insert, [tenantA])).rejects.toThrow(/permission denied/);
+      await expect(asServer(insert, [tenantA])).rejects.toThrow(/permission denied/);
+      for (const run of [(sql: string) => asUser(asAdmin, sql, [id]), (sql: string) => asServer(sql, [id])]) {
+        await expect(run("update public.audit_log set owner_id = null where id = $1")).rejects.toThrow(/permission denied/);
+        await expect(run("delete from public.audit_log where id = $1")).rejects.toThrow(/permission denied/);
+      }
+      await expect(db.query("update public.audit_log set owner_id = null where id = $1", [id])).rejects.toThrow(/append-only/);
+      await expect(db.query("delete from public.audit_log where id = $1", [id])).rejects.toThrow(/append-only/);
+      await expect(db.query("truncate public.audit_log")).rejects.toThrow(/append-only/);
+    });
+
+    it("its helpers can't be called through the API", async () => {
+      for (const sql of ["select private.audit_actor(null, null)", "select private.audit_allow('leads')", "select private.write_audit()"]) {
+        await expect(asUser(asAdmin, sql)).rejects.toThrow(/permission denied/);
+        await expect(asServer(sql)).rejects.toThrow(/permission denied/);
+      }
+    });
+
+    it("every audited table has a record type and an owner rule", async () => {
+      const tables = (
+        await db.query<{ name: string }>(
+          "select c.relname as name from pg_trigger t join pg_class c on c.oid = t.tgrelid where t.tgfoid = 'private.write_audit()'::regprocedure order by 1",
+        )
+      ).rows.map((r) => r.name);
+      expect(tables).toEqual(["client_va_assignments", "clients", "leads", "meetings", "profiles", "roles", "tasks", "va_shortlists"]);
+      const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.write_audit()'::regprocedure")).rows;
+      const [{ def }] = (await db.query<{ def: string }>("select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'audit_log_record_type_check'")).rows;
+      const ownerRules = src.slice(src.indexOf("case tg_table_name\n    when 'leads' then\n      owner"));
+      for (const name of tables) {
+        expect(def).toContain(`'${name}'`);
+        expect(ownerRules).toContain(`when '${name}' then`);
+      }
+    });
+  });
+});
+
+describe("audit log: tasks and VA match", () => {
+  // Own users and company so the tasks and VA match suites stay as they left theirs. The company is CLOSER's,
+  // so CLOSER is the owning Lead Gen of every entry here.
+  const AC = "33333333-3333-4333-8333-333333333301"; // the client's login
+  const AV = "33333333-3333-4333-8333-333333333302"; // a VA the client accepts
+  const AV2 = "33333333-3333-4333-8333-333333333303"; // a VA offered by the server, then withdrawn
+  const asAc = token(AC, ["client"]);
+  const asAv = token(AV, ["va"]);
+  let company = "";
+
+  type Entry = { actor_kind: string; actor_id: string | null; action: string; owner_id: string | null; client_id: string | null; changes: Record<string, unknown> };
+  const entries = async (type: string, id: string) =>
+    (await db.query<Entry>(
+      "select actor_kind::text as actor_kind, actor_id, action::text as action, owner_id, client_id, changes from public.audit_log where record_type = $1 and record_id = $2 order by at, action",
+      [type, id],
+    )).rows;
+  const last = async (type: string, id: string) => (await entries(type, id)).at(-1);
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email, raw_user_meta_data) values
+        ('${AC}', 'audit-client@x.co', '{"full_name":"Ava Client"}'),
+        ('${AV}', 'audit-va@x.co', '{"full_name":"Rosa Villanueva"}'),
+        ('${AV2}', 'audit-va2@x.co', '{"full_name":"Tess Ramos"}')`);
+    await asServer(`update public.profiles set status = 'active' where id in ('${AC}', '${AV}', '${AV2}')`);
+    await asServer(`insert into public.roles (user_id, role) values ('${AC}', 'client'), ('${AV}', 'va'), ('${AV2}', 'va')`);
+    [{ id: company }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Audit Match Co', 'Ava', 'ava@audit.co', $1) returning id",
+      [CLOSER],
+    );
+    await asServer(
+      `update public.clients set user_id = $2, status = 'active', activated_at = now(), timezone = 'America/New_York',
+         package_code = 'essentials', hours_per_week = 20, term_months = 6, monthly_cents = 85500, starts_on = '2026-11-01'
+       where id = $1`,
+      [company, AC],
+    );
+  });
+
+  describe("shortlists and the accept path", () => {
+    let offerId = "";
+
+    it("an admin's offer is theirs; ids and status keep values, the name snapshots are names only", async () => {
+      [{ id: offerId }] = await asUser<{ id: string }>(asAdmin, "insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id", [company, AV, ADMIN]);
+      const [entry] = await entries("va_shortlists", offerId);
+      expect(entry).toMatchObject({
+        action: "insert",
+        actor_kind: "user",
+        actor_id: ADMIN,
+        owner_id: null,
+        client_id: company,
+        changes: { client_id: company, va_id: AV, status: "offered", offered_by: ADMIN, va_first_name: null, company_name: null },
+      });
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Rosa|Audit Match/);
+    });
+
+    it("the client's accept is theirs: the shortlist update and the assignment it inserts", async () => {
+      await asUser(asAc, "update public.va_shortlists set status = 'accepted' where id = $1", [offerId]);
+      const decided = await last("va_shortlists", offerId);
+      expect(decided).toMatchObject({ action: "update", actor_id: AC, owner_id: null, client_id: company, changes: { status: ["offered", "accepted"] } });
+      expect(Object.keys(decided!.changes).sort()).toEqual(["decided_at", "status"]);
+
+      const [{ id: assignment }] = await asServer<{ id: string }>("select id from public.client_va_assignments where client_id = $1 and va_id = $2 and status = 'active'", [company, AV]);
+      const [entry] = await entries("client_va_assignments", assignment);
+      // The client accepted it, though assigned_by records who offered the VA.
+      expect(entry).toMatchObject({
+        action: "insert",
+        actor_kind: "user",
+        actor_id: AC,
+        owner_id: CLOSER,
+        client_id: company,
+        changes: { va_id: AV, status: "active", assigned_by: ADMIN, va_first_name: null },
+      });
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Rosa/);
+    });
+
+    it("the secret key's offer names whoever offered it; an admin's withdrawal is theirs", async () => {
+      const [{ id }] = await asServer<{ id: string }>("insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id", [company, AV2, ADMIN]);
+      expect(await last("va_shortlists", id)).toMatchObject({ action: "insert", actor_id: ADMIN, owner_id: null });
+      expect(await asUser(asAdmin, "delete from public.va_shortlists where id = $1 returning id", [id])).toHaveLength(1);
+      expect(await last("va_shortlists", id)).toMatchObject({ action: "delete", actor_id: ADMIN, changes: { status: "offered", va_first_name: null } });
+    });
+
+    it("the secret key's assignment insert still falls back to assigned_by", async () => {
+      await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and va_id = $2", [company, AV2]);
+      const [{ id }] = await asServer<{ id: string }>("insert into public.client_va_assignments (client_id, va_id, assigned_by) values ($1, $2, $3) returning id", [company, AV2, ADMIN]);
+      expect(await last("client_va_assignments", id)).toMatchObject({ actor_id: ADMIN, changes: { va_first_name: null } });
+      await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [id]);
+    });
+  });
+
+  describe("tasks", () => {
+    let task = "";
+
+    it("the client's task is theirs: never the title or the name snapshots, values for ids, status and dates", async () => {
+      [{ id: task }] = await asUser<{ id: string }>(
+        asAc,
+        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Secret plan for the merger', current_date + 10, $3) returning id",
+        [company, AV, AC],
+      );
+      const [entry] = await entries("tasks", task);
+      expect(entry).toMatchObject({
+        action: "insert",
+        actor_id: AC,
+        owner_id: null,
+        client_id: company,
+        changes: { client_id: company, va_id: AV, status: "todo", deadline_timezone: "America/New_York", created_by: AC, title: null, company_name: null, va_first_name: null },
+      });
+      expect(entry.changes.deadline).toEqual(expect.any(String));
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Secret plan|Audit Match|Rosa/);
+    });
+
+    it("the VA's status change is theirs; the client's title change is a name only; closing records done_at and closed_by", async () => {
+      await asUser(asAv, "update public.tasks set status = 'in_progress' where id = $1", [task]);
+      expect(await last("tasks", task)).toMatchObject({ actor_id: AV, changes: { status: ["todo", "in_progress"] } });
+      expect(Object.keys((await last("tasks", task))!.changes)).toEqual(["status"]);
+
+      await asUser(asAc, "update public.tasks set title = 'Another secret' where id = $1", [task]);
+      expect(await last("tasks", task)).toMatchObject({ actor_id: AC, changes: { title: null } });
+
+      await asUser(asAc, "update public.tasks set status = 'done' where id = $1", [task]);
+      const closed = await last("tasks", task);
+      expect(closed).toMatchObject({ actor_id: AC, changes: { status: ["in_progress", "done"], closed_by: [null, AC] } });
+      expect((closed!.changes.done_at as unknown[])[1]).toEqual(expect.any(String));
+      expect(JSON.stringify(await entries("tasks", task))).not.toMatch(/secret/i);
+    });
+
+    it("a secret-key task names its creator", async () => {
+      const [{ id }] = await asServer<{ id: string }>(
+        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Server task', current_date + 5, $3) returning id",
+        [company, AV, AC],
+      );
+      expect(await last("tasks", id)).toMatchObject({ actor_kind: "user", actor_id: AC });
+    });
+
+    it("admins with two-factor read task and shortlist entries; the owning Lead Gen sees only the client and its assignments; the client, the VA and other Lead Gens see none", async () => {
+      const seen = async (claims: Claims) =>
+        (await asUser<{ record_type: string }>(claims, "select distinct record_type from public.audit_log where client_id = $1 order by 1", [company])).map((r) => r.record_type);
+      expect(await seen(asCloser)).toEqual(["client_va_assignments", "clients"]);
+      expect(await seen(asAdmin)).toEqual(["client_va_assignments", "clients", "tasks", "va_shortlists"]);
+      for (const claims of [asCloser2, asAc, asAv, token(ADMIN, ["admin"], "aal1")]) expect(await seen(claims)).toEqual([]);
+    });
+  });
+});

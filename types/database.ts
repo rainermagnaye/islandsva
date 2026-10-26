@@ -185,6 +185,23 @@ type TaskCommentRow = {
   created_at: string;
 };
 
+/** Written only by database triggers (private.write_audit); nobody updates or deletes it. */
+type AuditLogRow = {
+  id: string;
+  tenant_id: string;
+  at: string;
+  actor_kind: Enum<"audit_actor_kind">;
+  /** Null when actor_kind is "system" (shown as "System"). */
+  actor_id: string | null;
+  action: Enum<"audit_action">;
+  record_type: "leads" | "meetings" | "clients" | "client_va_assignments" | "tasks" | "va_shortlists" | "roles" | "profiles";
+  record_id: string;
+  owner_id: string | null;
+  client_id: string | null;
+  /** { column: value } on insert/delete, { column: [old, new] } on update; null = changed, value withheld. */
+  changes: Json;
+};
+
 /** Signed-in users may read every column except token_hash (column grant); the server reads all. */
 type OnboardingLinkRow = {
   id: string;
@@ -437,6 +454,12 @@ export type Database = {
         Update: Optional<TaskCommentRow>;
         Relationships: [];
       };
+      audit_log: {
+        Row: AuditLogRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       client_onboarding_links: {
         Row: OnboardingLinkRow;
         Insert: InsertOf<OnboardingLinkRow, "client_id" | "token_hash" | "created_by">;
@@ -574,6 +597,8 @@ export type Database = {
       cancel_demo: { Args: { booking_id: string; actor: string }; Returns: Json };
       // Discovery calls. set_discovery_times: an admin with two-factor (signed in). discovery_inbox: signed in,
       // rows only for an active Lead Gen. The rest: the secret key only.
+      // Secret key only; the actor must be an active admin of the account's agency (or a Super Admin).
+      set_account_status: { Args: { user_id: string; actor: string; status: "inactive" }; Returns: undefined };
       set_discovery_times: { Args: { times: string[] }; Returns: undefined };
       open_discovery_slots: { Args: Record<PropertyKey, never>; Returns: string[] };
       request_discovery_call: {
@@ -629,6 +654,8 @@ export type Database = {
       payment_provider: "manual";
       payment_status: "paid" | "void";
       demo_status: "pending" | "confirmed" | "rejected" | "cancelled" | "completed" | "expired";
+      audit_actor_kind: "user" | "system";
+      audit_action: "insert" | "update" | "delete";
       meeting_kind: "discovery";
       meeting_status: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "cancelled" | "expired";
       meeting_event_kind: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "note" | "expired";
