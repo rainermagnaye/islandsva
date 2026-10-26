@@ -322,16 +322,19 @@ describe("VA assignments", () => {
     expect(await visible(asCloser2)).toBe(0);
   });
 
-  it("only admins with 2FA assign VAs", async () => {
+  it("signed-in users cannot insert an assignment", async () => {
     const assign = (claims: Claims) => asUser(claims, "insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientB, VA2]);
-    await expect(assign(asCloser)).rejects.toThrow(/row-level security/);
-    await expect(assign(asVa)).rejects.toThrow(/row-level security/);
-    await expect(assign(asAdmin)).resolves.toBeDefined();
+    await expect(assign(asCloser)).rejects.toThrow(/permission denied/);
+    await expect(assign(asVa)).rejects.toThrow(/permission denied/);
+    await expect(assign(asAdmin)).rejects.toThrow(/permission denied/);
+    await expect(as("service_role", asAdmin, "insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientB, VA2])).rejects.toMatchObject({ code: "IVA28" });
   });
 
-  it("only a VA can be assigned, and one active VA per client", async () => {
+  it("only a VA can be assigned, and the same pair cannot be active twice", async () => {
     await expect(asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientC, CLOSER])).rejects.toThrow(/not an active user with the va role/);
-    await expect(asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientA, VA2])).rejects.toThrow(/one_active_per_client/);
+    const [second] = await asServer<{ id: string }>("insert into public.client_va_assignments (client_id, va_id) values ($1, $2) returning id", [clientA, VA2]);
+    await expect(asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientA, VA2])).rejects.toThrow(/one_active_pair/);
+    await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [second.id]);
   });
 });
 
@@ -2261,5 +2264,385 @@ describe("discovery calls", () => {
       expect((await asUser(token(SUPER, ["super_admin"], "aal2"), "select id from public.meetings")).length).toBeGreaterThan(0);
       expect(await asUser(token(SUPER, ["super_admin"], "aal1"), "select id from public.meetings")).toEqual([]);
     });
+  });
+});
+
+describe("tasks", () => {
+  // Its own users, company and assignment — clientA stays as the other suites left it.
+  // f1–f4 belong to the discovery-call suite. These ids stay clear of every other suite.
+  const OWNER = "22222222-2222-4222-8222-222222222201";
+  const WORKER = "22222222-2222-4222-8222-222222222202";
+  const WORKER2 = "22222222-2222-4222-8222-222222222203";
+  const OTHER = "22222222-2222-4222-8222-222222222204";
+  const SUPER = "22222222-2222-4222-8222-222222222205";
+  const SPARE = "22222222-2222-4222-8222-222222222206";
+  const FAR_CLOSER = "22222222-2222-4222-8222-222222222207";
+  const FAR_CLIENT = "22222222-2222-4222-8222-222222222208";
+  const FAR_VA = "22222222-2222-4222-8222-222222222209";
+  const PEND = "22222222-2222-4222-8222-222222222210";
+  const ENDU = "22222222-2222-4222-8222-222222222211";
+  const DISA = "22222222-2222-4222-8222-222222222212";
+
+  const asOwner = token(OWNER, ["client"]);
+  const asWorker = token(WORKER, ["va"]);
+  const asOther = token(OTHER, ["client"]);
+  const asFar = token(FAR_CLIENT, ["client"]);
+  const asSuper = token(SUPER, ["super_admin"], "aal2");
+
+  let harbor = "";
+  let otherCo = "";
+  let taskId = "";
+  let otherTask = "";
+  let farTask = "";
+
+  const insertTask = (claims: Claims, client: string, va: string, actor: string, deadlineSql = "current_date + 10") =>
+    asUser<{ id: string; company_name: string; va_first_name: string; deadline_timezone: string; status: string }>(
+      claims,
+      `insert into public.tasks (client_id, va_id, title, deadline, created_by)
+       values ($1, $2, 'Call the vendor', ${deadlineSql}, $3)
+       returning id, company_name, va_first_name, deadline_timezone, status`,
+      [client, va, actor],
+    );
+
+  const insertAsServer = (client: string, va: string, deadlineSql = "current_date + 10") =>
+    asServer<{ id: string }>(
+      `insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Call the vendor', ${deadlineSql}, $3) returning id`,
+      [client, va, OWNER],
+    );
+
+  async function makeCompany(
+    name: string,
+    opts: { user: string | null; createdBy?: string; status?: string; zone?: string | null; disabled?: boolean; va?: string | null; ended?: boolean },
+  ) {
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'Contact', $2, $3) returning id",
+      [name, `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@tasks.co`, opts.createdBy ?? CLOSER],
+    );
+    await asServer(
+      `update public.clients set user_id = $2, status = $3::public.client_status, timezone = $4,
+         package_code = case when $4::text is null then null else 'essentials' end,
+         hours_per_week = case when $4::text is null then null else 20 end,
+         term_months = case when $4::text is null then null else 6 end,
+         monthly_cents = case when $4::text is null then null else 85500 end,
+         starts_on = case when $4::text is null then null else date '2026-11-01' end,
+         activated_at = case when $3::public.client_status = 'active' then now() else null end,
+         disabled_at = case when $5 then now() else null end
+       where id = $1`,
+      [
+      id,
+      opts.user,
+      opts.status ?? "active",
+      opts.zone === undefined ? "Pacific/Auckland" : opts.zone,
+      opts.disabled ?? false,
+    ]);
+    if (opts.va) {
+      await asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [id, opts.va]);
+      if (opts.ended) {
+        await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and status = 'active'", [id]);
+      }
+    }
+    return id;
+  }
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email, raw_user_meta_data) values
+        ('${OWNER}', 'task-owner@x.co', '{"full_name":"Cleo Owner"}'),
+        ('${WORKER}', 'task-va@x.co', '{"full_name":"Maria Santos"}'),
+        ('${WORKER2}', 'task-va2@x.co', '{"full_name":"Luis Other"}'),
+        ('${OTHER}', 'task-other@x.co', '{"full_name":"Pat Other"}'),
+        ('${SUPER}', 'task-super@x.co', '{"full_name":"Super Tasks"}'),
+        ('${SPARE}', 'task-spare@x.co', '{"full_name":"Spare VA"}'),
+        ('${FAR_CLOSER}', 'task-far-closer@x.co', '{}'),
+        ('${FAR_CLIENT}', 'task-far-client@x.co', '{"full_name":"Far Client"}'),
+        ('${FAR_VA}', 'task-far-va@x.co', '{"full_name":"Far VA"}'),
+        ('${PEND}', 'task-pend@x.co', '{"full_name":"Pending Owner"}'),
+        ('${ENDU}', 'task-endu@x.co', '{"full_name":"Ended Owner"}'),
+        ('${DISA}', 'task-disa@x.co', '{"full_name":"Disabled Owner"}')`);
+    await asServer(`update public.profiles set status = 'active' where id in ('${OWNER}', '${WORKER}', '${WORKER2}', '${OTHER}', '${SUPER}', '${FAR_CLOSER}', '${FAR_CLIENT}', '${FAR_VA}', '${PEND}', '${ENDU}', '${DISA}')`);
+    await asServer(`
+      insert into public.roles (user_id, role) values
+        ('${OWNER}', 'client'), ('${WORKER}', 'va'), ('${WORKER2}', 'va'), ('${OTHER}', 'client'),
+        ('${SUPER}', 'super_admin'), ('${SPARE}', 'va'), ('${FAR_CLOSER}', 'closer'), ('${FAR_CLIENT}', 'client'), ('${FAR_VA}', 'va'),
+        ('${PEND}', 'client'), ('${ENDU}', 'client'), ('${DISA}', 'client')`);
+
+    harbor = await makeCompany("Harbor Co", { user: OWNER, va: WORKER });
+    otherCo = await makeCompany("Other Co", { user: OTHER, va: WORKER2 });
+    [{ id: taskId }] = await insertTask(asOwner, harbor, WORKER, OWNER);
+    [{ id: otherTask }] = await insertTask(asOther, otherCo, WORKER2, OTHER);
+
+    const [{ id: farTenant }] = await asServer<{ id: string }>("insert into public.tenants (name, slug) values ('Tasks other', 'tasks-other') returning id");
+    await asServer(`update public.profiles set tenant_id = $1 where id in ('${FAR_CLOSER}', '${FAR_CLIENT}', '${FAR_VA}')`, [farTenant]);
+    const farCo = await makeCompany("Far Co", { user: FAR_CLIENT, createdBy: FAR_CLOSER, va: FAR_VA });
+    [{ id: farTask }] = await asServer<{ id: string }>(
+      "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Far task', current_date + 10, $3) returning id",
+      [farCo, FAR_VA, FAR_CLIENT],
+    );
+  });
+
+  it("snapshots the company name and the VA's first name, and ignores columns the client cannot send", async () => {
+    const [row] = await asUser<{ company_name: string; va_first_name: string; deadline_timezone: string; status: string }>(
+      asOwner,
+      "select company_name, va_first_name, deadline_timezone, status from public.tasks where id = $1",
+      [taskId],
+    );
+    expect(row).toEqual({ company_name: "Harbor Co", va_first_name: "Maria", deadline_timezone: "Pacific/Auckland", status: "todo" });
+    await expect(
+      asUser(asOwner, "insert into public.tasks (client_id, va_id, title, deadline, created_by, company_name) values ($1, $2, 'X', current_date + 10, $3, 'Spoofed')", [harbor, WORKER, OWNER]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(asServer("update public.tasks set company_name = 'Spoofed' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+  });
+
+  it("uses Your VA when the profile has no first name", async () => {
+    await asServer("update public.profiles set full_name = '' where id = $1", [WORKER]);
+    try {
+      const [row] = await insertTask(asOwner, harbor, WORKER, OWNER);
+      expect(row.va_first_name).toBe("Your VA");
+      await asServer("delete from public.tasks where id = $1", [row.id]);
+    } finally {
+      await asServer("update public.profiles set full_name = 'Maria Santos' where id = $1", [WORKER]);
+    }
+  });
+
+  it("rejects a past deadline, one too far ahead, and a zone Postgres does not know", async () => {
+    // PGlite cannot freeze now(). The Auckland "today versus yesterday in UTC" case lives in metrics.test.ts.
+    await expect(insertTask(asOwner, harbor, WORKER, OWNER, "date '2000-01-01'")).rejects.toMatchObject({ code: "IVA22" });
+    await expect(insertTask(asOwner, harbor, WORKER, OWNER, "current_date + 400")).rejects.toMatchObject({ code: "IVA22" });
+    const odd = await makeCompany("Odd Zone", { user: null, zone: "Not/AZone", va: WORKER });
+    await expect(insertAsServer(odd, WORKER)).rejects.toMatchObject({ code: "IVA22" });
+    const blank = await makeCompany("No Zone", { user: null, zone: null, va: WORKER });
+    await expect(insertAsServer(blank, WORKER)).rejects.toMatchObject({ code: "IVA22" });
+  });
+
+  it("rejects a pending company, a disabled company, a closed portal and an ended assignment", async () => {
+    const pending = await makeCompany("Pending Co", { user: PEND, status: "pending", va: WORKER });
+    await expect(insertAsServer(pending, WORKER)).rejects.toMatchObject({ code: "IVA23" });
+    await expect(insertTask(token(PEND, ["client"]), pending, WORKER, PEND)).rejects.toMatchObject({ code: "IVA23" });
+    const disabled = await makeCompany("Disabled Co", { user: DISA, disabled: true, va: WORKER });
+    await expect(insertAsServer(disabled, WORKER)).rejects.toMatchObject({ code: "IVA23" });
+    await expect(insertTask(token(DISA, ["client"]), disabled, WORKER, DISA)).rejects.toMatchObject({ code: "IVA23" });
+    const spareCo = await makeCompany("Spare Co", { user: null, va: SPARE });
+    await expect(insertAsServer(spareCo, SPARE)).rejects.toMatchObject({ code: "IVA24" });
+    const ended = await makeCompany("Ended Co", { user: ENDU, va: WORKER, ended: true });
+    await expect(insertAsServer(ended, WORKER)).rejects.toMatchObject({ code: "IVA24" });
+    await expect(insertTask(token(ENDU, ["client"]), ended, WORKER, ENDU)).rejects.toMatchObject({ code: "IVA24" });
+
+    // The guard raises before RLS WITH CHECK. With it off, the insert policy still refuses these rows.
+    await db.exec("alter table public.tasks disable trigger tasks_guard");
+    try {
+      await expect(insertTask(token(PEND, ["client"]), pending, WORKER, PEND)).rejects.toThrow(/row-level security/);
+      await expect(insertTask(token(DISA, ["client"]), disabled, WORKER, DISA)).rejects.toThrow(/row-level security/);
+      await expect(insertTask(token(ENDU, ["client"]), ended, WORKER, ENDU)).rejects.toThrow(/row-level security/);
+      await expect(insertTask(asOwner, harbor, WORKER2, OWNER)).rejects.toThrow(/row-level security/);
+    } finally {
+      await db.exec("alter table public.tasks enable trigger tasks_guard");
+    }
+  });
+
+  it("lets only the client insert, and only for their own company and active VA", async () => {
+    await expect(insertTask(asOwner, otherCo, WORKER2, OWNER)).rejects.toThrow(/row-level security/);
+    await expect(insertTask(asOwner, harbor, WORKER2, OWNER)).rejects.toMatchObject({ code: "IVA24" });
+    await expect(insertTask(asWorker, harbor, WORKER, WORKER)).rejects.toThrow(/row-level security|permission denied|not an active user with the client role/);
+    await expect(insertTask(asCloser, harbor, WORKER, CLOSER)).rejects.toThrow(/row-level security|permission denied|not an active user with the client role/);
+    await expect(insertTask(asAdmin, harbor, WORKER, ADMIN)).rejects.toThrow(/row-level security|permission denied|not an active user with the client role/);
+    await expect(as("anon", {}, "select id from public.tasks")).rejects.toThrow(/permission denied/);
+    await expect(asUser(asOwner, "select private.guard_task()")).rejects.toThrow(/permission denied/);
+  });
+
+  it("lets an admin with two-factor read and not write; a super admin reads across tenants", async () => {
+    expect(await asUser(asAdmin, "select id from public.tasks where id = $1", [taskId])).toEqual([{ id: taskId }]);
+    expect(await asUser(asAdmin, "update public.tasks set title = 'Nope' where id = $1 returning id", [taskId])).toEqual([]);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.tasks where id = $1", [taskId])).toEqual([]);
+    expect(ids(await asUser<{ id: string }>(asSuper, "select id from public.tasks where id in ($1, $2)", [taskId, farTask]))).toEqual([farTask, taskId].sort());
+    expect(await asUser(asOwner, "select id from public.tasks where id = $1", [farTask])).toEqual([]);
+    expect(await asUser(asFar, "select id from public.tasks where id = $1", [taskId])).toEqual([]);
+    expect(await asUser(asAdmin, "select id from public.tasks where id = $1", [farTask])).toEqual([]);
+  });
+
+  it("hides tasks from a token that no longer has the role", async () => {
+    expect(await asUser(token(OWNER, []), "select id from public.tasks where id = $1", [taskId])).toEqual([]);
+    expect(await asUser(token(WORKER, []), "update public.tasks set status = 'in_progress' where id = $1 returning id", [taskId])).toEqual([]);
+  });
+
+  it("does not re-check the deadline window when only the status changes", async () => {
+    await db.exec("alter table public.tasks disable trigger tasks_guard");
+    let late = "";
+    try {
+      const [row] = await asServer<{ id: string }>(
+        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Late', date '2000-01-01', $3) returning id",
+        [harbor, WORKER, OWNER],
+      );
+      late = row.id;
+    } finally {
+      await db.exec("alter table public.tasks enable trigger tasks_guard");
+    }
+    await expect(asUser<{ status: string }>(asWorker, "update public.tasks set status = 'in_progress' where id = $1 returning status", [late])).resolves.toEqual([
+      { status: "in_progress" },
+    ]);
+  });
+
+  it("moves status forward, keeps the row with the VA after the assignment ends, and freezes it once done", async () => {
+    await expect(asUser(asOwner, "update public.tasks set status = 'in_progress' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asUser(asWorker, "update public.tasks set title = 'VA title' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    expect(await asUser(asWorker, "update public.tasks set status = 'in_progress' where id = $1 returning id", [otherTask])).toEqual([]);
+
+    const [second] = await insertTask(asOwner, harbor, WORKER, OWNER);
+    expect(await asUser<{ status: string }>(asWorker, "update public.tasks set status = 'done' where id = $1 returning status", [second.id])).toEqual([{ status: "done" }]);
+    await expect(asUser(asOwner, "update public.tasks set title = 'Again' where id = $1", [second.id])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asServer("update public.tasks set status = 'todo', done_at = null where id = $1", [second.id])).rejects.toMatchObject({ code: "IVA25" });
+
+    expect(await asUser<{ status: string }>(asWorker, "update public.tasks set status = 'in_progress' where id = $1 returning status", [taskId])).toEqual([{ status: "in_progress" }]);
+    await expect(asUser(asWorker, "update public.tasks set status = 'todo' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    expect(await asUser<{ title: string }>(asOwner, "update public.tasks set title = 'Call tomorrow', deadline = current_date + 12 where id = $1 returning title", [taskId])).toEqual([
+      { title: "Call tomorrow" },
+    ]);
+
+    const [note] = await asUser<{ author_first_name: string }>(
+      asWorker,
+      "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Starting now') returning author_first_name",
+      [taskId, WORKER],
+    );
+    expect(note.author_first_name).toBe("Maria");
+    await expect(asServer("insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Not my company')", [otherTask, OWNER])).rejects.toMatchObject({ code: "IVA25" });
+
+    await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and status = 'active'", [harbor]);
+    expect(await asUser(asWorker, "update public.tasks set status = 'done' where id = $1 returning id", [taskId])).toEqual([]);
+    await expect(asUser(asWorker, "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Still here')", [taskId, WORKER])).rejects.toMatchObject({ code: "IVA24" });
+    await db.exec("alter table public.task_comments disable trigger task_comments_guard");
+    try {
+      await expect(asUser(asWorker, "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Still here')", [taskId, WORKER])).rejects.toThrow(/row-level security/);
+    } finally {
+      await db.exec("alter table public.task_comments enable trigger task_comments_guard");
+    }
+    await expect(as("service_role", asWorker, "update public.tasks set status = 'done' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA24" });
+    await expect(as("service_role", asWorker, "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Still here')", [taskId, WORKER])).rejects.toMatchObject({ code: "IVA24" });
+    expect(await asUser(asWorker, "select id from public.tasks where id = $1", [taskId])).toEqual([{ id: taskId }]);
+
+    await asServer("update public.clients set disabled_at = now() where id = $1", [harbor]);
+    await expect(asUser(asOwner, "update public.tasks set title = 'Too late' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA23" });
+    const [clientNote] = await asUser<{ author_first_name: string }>(
+      asOwner,
+      "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Closing this') returning author_first_name",
+      [taskId, OWNER],
+    );
+    expect(clientNote.author_first_name).toBe("Cleo");
+    const [closed] = await asUser<{ status: string; closed_by: string; closed: boolean }>(
+      asOwner,
+      "update public.tasks set status = 'done' where id = $1 returning status, closed_by, done_at is not null as closed",
+      [taskId],
+    );
+    expect(closed).toEqual({ status: "done", closed_by: OWNER, closed: true });
+
+    await expect(asUser(asOwner, "update public.tasks set title = 'After' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asUser(asOwner, "update public.tasks set deadline = current_date + 3 where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asUser(asOwner, "update public.tasks set status = 'in_progress' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asUser(asOwner, "update public.task_comments set body = 'Edited' where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asOwner, "delete from public.task_comments where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asWorker, "delete from public.task_comments where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asOwner, "delete from public.tasks where id = $1", [taskId])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "delete from public.tasks where id = $1", [taskId])).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("VA match", () => {
+  const CLIENT_M = "11111111-1111-4111-8111-111111111101";
+  const VA_M = "11111111-1111-4111-8111-111111111102";
+  const VA_N = "11111111-1111-4111-8111-111111111103";
+  const VA_O = "11111111-1111-4111-8111-111111111104";
+  const VA_P = "11111111-1111-4111-8111-111111111105";
+  const OTHER_M = "11111111-1111-4111-8111-111111111106";
+  const asMatch = token(CLIENT_M, ["client"]);
+  const asVaM = token(VA_M, ["va"]);
+  let company = "";
+
+  const offer = (va: string, claims: Claims = asAdmin) =>
+    asUser<{ id: string; va_first_name: string }>(
+      claims,
+      "insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id, va_first_name",
+      [company, va, claims.sub],
+    );
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email, raw_user_meta_data) values
+        ('${CLIENT_M}', 'match-client@x.co', '{"full_name":"Mina Client"}'),
+        ('${VA_M}', 'match-va@x.co', '{"full_name":"Nora Santos"}'),
+        ('${VA_N}', 'match-va-n@x.co', '{"full_name":"Omar Diaz"}'),
+        ('${VA_O}', 'match-va-o@x.co', '{"full_name":"Pia Cruz"}'),
+        ('${VA_P}', 'match-va-p@x.co', '{"full_name":"Quinn Reyes"}'),
+        ('${OTHER_M}', 'match-other@x.co', '{"full_name":"Other Client"}')`);
+    await asServer(`update public.profiles set status = 'active' where id in ('${CLIENT_M}', '${VA_M}', '${VA_N}', '${VA_O}', '${VA_P}', '${OTHER_M}')`);
+    await asServer(`
+      insert into public.roles (user_id, role) values
+        ('${CLIENT_M}', 'client'), ('${VA_M}', 'va'), ('${VA_N}', 'va'), ('${VA_O}', 'va'), ('${VA_P}', 'va'), ('${OTHER_M}', 'client')`);
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Match Co', 'Mina', 'match@tasks.co', $1) returning id",
+      [CLOSER],
+    );
+    company = id;
+    await asServer(
+      `update public.clients set user_id = $2, status = 'active', activated_at = now(), timezone = 'America/New_York',
+         package_code = 'essentials', hours_per_week = 20, term_months = 6, monthly_cents = 85500, starts_on = '2026-11-01'
+       where id = $1`,
+      [company, CLIENT_M],
+    );
+  });
+
+  it("offers up to three VAs, copies the first name, and refuses a fourth or a duplicate", async () => {
+    const [first] = await offer(VA_M);
+    expect(first.va_first_name).toBe("Nora");
+    await offer(VA_N);
+    await offer(VA_O);
+    await expect(offer(VA_P)).rejects.toMatchObject({ code: "IVA26" });
+    await expect(offer(VA_M)).rejects.toMatchObject({ code: "IVA26" });
+    await expect(offer(VA_M, asCloser)).rejects.toMatchObject({ code: "IVA26" });
+    await expect(as("anon", {}, "select id from public.va_shortlists")).rejects.toThrow(/permission denied/);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.va_shortlists where client_id = $1", [company])).toEqual([]);
+    expect(await asUser(asMatch, "select id from public.profiles where id = $1", [VA_M])).toEqual([]);
+  });
+
+  it("lets the client accept one offer into an assignment and decline another", async () => {
+    const [nora] = await asUser<{ id: string }>(asAdmin, "select id from public.va_shortlists where client_id = $1 and va_id = $2", [company, VA_M]);
+    const [accepted] = await asUser<{ status: string }>(asMatch, "update public.va_shortlists set status = 'accepted' where id = $1 returning status", [nora.id]);
+    expect(accepted.status).toBe("accepted");
+    const assignments = await asUser<{ va_id: string; va_first_name: string }>(
+      asMatch,
+      "select va_id, va_first_name from public.client_va_assignments where client_id = $1 and status = 'active'",
+      [company],
+    );
+    expect(assignments).toEqual([{ va_id: VA_M, va_first_name: "Nora" }]);
+    expect(await asUser(asMatch, "update public.va_shortlists set status = 'declined' where id = $1 returning id", [nora.id])).toEqual([]);
+    await expect(asServer("update public.va_shortlists set status = 'declined' where id = $1", [nora.id])).rejects.toMatchObject({ code: "IVA27" });
+
+    const [omar] = await asUser<{ id: string }>(asAdmin, "select id from public.va_shortlists where client_id = $1 and va_id = $2", [company, VA_N]);
+    expect(await asUser(asMatch, "update public.va_shortlists set status = 'declined' where id = $1 returning status", [omar.id])).toEqual([{ status: "declined" }]);
+    expect(await asServer("select count(*)::int as n from public.client_va_assignments where client_id = $1 and va_id = $2", [company, VA_N])).toEqual([{ n: 0 }]);
+  });
+
+  it("allows a second active VA, and an admin can end one without changing the shortlist", async () => {
+    const [pia] = await asUser<{ id: string }>(asAdmin, "select id from public.va_shortlists where client_id = $1 and va_id = $2", [company, VA_O]);
+    await asUser(asMatch, "update public.va_shortlists set status = 'accepted' where id = $1", [pia.id]);
+    const active = await asServer<{ id: string; va_id: string }>("select id, va_id from public.client_va_assignments where client_id = $1 and status = 'active' order by va_id", [company]);
+    expect(active.map((row) => row.va_id).sort()).toEqual([VA_M, VA_O].sort());
+    const nora = active.find((row) => row.va_id === VA_M);
+    await asUser(asAdmin, "update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [nora?.id]);
+    expect(await asServer("select status from public.va_shortlists where client_id = $1 and va_id = $2", [company, VA_M])).toEqual([{ status: "accepted" }]);
+    expect(await asServer("select status from public.client_va_assignments where id = $1", [nora?.id])).toEqual([{ status: "ended" }]);
+    const [again] = await offer(VA_M);
+    await asUser(asMatch, "update public.va_shortlists set status = 'accepted' where id = $1", [again.id]);
+    expect(await asServer("select count(*)::int as n from public.client_va_assignments where client_id = $1 and va_id = $2 and status = 'active'", [company, VA_M])).toEqual([{ n: 1 }]);
+  });
+
+  it("lets the VA save their own hours and refuses another person's", async () => {
+    const saved = await asUser<{ weekday: number }>(
+      asVaM,
+      "insert into public.va_working_hours (va_id, weekday, start_minute, end_minute) values ($1, 1, 540, 1020) returning weekday",
+      [VA_M],
+    );
+    expect(saved).toEqual([{ weekday: 1 }]);
+    await expect(asUser(asVaM, "insert into public.va_working_hours (va_id, weekday, start_minute, end_minute) values ($1, 1, 500, 600)", [VA_M])).rejects.toMatchObject({ code: "IVA29" });
+    expect(await asUser(asMatch, "select id from public.va_working_hours where va_id = $1", [VA_M])).toEqual([]);
+    await expect(asUser(asCloser, "insert into public.va_working_hours (va_id, weekday, start_minute, end_minute) values ($1, 2, 540, 1020)", [VA_M])).rejects.toMatchObject({ code: "IVA29" });
+    expect(await asUser(asAdmin, "select weekday from public.va_working_hours where va_id = $1", [VA_M])).toEqual([{ weekday: 1 }]);
   });
 });

@@ -3,7 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { cardSurface } from "@/components/ui/card";
+// The class alone. Importing it from card.tsx pulls Card into this chunk and pushes /profile over the first-load budget.
+import { cardSurface } from "@/components/ui/card-surface";
 import { SearchField } from "@/components/ui/search-field";
 import { SEARCH_MIN_LENGTH, type SearchHit, type SearchResults } from "@/features/search/contract";
 

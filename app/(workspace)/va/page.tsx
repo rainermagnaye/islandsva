@@ -13,6 +13,8 @@ import { listAssignedClients } from "@/features/clients/assignment-dal";
 import { AssignedClientsTable } from "@/features/clients/components/assigned-clients-table";
 import { listVaDemos } from "@/features/demos/booking-dal";
 import { VaDemoList } from "@/features/demos/components/va-demo-list";
+import { TaskMetrics } from "@/features/tasks/components/task-metrics";
+import { listTasks } from "@/features/tasks/dal";
 import { LazyVaRegistration } from "@/features/users/components/lazy-va-registration";
 import { employeeAccessBadge } from "@/features/users/contract";
 import { loadVaAccess } from "@/features/users/service";
@@ -68,12 +70,13 @@ const RECENT = 5;
 /** The approved VA's dashboard: demo requests to answer, upcoming calls, clients and weekly hours. */
 async function VaDashboard({ vaId }: { vaId: string }) {
   // Independent reads, in parallel; both run as the signed-in VA, so RLS applies.
-  const [clients, demos] = await Promise.all([listAssignedClients(vaId), listVaDemos(vaId)]);
+  const [clients, demos, tasks] = await Promise.all([listAssignedClients(vaId), listVaDemos(vaId), listTasks()]);
   const requests = demos.filter((demo) => demo.status === "pending").length;
   const hours = clients.reduce((sum, client) => sum + (client.hoursPerWeek ?? 0), 0);
 
   return (
     <Workspace title="Dashboard" lead="Demo requests, your clients and hours at a glance.">
+      <TaskMetrics tasks={tasks} href={appRoutes.vaTasks} />
       <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Demo requests" value={requests} icon="bell" caption="Waiting for your answer" />
         <StatCard label="Upcoming demos" value={demos.length - requests} icon="calendar" href={appRoutes.vaCalendar} />

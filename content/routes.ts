@@ -28,8 +28,12 @@ export const appRoutes = {
   dashboard: dashboardPath,
   client: "/client",
   clientDemo: "/client/demo",
+  clientTasks: "/client/tasks",
+  clientMatch: "/client/match",
   va: "/va",
   vaClients: "/va/clients",
+  vaTasks: "/va/tasks",
+  vaHours: "/va/hours",
   vaCalendar: "/va/calendar",
   closer: "/closer",
   closerNewClient: "/closer/clients/new",
@@ -62,6 +66,10 @@ export const adminUserHref = (id: string) => `${appRoutes.adminUsers}/${id}`;
 
 /** One client profile. The id is a random UUID, so the URL carries no personal data. */
 export const adminClientHref = (id: string) => `${appRoutes.adminClients}/${id}`;
+
+/** One task. The id is a random UUID, so the URL carries no personal data. */
+export const clientTaskHref = (id: string) => `${appRoutes.clientTasks}/${id}`;
+export const vaTaskHref = (id: string) => `${appRoutes.vaTasks}/${id}`;
 
 
 /** A Closer's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */

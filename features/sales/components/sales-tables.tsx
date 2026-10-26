@@ -1,9 +1,8 @@
 import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { SalesMonth, SalesPayment } from "../contract";
+import { money, type SalesMonth, type SalesPayment } from "../contract";
 
 // Cents, not rounded to dollars: these are accounting figures.
-export const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const monthLabel = (month: string) => new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`));
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 const figure = (value: string) => <span className="block text-right tabular-nums">{value}</span>;

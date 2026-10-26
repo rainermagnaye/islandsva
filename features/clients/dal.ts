@@ -284,6 +284,29 @@ export async function insertPendingClient(input: { companyName: string; contactN
   if (error) throw new UpstreamError("supabase", `Creating a client failed: ${error.message}`, { cause: error });
 }
 
+const OVERVIEW_PAGE = 1000;
+const OVERVIEW_PAGES = 20;
+
+/** Package and price for every active, enabled client. Paged so a long list is not cut off at one response. */
+export async function listActivePackageRows(): Promise<{ packageCode: string | null; monthlyCents: number | null }[]> {
+  const rows: { packageCode: string | null; monthlyCents: number | null }[] = [];
+  for (let page = 0; page < OVERVIEW_PAGES; page += 1) {
+    const from = page * OVERVIEW_PAGE;
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("clients")
+      .select("package_code, monthly_cents")
+      .eq("status", "active")
+      .is("disabled_at", null)
+      .order("id")
+      .range(from, from + OVERVIEW_PAGE - 1);
+    if (error) throw new UpstreamError("supabase", `Reading the package mix failed (${error.code})`);
+    rows.push(...data.map((row) => ({ packageCode: row.package_code, monthlyCents: row.monthly_cents })));
+    if (data.length < OVERVIEW_PAGE) return rows;
+  }
+  throw new UpstreamError("supabase", "Reading the package mix exceeded 20 pages");
+}
+
 /** Hides the client from the list, or puts them back. The record stays. */
 export async function setClientDisabled(clientId: string, disabled: boolean) {
   const supabase = await createClient();

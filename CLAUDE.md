@@ -55,7 +55,7 @@ app/                  routes only — thin pages and endpoints; robots, sitemap,
   (workspace)/        portal: dashboard (fallback) · profile · client · va · closer · admin; @search = header search slot
   auth/confirm/       email-link landing (token hash → session)
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
-features/<feature>/   one business area (today: auth, leads, clients, users, demos, sales, search)
+features/<feature>/   one business area (today: auth, leads, clients, users, demos, sales, search, tasks, matching)
   contract.ts         [shared] types, labels, limits — no Zod, safe for client imports
   validation.ts       [server] Zod schemas + parseX()
   service.ts          [server] use cases routes and actions call (simple CRUD skips it)

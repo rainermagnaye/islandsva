@@ -24,6 +24,45 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
   return data.map((row) => toSummary(row, extras.get(row.id)));
 }
 
+const OVERVIEW_PAGE = 1000;
+const OVERVIEW_PAGES = 20;
+
+export type VaRosterEntry = {
+  id: string;
+  fullName: string;
+  status: UserSummary["status"];
+  roles: Role[];
+  reviewStatus: EmployeeReviewStatus | null;
+};
+
+/** Every account that holds the VA role, oldest id first. The page decides who is open with `vaPortalOpen`. */
+export async function listVaRoster(): Promise<VaRosterEntry[]> {
+  const rows: VaRosterEntry[] = [];
+  for (let page = 0; page < OVERVIEW_PAGES; page += 1) {
+    const from = page * OVERVIEW_PAGE;
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, status, roles!roles_user_id_fkey!inner(role)")
+      .eq("roles.role", "va")
+      .order("id")
+      .range(from, from + OVERVIEW_PAGE - 1);
+    if (error) throw new UpstreamError("supabase", `Reading the VA roster failed (${error.code})`);
+    const extras = await employeeExtras(data.map((row) => row.id));
+    rows.push(
+      ...data.map((row) => ({
+        id: row.id,
+        fullName: row.full_name,
+        status: row.status,
+        roles: row.roles.map((granted) => granted.role),
+        reviewStatus: extras.get(row.id)?.reviewStatus ?? null,
+      })),
+    );
+    if (data.length < OVERVIEW_PAGE) return rows;
+  }
+  throw new UpstreamError("supabase", "Reading the VA roster exceeded 20 pages");
+}
+
 /** A few accounts matching a name or email, newest first. Read as the signed-in admin, so RLS applies. */
 export async function searchProfiles(search: string, limit: number) {
   const supabase = await createClient();

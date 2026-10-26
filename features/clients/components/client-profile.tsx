@@ -14,14 +14,16 @@ import { ClientActions } from "./client-actions";
 import { ClientCompanyForm } from "./client-company-form";
 import { ClientNotes } from "./client-notes";
 import { ClientConsents, ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
-import { VaAssignment } from "./va-assignment";
+import { ShortlistAdmin } from "@/features/matching/components/shortlist-admin";
+import type { ShortlistEntry } from "@/features/matching/contract";
 
 /** The client profile: registration progress, then overview, notes, consents, or invoices. */
 export function ClientProfile({
   client,
   notes,
   packet,
-  assignment,
+  assignments,
+  offers,
   vas,
   tab,
   editing,
@@ -29,7 +31,8 @@ export function ClientProfile({
   client: ClientDetail;
   notes: readonly ClientNote[];
   packet: ClientPacketSummary;
-  assignment: { vaName: string; startedAt: string } | null;
+  assignments: readonly { id: string; vaId: string; vaName: string; startedAt: string }[];
+  offers: readonly ShortlistEntry[];
   vas: readonly { id: string; fullName: string }[];
   tab: ClientProfileTab;
   editing: boolean;
@@ -79,7 +82,7 @@ export function ClientProfile({
         </Alert>
       )}
       <ClientStepper steps={steps} />
-      <VaAssignment clientId={client.id} assignment={assignment} vas={vas} />
+      <ShortlistAdmin clientId={client.id} assignments={assignments} offers={offers} vas={vas} />
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
         <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />

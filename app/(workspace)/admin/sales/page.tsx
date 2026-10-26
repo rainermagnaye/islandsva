@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Panel, cardSurface } from "@/components/ui/card";
-import { RecentPayments, SalesByMonth, money } from "@/features/sales/components/sales-tables";
-import { lastMonths, summarizeByMonth, totalOf } from "@/features/sales/contract";
+import { RecentPayments, SalesByMonth } from "@/features/sales/components/sales-tables";
+import { lastMonths, money, summarizeByMonth, totalOf } from "@/features/sales/contract";
 import { listPaymentsSince, recurringRevenue } from "@/features/sales/dal";
 import { requireRole } from "@/lib/auth/session";
 
