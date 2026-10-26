@@ -72,7 +72,7 @@ export async function listAssignedClients(vaId: string): Promise<AssignedClient[
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("client_va_assignments")
-    .select("started_at, client:clients!inner(id, company_name, contact_name, contact_email, timezone, hours_per_week)")
+    .select("started_at, client:clients!client_va_assignments_client_id_fkey!inner(id, company_name, contact_name, contact_email, timezone, hours_per_week)")
     .eq("va_id", vaId)
     .eq("status", "active")
     .order("started_at", { ascending: false });

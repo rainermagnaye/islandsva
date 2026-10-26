@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "size": "node scripts/check-bundle.mjs",
     "tokens": "node scripts/build-tokens.mjs",
+    "db:types": "supabase gen types --project-id qqqfahnyajwgugylcbtn --schema public --lang typescript > types/database.generated.ts",
     "admin:create": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/create-admin.mjs"
   },
   "dependencies": {

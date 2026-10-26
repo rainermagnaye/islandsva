@@ -30,6 +30,7 @@ npm run build        # every public route must stay ○ (static)
 npm run size         # after build: first-load JS per page vs the §8 budget (exit 1 if over)
 npm run start        # serve the production build
 npm run tokens       # regenerate app/tokens.css from design/tokens.json
+npm run db:types     # regenerate types/database.generated.ts from the live schema (after a migration is applied)
 npm run admin:create -- <email>        # make an account admin in the project .env.local points at
 npx supabase migration new <name>      # new SQL file in supabase/migrations/
 ```
@@ -63,7 +64,7 @@ lib/                  shared infrastructure only
   validation.ts       [server] parseWith, emailField, toSubmitResult — building blocks for every validation.ts
   email.ts            [server] sendPlainEmail — every outbound email goes through it (Resend REST, plain text)
   env · upstream-error · uuid (isUuid) · cx
-types/                shared types only (api, form, icon, turnstile, database)
+types/                shared types only (api, form, icon, turnstile, database: generated from the live schema + a small wrapper)
 content/              typed static content; content/routes.ts is the only source of internal URLs
 supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)
 design/ · scripts/    tokens, logo sources, design-system PDF · build-tokens, check-bundle, create-admin
