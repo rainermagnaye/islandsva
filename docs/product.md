@@ -17,7 +17,7 @@ One platform for an agency: a public site that books discovery calls, a Lead Gen
 | Visitor | Reads the site, sends an enquiry, picks a discovery-call time |
 | Lead Gen / Closer | Owns a lead from enquiry to Won: confirms the call, runs it, records the outcome, converts |
 | Client | Chooses their VA, assigns tasks and deadlines, schedules meetings with their VAs, monitors their VAs, sees their package |
-| VA | Works on their tasks, schedules meetings with their clients, sees their performance |
+| VA | Confirms and tracks their intro calls with prospective clients, works on their tasks, schedules meetings with their clients, sees their performance |
 | Admin | Monitors everything (pipeline, won leads, clients, VAs, packages); manages staff, discovery-call times, VA shortlists |
 | Super Admin | Everything an admin does, across agencies (tenants) |
 
@@ -36,7 +36,7 @@ One platform for an agency: a public site that books discovery calls, a Lead Gen
 - **Public site:** contact form with a slot picker (open times only, shown in PHT and the visitor's local time); Turnstile, honeypot, rate limit.
 - **Lead Gen:** shared inbox of call requests; their pipeline (leads they own); calendar synced with Google; outcomes; Won → client; their clients.
 - **Client:** dashboard (VAs, package, next meetings); VA Match; tasks (create, assign to one of their VAs, deadline, comments, close); schedule (schedule, reschedule, cancel meetings with their VAs; record done or no-show; history and notes); VA overview (tasks done, on-time rate, overdue, meetings held).
-- **VA:** task list across clients; status updates; working hours; schedule (schedule, reschedule, cancel meetings; record done or no-show; history and notes); Google connection; performance (tasks done, on-time rate, overdue).
+- **VA:** intro calls (requests to confirm or reject; upcoming; history of every intro call — confirmed, rejected, done, no-show, cancelled — with notes and whether the client then chose them); task list across clients; status updates; working hours; schedule (schedule, reschedule, cancel meetings; record done or no-show; history and notes); Google connection; performance (tasks done, on-time rate, overdue).
 - **Admin:** overview (calls booked / done / no-show / cancelled, leads won per Lead Gen, active clients, VAs and their load, meetings per client and VA, staff without a Google connection, package mix, contracted revenue); discovery-call times; leads (read-only pipeline), clients, Teams, registration review, VA shortlists, every meeting's history.
 - **Super Admin:** the admin view across tenants, plus tenant management.
 

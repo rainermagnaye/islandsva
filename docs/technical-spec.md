@@ -74,7 +74,7 @@ Roles and `tenant_id` come from the token; pages call `requireRole`, RLS checks 
 |---|---|
 | Lead Gen | The shared inbox of requested discovery calls; leads, meetings and clients they own |
 | Client | Their own tasks, shortlist, VAs, package, and meetings with their VAs |
-| VA | Their own tasks; meetings they organize; the clients they are assigned to |
+| VA | Their own tasks; every meeting they attend (intro calls and client↔VA meetings) with its full history and notes; for intro calls, the prospective client's company name and the shortlist outcome; the clients they are assigned to |
 | Admin | Everything in their tenant; changes discovery-call times, shortlists, staff and registrations |
 
 ## Planned modules
