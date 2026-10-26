@@ -810,6 +810,35 @@ describe("tenants", () => {
     expect(missing).toEqual([]);
   });
 
+  it("restore_assign_tenant_cases brings every case back after discovery_calls is applied out of order", async () => {
+    // The live database took tasks and va_match before discovery_calls, so discovery_calls' shorter function ends
+    // up in force there. Replay that order in a rolled-back transaction: discovery_calls' definition last, then
+    // the restore migration, and every table using the trigger must have its case again.
+    const definition = (file: string) => {
+      const sql = readFileSync(join(MIGRATIONS, file), "utf8");
+      const start = sql.indexOf("create or replace function private.assign_tenant()");
+      return sql.slice(start, sql.indexOf("$$;", start) + 3);
+    };
+    const tables = (
+      await db.query<{ name: string }>(
+        "select c.relname as name from pg_trigger t join pg_class c on c.oid = t.tgrelid where t.tgfoid = 'private.assign_tenant()'::regprocedure",
+      )
+    ).rows.map((t) => t.name).filter((name) => !["profiles", "leads"].includes(name));
+    const missingNow = async () => {
+      const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.assign_tenant()'::regprocedure")).rows;
+      return tables.filter((name) => !src.includes(`when '${name}'`));
+    };
+    await db.exec("begin");
+    try {
+      await db.exec(definition("20261026111332_discovery_calls.sql"));
+      expect(await missingNow()).toEqual(expect.arrayContaining(["tasks", "task_comments", "va_shortlists", "va_working_hours"]));
+      await db.exec(readFileSync(join(MIGRATIONS, "20261026142144_restore_assign_tenant_cases.sql"), "utf8"));
+      expect(await missingNow()).toEqual([]);
+    } finally {
+      await db.exec("rollback");
+    }
+  });
+
   it("every row inherits a tenant: users the default, clients their creator's, assignments their client's", async () => {
     const tenantOf = async (sql: string) => (await asServer<{ tenant_id: string }>(sql))[0].tenant_id;
     expect(await tenantOf(`select tenant_id from public.profiles where id = '${ADMIN}'`)).toBe(tenantA);
