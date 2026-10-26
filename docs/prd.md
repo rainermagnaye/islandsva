@@ -1,4 +1,4 @@
-# Islands VA — Product
+# Islands VA — Product requirements (PRD)
 
 What the platform is for and who uses it. What ships when: `docs/mvp.md`. How it works: `docs/technical-spec.md`.
 

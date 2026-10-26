@@ -1,6 +1,6 @@
 # Islands VA — MVP plan
 
-What ships, in order, and what is parked. Why: `docs/product.md`. How: `docs/technical-spec.md`.
+What ships, in order, and what is parked. Why: `docs/prd.md`. How: `docs/technical-spec.md`.
 
 Done means: works for every role it touches, RLS allowed and denied tests, CI green.
 

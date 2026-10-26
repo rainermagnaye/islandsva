@@ -8,13 +8,13 @@ Rules for the team and AI agents; change them by PR. This file holds everyday ru
 |---|---|
 | Database — migrations, grants, RLS, access model, database tests | `supabase/CLAUDE.md` (loaded when working there) |
 | UI — design system, tokens, components, voice and brand | `components/CLAUDE.md` (loaded when working there) |
-| Product and users · milestones, launch and parked work · data model, status flows, integrations | `docs/product.md` · `docs/mvp.md` · `docs/technical-spec.md` (for people; not loaded) |
+| Product and users · milestones, launch and parked work · data model, status flows, integrations | `docs/prd.md` · `docs/mvp.md` · `docs/technical-spec.md` (for people; not loaded) |
 | Setup, applying migrations, launch steps · decisions | `docs/operations.md` · `docs/decisions.md` (for people; not loaded) |
 | Subagent roles | `.claude/agents/` (§10) |
 
 ## 1. Project
 
-- **Product:** B2B virtual-assistant staffing platform — public site, client/VA portal, agency back office. Scope: `docs/product.md`.
+- **Product:** B2B virtual-assistant staffing platform — public site, client/VA portal, agency back office. Scope: `docs/prd.md`.
 - **Stack:** Next.js 16 App Router (React 19, TS strict, Tailwind v4, `cacheComponents`, `partialPrefetching`) · Supabase (Singapore) · Vercel · Resend · Cloudflare Turnstile. Runtime deps stay minimal; `zod` and the Supabase packages are server-only and never reach the browser.
 - **Priorities:** secure → correct → maintainable → performant.
 - **Phase:** M7 — admin lists and sales summary; M1–M3, M5 and M6 are done; next M8 discovery calls, M9 Google, M10 VA Match, M11 tasks, M12 client↔VA meetings, M13 admin overview (`docs/mvp.md`). **Build only the current phase.** Not in the MVP: time tracking, call reminders, payment automation (Stripe), client rating, blog, chatbot, VA mailer, salary deductions, payroll, native apps, i18n.
