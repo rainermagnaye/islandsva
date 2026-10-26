@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { TextField } from "@/components/ui/text-field";
+import { DatePicker } from "@/components/ui/date-picker";
 import { addDemoSlots } from "../actions";
 import { SLOT_TIMES, type SlotField } from "../contract";
 
@@ -16,7 +16,7 @@ export function AddSlotsForm({ today, last }: { today: string; last: string }) {
       {({ pending, fieldErrors }) => (
         <>
           <div className="max-w-60">
-            <TextField label="Date" name="date" type="date" required min={today} max={last} defaultValue={today} error={fieldErrors.date} />
+            <DatePicker label="Date" name="date" required min={today} max={last} defaultValue={today} timeZone="Asia/Manila" error={fieldErrors.date} />
           </div>
           <fieldset className="m-0 grid gap-2 border-0 p-0" aria-describedby={fieldErrors.times ? "times-error" : "times-hint"}>
             <legend className="mb-2 type-label text-ink">Start times (Manila)</legend>

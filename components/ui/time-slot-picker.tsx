@@ -6,7 +6,8 @@ import { convertWallClock, formatDate, minutesOf, clockLabel, partOfDay, type Is
 import { EmptyState } from "./empty-state";
 import { Icon } from "./icon";
 
-type Slot = IsoLocalDateTime | { start: IsoLocalDateTime; available?: boolean };
+/** A start time, or one with availability and the value a form posts (default: the start time itself). */
+type Slot = IsoLocalDateTime | { start: IsoLocalDateTime; available?: boolean; value?: string };
 
 type TimeSlotPickerProps = {
   /** Wall-clock times written in `timeZone`; `{ start, available: false }` for booked ones. Generate them on the server. */
@@ -41,7 +42,7 @@ export function TimeSlotPicker({ slots, timeZone = "Asia/Manila", otherTimeZone,
   const id = useId();
   const [inner, setInner] = useState<IsoLocalDateTime | null>(null);
   const chosen = value === undefined ? inner : value;
-  const normal = slots.map((slot) => (typeof slot === "string" ? { start: slot, available: true } : { start: slot.start, available: slot.available !== false }));
+  const normal = slots.map((slot) => (typeof slot === "string" ? { start: slot, available: true, value: slot } : { start: slot.start, available: slot.available !== false, value: slot.value ?? slot.start }));
   const title = label ?? (date ? formatDate(date, { weekday: "long", month: "long", day: "numeric" }) : "Pick a time");
 
   if (!normal.some((slot) => slot.available)) {
@@ -77,7 +78,7 @@ export function TimeSlotPicker({ slots, timeZone = "Asia/Manila", otherTimeZone,
                       id={inputId}
                       type="radio"
                       name={name ?? id}
-                      value={slot.start}
+                      value={slot.value}
                       disabled={!slot.available}
                       checked={chosen === slot.start}
                       onChange={() => {

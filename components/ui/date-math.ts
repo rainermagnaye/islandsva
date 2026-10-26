@@ -128,3 +128,9 @@ export function layoutDay<T extends { start: string; end: string }>(events: read
   if (cluster.length) close();
   return placed;
 }
+
+/** A moment (UTC ISO, "2026-11-03T01:30:00.000Z") as the wall clock in a zone ("2026-11-03T09:30" in Manila). */
+export function wallClockIn(iso: string, timeZone: string): IsoLocalDateTime {
+  const { date, time } = convertWallClock(new Date(iso).toISOString().slice(0, 16), "UTC", timeZone);
+  return `${date}T${time}`;
+}
