@@ -7,8 +7,8 @@ import {
   type MaritalStatus,
   type RegistrationStatus,
   type ReviewSection,
-  type StaffGender,
-} from "./staff-fields";
+  type EmployeeGender,
+} from "./employee-fields";
 
 export {
   GENDERS,
@@ -20,19 +20,19 @@ export {
   REGISTRATION_STATUSES,
   REGISTRATION_STATUS_LABELS,
   REVIEW_SECTIONS,
-  STAFF_LIMITS,
+  EMPLOYEE_LIMITS,
   USER_LIMITS,
   type MaritalStatus,
   type RegistrationStatus,
   type ReviewSection,
-  type StaffGender,
-} from "./staff-fields";
+  type EmployeeGender,
+} from "./employee-fields";
 
 // Shared by the invite form and the server. No Zod: the form imports this file.
-// Values the staff profile form needs in the browser live in ./staff-fields (re-exported above).
+// Values the employee profile form needs in the browser live in ./employee-fields (re-exported above).
 
 /** Roles an admin can invite directly. Clients are invited by a Closer during onboarding (M3). */
-export const STAFF_ROLES = ["va", "closer", "admin"] as const satisfies readonly Role[];
+export const EMPLOYEE_ROLES = ["va", "closer", "admin"] as const satisfies readonly Role[];
 
 export type InviteField = "email" | "fullName" | "role";
 
@@ -41,14 +41,14 @@ export type UserSummary = {
   id: string;
   email: string;
   fullName: string;
-  /** Mobile number from the staff profile, when one has been saved. */
+  /** Mobile number from the employee profile, when one has been saved. */
   phone: string | null;
   roles: Role[];
   status: AccountStatus;
   /** Set on the first sign-in. A VA can be signed in and still not Active. */
   signedInAt: string | null;
-  /** Null when this person has no staff profile yet. */
-  reviewStatus: StaffReviewStatus | null;
+  /** Null when this person has no employee profile yet. */
+  reviewStatus: EmployeeReviewStatus | null;
   createdAt: string;
 };
 
@@ -60,18 +60,18 @@ export const STATUS_LABELS: Record<AccountStatus, string> = {
   inactive: "Deactivated",
 };
 
-export type StaffEmployer = { company: string; position: string; duration: string };
+export type EmployeeEmployer = { company: string; position: string; duration: string };
 
-export type StaffReference = { name: string; phone: string; relationship: string; company: string; email: string };
+export type EmployeeReference = { name: string; phone: string; relationship: string; company: string; email: string };
 
 /** The sections the progress tracker reports. A résumé can stand in for typed skills, not for experience. */
-export const STAFF_SECTIONS = ["basic", "address", "contact", "education", "experience", "resume"] as const;
-export type StaffSection = (typeof STAFF_SECTIONS)[number];
+export const EMPLOYEE_SECTIONS = ["basic", "address", "contact", "education", "experience", "resume"] as const;
+export type EmployeeSection = (typeof EMPLOYEE_SECTIONS)[number];
 
-/** Inputs on the staff profile form that can show a field error (lists and the résumé report form-level). */
-export type StaffDetailField = Exclude<keyof StaffDetails, "employers" | "references" | "resumeName">;
+/** Inputs on the employee profile form that can show a field error (lists and the résumé report form-level). */
+export type EmployeeDetailField = Exclude<keyof EmployeeDetails, "employers" | "references" | "resumeName">;
 
-/** Inputs on My Profile. Name and email stay as saved; the staff profile is where the name changes. */
+/** Inputs on My Profile. Name and email stay as saved; the employee profile is where the name changes. */
 export type MyProfileField = "mobileNumber" | "timeFormat";
 
 export const TIME_FORMATS = ["12", "24"] as const;
@@ -81,10 +81,10 @@ export const TIME_FORMAT_LABELS: Record<TimeFormat, string> = {
   "24": "24 hour",
 };
 
-export type StaffDetails = {
+export type EmployeeDetails = {
   fullName: string;
   dateOfBirth: string;
-  gender: StaffGender | "";
+  gender: EmployeeGender | "";
   nationality: string;
   maritalStatus: MaritalStatus | "";
   currentStreet: string;
@@ -102,14 +102,14 @@ export type StaffDetails = {
   certifications: string;
   skills: string;
   languages: string;
-  employers: StaffEmployer[];
-  references: StaffReference[];
+  employers: EmployeeEmployer[];
+  references: EmployeeReference[];
   keyResponsibilities: string;
   achievements: string;
   resumeName: string;
 };
 
-export function emptyStaffDetails(fullName = ""): StaffDetails {
+export function emptyEmployeeDetails(fullName = ""): EmployeeDetails {
   return {
     fullName,
     dateOfBirth: "",
@@ -151,7 +151,7 @@ function isPastDate(value: string): boolean {
 }
 
 /** Which sections have the details they need. A half-filled or invalid section stays open. Email on the account is not a section by itself. */
-export function staffSections(details: StaffDetails): Record<StaffSection, boolean> {
+export function employeeSections(details: EmployeeDetails): Record<EmployeeSection, boolean> {
   const employer = details.employers.some((job) => filled(job.company) && filled(job.position));
   const reference = details.references.some(
     (person) => filled(person.name) && EMAIL_SHAPE.test(person.email.trim()) && filled(person.phone) && filled(person.company) && filled(person.relationship),
@@ -174,19 +174,19 @@ export const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
   experience: "Experiences",
 };
 
-export type StaffReviewStatus = Enums<"staff_review_status">;
+export type EmployeeReviewStatus = Enums<"employee_review_status">;
 
 export function reviewSections(value: readonly string[]): ReviewSection[] {
   return value.filter((item): item is ReviewSection => (REVIEW_SECTIONS as readonly string[]).includes(item));
 }
 
-export function reviewSectionFilled(sections: Record<StaffSection, boolean>, section: ReviewSection): boolean {
+export function reviewSectionFilled(sections: Record<EmployeeSection, boolean>, section: ReviewSection): boolean {
   if (section === "skills") return sections.education || sections.resume;
   return sections[section];
 }
 
 /** First visit shows every section. A return shows the flagged ones, plus any that are still empty. */
-export function openReviewSections(sections: Record<StaffSection, boolean>, returned: readonly ReviewSection[]): ReviewSection[] {
+export function openReviewSections(sections: Record<EmployeeSection, boolean>, returned: readonly ReviewSection[]): ReviewSection[] {
   if (returned.length === 0) return [...REVIEW_SECTIONS];
   return REVIEW_SECTIONS.filter((section) => returned.includes(section) || !reviewSectionFilled(sections, section));
 }
@@ -197,7 +197,7 @@ export function isVaAccount(roles: readonly Role[]): boolean {
 }
 
 /** The portal opens once an admin confirms the profile. An account that was already active stays open. */
-export function vaPortalOpen(accountStatus: AccountStatus, review: StaffReviewStatus | null): boolean {
+export function vaPortalOpen(accountStatus: AccountStatus, review: EmployeeReviewStatus | null): boolean {
   if (accountStatus === "inactive") return false;
   if (review === "approved") return true;
   return review === null && accountStatus === "active";
@@ -206,10 +206,10 @@ export function vaPortalOpen(accountStatus: AccountStatus, review: StaffReviewSt
 export type AccessBadge = { label: string; tone: "info" | "success" | "warning" | "neutral"; validated: boolean };
 
 /** The status on the profile and the team list. A confirmed VA also gets the check beside the name. */
-export function staffAccessBadge(input: {
+export function employeeAccessBadge(input: {
   roles: readonly Role[];
   accountStatus: AccountStatus;
-  review: StaffReviewStatus | null;
+  review: EmployeeReviewStatus | null;
   signedIn: boolean;
 }): AccessBadge {
   if (!isVaAccount(input.roles)) {
@@ -235,7 +235,7 @@ export type RegistrationStep = { id: (typeof REGISTRATION_STEPS)[number]["id"]; 
 
 export type RegistrationProgress = {
   signedIn: boolean;
-  review: StaffReviewStatus;
+  review: EmployeeReviewStatus;
   returned: readonly ReviewSection[];
 };
 
@@ -243,7 +243,7 @@ export type RegistrationProgress = {
  * Registration is one step. It checks only when every section is valid, and opens again when an admin sends a section back.
  * Invitation is always done. Skills is typed skills or a résumé. Experiences also needs a reference.
  */
-export function registrationSteps(sections: Record<StaffSection, boolean>, progress: RegistrationProgress): RegistrationStep[] {
+export function registrationSteps(sections: Record<EmployeeSection, boolean>, progress: RegistrationProgress): RegistrationStep[] {
   const sentBack = progress.review === "pending" && progress.returned.length > 0;
   const locked = progress.review === "pending_review" || progress.review === "approved";
   const described = sections.basic && sections.address && sections.contact && (sections.education || sections.resume) && sections.experience;
@@ -260,9 +260,9 @@ export function registrationSteps(sections: Record<StaffSection, boolean>, progr
 }
 
 /** Pending until a section is saved. Complete only when skills and experiences, including a reference, are in. */
-export function registrationStatus(sections: Record<StaffSection, boolean>): RegistrationStatus {
+export function registrationStatus(sections: Record<EmployeeSection, boolean>): RegistrationStatus {
   const described = sections.basic && sections.address && sections.contact && (sections.education || sections.resume) && sections.experience;
   if (described) return "completed";
-  if (STAFF_SECTIONS.some((section) => sections[section])) return "in_progress";
+  if (EMPLOYEE_SECTIONS.some((section) => sections[section])) return "in_progress";
   return "pending";
 }

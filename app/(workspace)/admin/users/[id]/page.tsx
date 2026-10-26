@@ -4,28 +4,28 @@ import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { appRoutes } from "@/content/routes";
-import { StaffProfile } from "@/features/users/components/staff-profile";
-import { getStaffProfile, getUser, staffHasHistory } from "@/features/users/dal";
-import { parseStaffId } from "@/features/users/validation";
+import { EmployeeProfile } from "@/features/users/components/employee-profile";
+import { getEmployeeProfile, getUser, employeeHasHistory } from "@/features/users/dal";
+import { parseEmployeeId } from "@/features/users/validation";
 import { requireRole } from "@/lib/auth/session";
 
-export const metadata: Metadata = { title: "Staff" };
+export const metadata: Metadata = { title: "Employee" };
 
-export default function StaffProfilePage({ params }: PageProps<"/admin/users/[id]">) {
+export default function EmployeeProfilePage({ params }: PageProps<"/admin/users/[id]">) {
   return (
     <Suspense fallback={<WorkspaceSkeleton />}>
-      <Staff params={params} />
+      <Employee params={params} />
     </Suspense>
   );
 }
 
-async function Staff({ params }: Pick<PageProps<"/admin/users/[id]">, "params">) {
+async function Employee({ params }: Pick<PageProps<"/admin/users/[id]">, "params">) {
   const admin = await requireRole(["admin"]);
   const { id } = await params;
-  if (!parseStaffId({ userId: id }).ok) notFound();
+  if (!parseEmployeeId({ userId: id }).ok) notFound();
   const user = await getUser(id);
   if (!user) notFound();
-  const [profile, hasHistory] = await Promise.all([getStaffProfile(user.id), staffHasHistory(user.id)]);
+  const [profile, hasHistory] = await Promise.all([getEmployeeProfile(user.id), employeeHasHistory(user.id)]);
 
   const name = user.fullName || user.email;
 
@@ -42,7 +42,7 @@ async function Staff({ params }: Pick<PageProps<"/admin/users/[id]">, "params">)
         />
       }
     >
-      <StaffProfile user={user} actorId={admin.id} profile={profile} hasHistory={hasHistory} />
+      <EmployeeProfile user={user} actorId={admin.id} profile={profile} hasHistory={hasHistory} />
     </Workspace>
   );
 }

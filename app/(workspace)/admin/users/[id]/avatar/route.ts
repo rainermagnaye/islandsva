@@ -1,6 +1,6 @@
 import { appRoutes } from "@/content/routes";
-import { getStaffAvatar } from "@/features/users/dal";
-import { parseStaffId } from "@/features/users/validation";
+import { getEmployeeAvatar } from "@/features/users/dal";
+import { parseEmployeeId } from "@/features/users/validation";
 import { needsSecondFactor, requireUser } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { UpstreamError } from "@/lib/upstream-error";
@@ -13,11 +13,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const user = await requireUser();
   if (needsSecondFactor(user)) redirect(appRoutes.mfa);
   const { id } = await context.params;
-  if (!parseStaffId({ userId: id }).ok) return new Response(null, { status: 404 });
+  if (!parseEmployeeId({ userId: id }).ok) return new Response(null, { status: 404 });
   if (user.id !== id && !user.roles.includes("admin")) return new Response(null, { status: 404 });
 
   try {
-    const avatar = await getStaffAvatar(id);
+    const avatar = await getEmployeeAvatar(id);
     if (!avatar || !TYPES.has(avatar.type)) return new Response(null, { status: 404 });
     return new Response(Buffer.from(avatar.bytes), {
       headers: {

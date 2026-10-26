@@ -12,7 +12,7 @@ const nameColumn: Column<LeadSummary> = {
   key: "name",
   label: "Lead Name",
   render: (lead) => (
-    <Link href={adminLeadHref(lead.id)} className="staff-row-link" title={lead.fullName}>
+    <Link href={adminLeadHref(lead.id)} className="row-link" title={lead.fullName}>
       {lead.fullName}
     </Link>
   ),

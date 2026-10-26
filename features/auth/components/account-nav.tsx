@@ -21,8 +21,8 @@ export async function AccountNav() {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Profile name failed", { service: error.service, error });
   }
-  const staff = user.roles.some((role) => role === "admin" || role === "va" || role === "closer");
-  const profileHref = staff ? appRoutes.profile : (homeFor(user.roles) ?? appRoutes.dashboard);
+  const isEmployee = user.roles.some((role) => role === "admin" || role === "va" || role === "closer");
+  const profileHref = isEmployee ? appRoutes.profile : (homeFor(user.roles) ?? appRoutes.dashboard);
 
   return (
     <div className="flex items-center gap-2">

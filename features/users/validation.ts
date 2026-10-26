@@ -5,15 +5,15 @@ import {
   GENDERS,
   MARITAL_STATUSES,
   REVIEW_SECTIONS,
-  STAFF_LIMITS,
-  STAFF_ROLES,
+  EMPLOYEE_LIMITS,
+  EMPLOYEE_ROLES,
   USER_LIMITS,
   TIME_FORMATS,
   type InviteField,
   type MyProfileField,
-  type StaffDetails,
-  type StaffEmployer,
-  type StaffReference,
+  type EmployeeDetails,
+  type EmployeeEmployer,
+  type EmployeeReference,
 } from "./contract";
 
 const inviteSchema = z.strictObject({
@@ -24,18 +24,18 @@ const inviteSchema = z.strictObject({
     .min(1, "Enter their name.")
     .max(USER_LIMITS.fullName, tooLong("the name", USER_LIMITS.fullName))
     .regex(NO_CONTROL_CHARS, tooLong("the name", USER_LIMITS.fullName)),
-  role: z.enum(STAFF_ROLES, { error: "Choose a role." }),
+  role: z.enum(EMPLOYEE_ROLES, { error: "Choose a role." }),
 });
 
 export type InviteInput = z.output<typeof inviteSchema>;
 
 export const parseInvite = (input: unknown) => parseWith(inviteSchema, input, ["email", "fullName", "role"] satisfies InviteField[]);
 
-const staffIdSchema = z.strictObject({
+const employeeIdSchema = z.strictObject({
   userId: z.uuid({ error: FORM_ERROR }),
 });
 
-export const parseStaffId = (input: unknown) => parseWith(staffIdSchema, input, [] as const);
+export const parseEmployeeId = (input: unknown) => parseWith(employeeIdSchema, input, [] as const);
 
 /** YYYY-MM-DD that exists on the calendar — "2026-02-31" has the right shape but the database rejects it. */
 function isCalendarDate(value: string) {
@@ -50,7 +50,7 @@ const line = (max: number, label: string) =>
 const notes = (max: number, label: string) =>
   z.string().trim().max(max, tooLong(label, max)).regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong(label, max));
 
-const staffDetailsSchema = z.strictObject({
+const employeeDetailsSchema = z.strictObject({
   fullName: z.string().trim().min(1, "Enter their name.").max(USER_LIMITS.fullName, tooLong("the name", USER_LIMITS.fullName)).regex(NO_CONTROL_CHARS, tooLong("the name", USER_LIMITS.fullName)),
   dateOfBirth: z
     .string()
@@ -61,28 +61,28 @@ const staffDetailsSchema = z.strictObject({
       return value >= "1900-01-01" && value <= new Date().toISOString().slice(0, 10);
     }, "Enter a date of birth in the past."),
   gender: z.union([z.literal(""), z.enum(GENDERS)]),
-  nationality: line(STAFF_LIMITS.nationality, "the nationality"),
+  nationality: line(EMPLOYEE_LIMITS.nationality, "the nationality"),
   maritalStatus: z.union([z.literal(""), z.enum(MARITAL_STATUSES)]),
-  currentStreet: line(STAFF_LIMITS.street, "the street"),
-  currentLine2: line(STAFF_LIMITS.street, "the additional info"),
-  currentCity: line(STAFF_LIMITS.city, "the city"),
-  currentProvince: line(STAFF_LIMITS.province, "the state"),
-  currentPostalCode: line(STAFF_LIMITS.postalCode, "the postal code"),
-  currentCountry: line(STAFF_LIMITS.country, "the country"),
-  mobileNumber: line(STAFF_LIMITS.phone, "the mobile number"),
-  alternatePhone: line(STAFF_LIMITS.phone, "the phone number"),
-  emergencyName: line(STAFF_LIMITS.emergencyName, "the emergency contact"),
-  emergencyRelationship: line(STAFF_LIMITS.relationship, "the relationship"),
-  emergencyPhone: line(STAFF_LIMITS.phone, "the emergency phone"),
-  highestEducation: line(STAFF_LIMITS.education, "the education"),
-  certifications: notes(STAFF_LIMITS.certifications, "the certifications"),
-  skills: line(STAFF_LIMITS.skills, "the skills"),
-  languages: line(STAFF_LIMITS.languages, "the languages"),
-  keyResponsibilities: notes(STAFF_LIMITS.responsibilities, "the responsibilities"),
-  achievements: notes(STAFF_LIMITS.achievements, "the achievements"),
+  currentStreet: line(EMPLOYEE_LIMITS.street, "the street"),
+  currentLine2: line(EMPLOYEE_LIMITS.street, "the additional info"),
+  currentCity: line(EMPLOYEE_LIMITS.city, "the city"),
+  currentProvince: line(EMPLOYEE_LIMITS.province, "the state"),
+  currentPostalCode: line(EMPLOYEE_LIMITS.postalCode, "the postal code"),
+  currentCountry: line(EMPLOYEE_LIMITS.country, "the country"),
+  mobileNumber: line(EMPLOYEE_LIMITS.phone, "the mobile number"),
+  alternatePhone: line(EMPLOYEE_LIMITS.phone, "the phone number"),
+  emergencyName: line(EMPLOYEE_LIMITS.emergencyName, "the emergency contact"),
+  emergencyRelationship: line(EMPLOYEE_LIMITS.relationship, "the relationship"),
+  emergencyPhone: line(EMPLOYEE_LIMITS.phone, "the emergency phone"),
+  highestEducation: line(EMPLOYEE_LIMITS.education, "the education"),
+  certifications: notes(EMPLOYEE_LIMITS.certifications, "the certifications"),
+  skills: line(EMPLOYEE_LIMITS.skills, "the skills"),
+  languages: line(EMPLOYEE_LIMITS.languages, "the languages"),
+  keyResponsibilities: notes(EMPLOYEE_LIMITS.responsibilities, "the responsibilities"),
+  achievements: notes(EMPLOYEE_LIMITS.achievements, "the achievements"),
 });
 
-export type StaffDetailsInput = z.output<typeof staffDetailsSchema>;
+export type EmployeeDetailsInput = z.output<typeof employeeDetailsSchema>;
 
 const DETAIL_FIELDS = [
   "fullName",
@@ -107,15 +107,15 @@ const DETAIL_FIELDS = [
   "languages",
   "keyResponsibilities",
   "achievements",
-] as const satisfies readonly (keyof StaffDetailsInput)[];
+] as const satisfies readonly (keyof EmployeeDetailsInput)[];
 
-export const parseStaffDetails = (input: unknown) => parseWith(staffDetailsSchema, input, DETAIL_FIELDS);
+export const parseEmployeeDetails = (input: unknown) => parseWith(employeeDetailsSchema, input, DETAIL_FIELDS);
 
 /** Phone and time format from My Profile. Name, email and languages are not accepted here. */
 export const parseMyProfile = (input: unknown) =>
   parseWith(
     z.strictObject({
-      mobileNumber: staffDetailsSchema.shape.mobileNumber,
+      mobileNumber: employeeDetailsSchema.shape.mobileNumber,
       timeFormat: z.enum(TIME_FORMATS, { error: "Choose a time format." }),
     }),
     input,
@@ -125,13 +125,13 @@ export const parseMyProfile = (input: unknown) =>
 const jobLine = (max: number) => z.string().trim().max(max, tooLong("that entry", max)).regex(NO_CONTROL_CHARS, tooLong("that entry", max));
 
 /** Parallel employer fields from the form. Blank rows are dropped. */
-export function parseEmployers(companies: string[], positions: string[], durations: string[]): { ok: true; value: StaffEmployer[] } | { ok: false; message: string } {
-  if (companies.length > STAFF_LIMITS.employers) return { ok: false, message: `Keep the work history to ${STAFF_LIMITS.employers} employers.` };
-  const employers: StaffEmployer[] = [];
+export function parseEmployers(companies: string[], positions: string[], durations: string[]): { ok: true; value: EmployeeEmployer[] } | { ok: false; message: string } {
+  if (companies.length > EMPLOYEE_LIMITS.employers) return { ok: false, message: `Keep the work history to ${EMPLOYEE_LIMITS.employers} employers.` };
+  const employers: EmployeeEmployer[] = [];
   for (let i = 0; i < companies.length; i += 1) {
-    const company = jobLine(STAFF_LIMITS.employer).safeParse(companies[i] ?? "");
-    const position = jobLine(STAFF_LIMITS.employer).safeParse(positions[i] ?? "");
-    const duration = jobLine(STAFF_LIMITS.employer).safeParse(durations[i] ?? "");
+    const company = jobLine(EMPLOYEE_LIMITS.employer).safeParse(companies[i] ?? "");
+    const position = jobLine(EMPLOYEE_LIMITS.employer).safeParse(positions[i] ?? "");
+    const duration = jobLine(EMPLOYEE_LIMITS.employer).safeParse(durations[i] ?? "");
     if (!company.success || !position.success || !duration.success) return { ok: false, message: "Check the work history. Each entry is too long or has an unusual character." };
     if (!company.data && !position.data && !duration.data) continue;
     employers.push({ company: company.data, position: position.data, duration: duration.data });
@@ -140,14 +140,14 @@ export function parseEmployers(companies: string[], positions: string[], duratio
 }
 
 /** Parallel reference fields from the form. Blank rows are dropped. */
-export function parseReferences(names: string[], phones: string[], relationships: string[], companies: string[], emails: string[]): { ok: true; value: StaffReference[] } | { ok: false; message: string } {
-  if (names.length > STAFF_LIMITS.references) return { ok: false, message: `Keep references to ${STAFF_LIMITS.references} people.` };
-  const references: StaffReference[] = [];
+export function parseReferences(names: string[], phones: string[], relationships: string[], companies: string[], emails: string[]): { ok: true; value: EmployeeReference[] } | { ok: false; message: string } {
+  if (names.length > EMPLOYEE_LIMITS.references) return { ok: false, message: `Keep references to ${EMPLOYEE_LIMITS.references} people.` };
+  const references: EmployeeReference[] = [];
   for (let i = 0; i < names.length; i += 1) {
-    const name = jobLine(STAFF_LIMITS.emergencyName).safeParse(names[i] ?? "");
-    const phone = jobLine(STAFF_LIMITS.phone).safeParse(phones[i] ?? "");
-    const relationship = jobLine(STAFF_LIMITS.relationship).safeParse(relationships[i] ?? "");
-    const company = jobLine(STAFF_LIMITS.employer).safeParse(companies[i] ?? "");
+    const name = jobLine(EMPLOYEE_LIMITS.emergencyName).safeParse(names[i] ?? "");
+    const phone = jobLine(EMPLOYEE_LIMITS.phone).safeParse(phones[i] ?? "");
+    const relationship = jobLine(EMPLOYEE_LIMITS.relationship).safeParse(relationships[i] ?? "");
+    const company = jobLine(EMPLOYEE_LIMITS.employer).safeParse(companies[i] ?? "");
     const email = parseReferenceEmail(emails[i] ?? "");
     if (!name.success || !phone.success || !relationship.success || !company.success || !email.ok) {
       return { ok: false, message: "Check the references. Each entry is too long, or the email doesn't look complete." };
@@ -166,13 +166,13 @@ function parseReferenceEmail(value: string): { ok: true; value: string } | { ok:
   return { ok: true, value: parsed.data };
 }
 
-export function withEmployers(details: StaffDetailsInput, employers: StaffEmployer[], references: StaffReference[], resumeName: string): StaffDetails {
+export function withEmployers(details: EmployeeDetailsInput, employers: EmployeeEmployer[], references: EmployeeReference[], resumeName: string): EmployeeDetails {
   return { ...details, employers, references, resumeName };
 }
 
 const reviewReturnSchema = z.strictObject({
   userId: z.uuid({ error: FORM_ERROR }),
-  note: z.string().trim().max(STAFF_LIMITS.returnNote, tooLong("the note", STAFF_LIMITS.returnNote)).regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the note", STAFF_LIMITS.returnNote)),
+  note: z.string().trim().max(EMPLOYEE_LIMITS.returnNote, tooLong("the note", EMPLOYEE_LIMITS.returnNote)).regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the note", EMPLOYEE_LIMITS.returnNote)),
   sections: z.array(z.enum(REVIEW_SECTIONS)).min(1, "Choose a section to send back."),
 });
 

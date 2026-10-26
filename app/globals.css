@@ -307,10 +307,10 @@ body:has(nav.portal-nav) .portal-header {
   transition: background-color 120ms ease;
 }
 /* Position the name cell, not the row. Relative positioning on a <tr> collapses the other columns. */
-.data-table tbody th:has(a.staff-row-link) {
+.data-table tbody th:has(a.row-link) {
   position: relative;
 }
-.data-table a.staff-row-link {
+.data-table a.row-link {
   display: block;
   overflow: hidden;
   color: inherit;
@@ -319,7 +319,7 @@ body:has(nav.portal-nav) .portal-header {
   white-space: nowrap;
   text-decoration: none;
 }
-.data-table a.staff-row-link::after {
+.data-table a.row-link::after {
   content: "";
   position: absolute;
   z-index: 0;
@@ -328,7 +328,7 @@ body:has(nav.portal-nav) .portal-header {
   left: 0;
   width: 100cqi;
 }
-.data-table tbody tr:has(a.staff-row-link) {
+.data-table tbody tr:has(a.row-link) {
   cursor: pointer;
 }
 .data-table tbody tr:hover {

@@ -51,7 +51,7 @@ export async function endActiveAssignment(clientId: string) {
 }
 
 /**
- * The assigned VA's first name, for the client's dashboard. Secret key: a client can't read staff profiles under
+ * The assigned VA's first name, for the client's dashboard. Secret key: a client can't read employee profiles under
  * RLS. Called only with a va_id from an assignment the signed-in client just read under RLS, and returns only
  * the first name.
  */

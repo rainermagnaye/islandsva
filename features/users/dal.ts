@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import type { Json } from "@/types/database";
-import { registrationStatus, reviewSections, staffSections, type RegistrationStatus, type ReviewSection, type StaffDetails, type StaffEmployer, type StaffReference, type StaffReviewStatus, type StaffSection, type TimeFormat, type UserSummary } from "./contract";
+import { registrationStatus, reviewSections, employeeSections, type RegistrationStatus, type ReviewSection, type EmployeeDetails, type EmployeeEmployer, type EmployeeReference, type EmployeeReviewStatus, type EmployeeSection, type TimeFormat, type UserSummary } from "./contract";
 import { classifyInviteError } from "./invite-result";
 
 /**
@@ -20,7 +20,7 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
     .limit(limit);
   if (error) throw new UpstreamError("supabase", `Listing users failed: ${error.message}`, { cause: error });
 
-  const extras = await staffExtras(data.map((row) => row.id));
+  const extras = await employeeExtras(data.map((row) => row.id));
   return data.map((row) => toSummary(row, extras.get(row.id)));
 }
 
@@ -56,18 +56,18 @@ export async function getUser(id: string): Promise<UserSummary | null> {
     .maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading user ${id} failed: ${error.message}`, { cause: error });
   if (!data) return null;
-  const extras = await staffExtras([data.id]);
+  const extras = await employeeExtras([data.id]);
   return toSummary(data, extras.get(data.id));
 }
 
-type StaffExtra = { phone: string | null; reviewStatus: StaffReviewStatus | null };
+type EmployeeExtra = { phone: string | null; reviewStatus: EmployeeReviewStatus | null };
 
-/** Phone and review state for these accounts. People without a staff profile are absent. */
-async function staffExtras(ids: readonly string[]) {
-  if (ids.length === 0) return new Map<string, StaffExtra>();
+/** Phone and review state for these accounts. People without an employee profile are absent. */
+async function employeeExtras(ids: readonly string[]) {
+  if (ids.length === 0) return new Map<string, EmployeeExtra>();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("staff_profiles").select("user_id, mobile_number, review_status").in("user_id", [...ids]);
-  if (error) throw new UpstreamError("supabase", `Reading staff profiles failed: ${error.message}`, { cause: error });
+  const { data, error } = await supabase.from("employee_profiles").select("user_id, mobile_number, review_status").in("user_id", [...ids]);
+  if (error) throw new UpstreamError("supabase", `Reading employee profiles failed: ${error.message}`, { cause: error });
   return new Map(data.map((row) => [row.user_id, { phone: row.mobile_number, reviewStatus: row.review_status }] as const));
 }
 
@@ -79,7 +79,7 @@ function toSummary(row: {
   signed_in_at: string | null;
   created_at: string;
   roles: { role: Role }[];
-}, extra: StaffExtra | undefined): UserSummary {
+}, extra: EmployeeExtra | undefined): UserSummary {
   return {
     id: row.id,
     email: row.email,
@@ -131,24 +131,24 @@ export async function deleteAuthUser(userId: string) {
 const PROFILE_COLUMNS =
   "user_id, date_of_birth, gender, nationality, marital_status, current_street, current_line2, current_city, current_province, current_postal_code, current_country, mobile_number, alternate_phone, emergency_name, emergency_relationship, emergency_phone, highest_education, certifications, skills, languages, employers, job_references, key_responsibilities, achievements, resume_name, resume_type, registration_status, review_status, returned_sections, return_note, invitation_sent_at, registration_completed_at, time_format";
 
-export type StaffProfileRecord = {
-  details: StaffDetails;
+export type EmployeeProfileRecord = {
+  details: EmployeeDetails;
   resumeType: string | null;
   registrationStatus: RegistrationStatus;
-  reviewStatus: StaffReviewStatus;
+  reviewStatus: EmployeeReviewStatus;
   returnedSections: ReviewSection[];
   returnNote: string | null;
   invitationSentAt: string;
   registrationCompletedAt: string | null;
   timeFormat: TimeFormat;
-  sections: Record<StaffSection, boolean>;
+  sections: Record<EmployeeSection, boolean>;
 };
 
-/** The staff profile, read as the signed-in admin so RLS applies. Null when nobody has saved one yet. */
-export async function getStaffProfile(userId: string): Promise<StaffProfileRecord | null> {
+/** The employee profile, read as the signed-in admin so RLS applies. Null when nobody has saved one yet. */
+export async function getEmployeeProfile(userId: string): Promise<EmployeeProfileRecord | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("staff_profiles").select(PROFILE_COLUMNS).eq("user_id", userId).maybeSingle();
-  if (error) throw new UpstreamError("supabase", `Reading staff profile ${userId} failed: ${error.message}`, { cause: error });
+  const { data, error } = await supabase.from("employee_profiles").select(PROFILE_COLUMNS).eq("user_id", userId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading employee profile ${userId} failed: ${error.message}`, { cause: error });
   if (!data) return null;
   const details = detailsFrom(data);
   return {
@@ -161,7 +161,7 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
     invitationSentAt: data.invitation_sent_at,
     registrationCompletedAt: data.registration_completed_at,
     timeFormat: data.time_format === "24" ? "24" : "12",
-    sections: staffSections(details),
+    sections: employeeSections(details),
   };
 }
 
@@ -169,7 +169,7 @@ export async function getStaffProfile(userId: string): Promise<StaffProfileRecor
  * Saves the profile with the secret key. profiles has no update policy, and résumé bytes are not granted
  * to the API, so this runs only after the caller has checked the role.
  */
-export async function staffHasHistory(userId: string) {
+export async function employeeHasHistory(userId: string) {
   const supabase = await createClient();
   const [clients, assignments] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }).eq("created_by", userId),
@@ -184,8 +184,8 @@ export async function staffHasHistory(userId: string) {
  * The picture bytes are not granted to the API (same as a résumé), so this read uses the secret key
  * after the caller has checked the admin role.
  */
-export async function getStaffResume(userId: string): Promise<{ name: string; type: string; bytes: Uint8Array } | null> {
-  const { data, error } = await createAdminClient().from("staff_profiles").select("resume_name, resume_type, resume_bytes").eq("user_id", userId).maybeSingle();
+export async function getEmployeeResume(userId: string): Promise<{ name: string; type: string; bytes: Uint8Array } | null> {
+  const { data, error } = await createAdminClient().from("employee_profiles").select("resume_name, resume_type, resume_bytes").eq("user_id", userId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading résumé ${userId} failed: ${error.message}`, { cause: error });
   if (!data?.resume_name || !data.resume_type || !data.resume_bytes) return null;
   return { name: data.resume_name, type: data.resume_type, bytes: decodeBytea(data.resume_bytes) };
@@ -195,14 +195,14 @@ export async function getStaffResume(userId: string): Promise<{ name: string; ty
  * Whether this person has a picture. The bytes are not granted to the API, so the header checks the type
  * column with the secret key after the caller has confirmed the id is the signed-in user.
  */
-export async function staffHasAvatar(userId: string) {
-  const { data, error } = await createAdminClient().from("staff_profiles").select("avatar_type").eq("user_id", userId).maybeSingle();
+export async function employeeHasAvatar(userId: string) {
+  const { data, error } = await createAdminClient().from("employee_profiles").select("avatar_type").eq("user_id", userId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading profile picture ${userId} failed: ${error.message}`, { cause: error });
   return Boolean(data?.avatar_type);
 }
 
-export async function getStaffAvatar(userId: string): Promise<{ type: string; bytes: Uint8Array } | null> {
-  const { data, error } = await createAdminClient().from("staff_profiles").select("avatar_type, avatar_bytes").eq("user_id", userId).maybeSingle();
+export async function getEmployeeAvatar(userId: string): Promise<{ type: string; bytes: Uint8Array } | null> {
+  const { data, error } = await createAdminClient().from("employee_profiles").select("avatar_type, avatar_bytes").eq("user_id", userId).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading profile picture ${userId} failed: ${error.message}`, { cause: error });
   if (!data?.avatar_type || !data.avatar_bytes) return null;
   return { type: data.avatar_type, bytes: decodeBytea(data.avatar_bytes) };
@@ -215,30 +215,30 @@ function decodeBytea(value: string) {
 }
 
 /** Changes the sign-in email. A trigger copies it onto the profile. */
-export async function updateStaffEmail(userId: string, email: string) {
+export async function updateEmployeeEmail(userId: string, email: string) {
   const { error } = await createAdminClient().auth.admin.updateUserById(userId, { email, email_confirm: true });
   if (!error) return { ok: true as const };
   if (error.code === "email_exists" || /already/i.test(error.message)) return { ok: false as const, reason: "exists" as const };
   throw new UpstreamError("supabase-auth", `Updating email ${userId} failed: ${error.message}`, { cause: error });
 }
 
-export async function saveStaffProfile(
+export async function saveEmployeeProfile(
   userId: string,
   invitedAt: string,
-  details: StaffDetails,
+  details: EmployeeDetails,
   resume?: { name: string; type: string; bytes: Uint8Array },
   avatar?: { type: string; bytes: Uint8Array },
   timeFormat?: TimeFormat,
 ) {
   const admin = createAdminClient();
   const { data: existing, error: readError } = await admin
-    .from("staff_profiles")
+    .from("employee_profiles")
     .select("invitation_sent_at, registration_completed_at, resume_name")
     .eq("user_id", userId)
     .maybeSingle();
-  if (readError) throw new UpstreamError("supabase", `Reading staff profile ${userId} failed: ${readError.message}`, { cause: readError });
+  if (readError) throw new UpstreamError("supabase", `Reading employee profile ${userId} failed: ${readError.message}`, { cause: readError });
 
-  const sections = staffSections(details);
+  const sections = employeeSections(details);
   const status = registrationStatus(sections);
   const completedAt = status === "completed" ? (existing?.registration_completed_at ?? new Date().toISOString()) : null;
   const blank = (value: string) => value.trim() || null;
@@ -284,8 +284,8 @@ export async function saveStaffProfile(
   // Profile first: it's the write that can fail (up to 2 MB of résumé, CHECK constraints). The name follows
   // only once that succeeded, so a failed save changes nothing; both writes are idempotent, so a retry
   // finishes the job. The name is written only when it actually changed.
-  const { error } = await admin.from("staff_profiles").upsert(row, { onConflict: "user_id" });
-  if (error) throw new UpstreamError("supabase", `Saving staff profile ${userId} failed: ${error.message}`, { cause: error });
+  const { error } = await admin.from("employee_profiles").upsert(row, { onConflict: "user_id" });
+  if (error) throw new UpstreamError("supabase", `Saving employee profile ${userId} failed: ${error.message}`, { cause: error });
 
   const { error: nameError } = await admin.from("profiles").update({ full_name: details.fullName }).eq("id", userId).neq("full_name", details.fullName);
   if (nameError) throw new UpstreamError("supabase", `Updating name ${userId} failed: ${nameError.message}`, { cause: nameError });
@@ -295,10 +295,10 @@ export async function saveStaffProfile(
  * Review state is not granted to the API. The caller has already checked the role.
  * Confirming also activates the account, which profiles does not let the signed-in user set.
  */
-export async function setStaffReview(userId: string, review: StaffReviewStatus, returned: readonly ReviewSection[], note: string | null) {
+export async function setEmployeeReview(userId: string, review: EmployeeReviewStatus, returned: readonly ReviewSection[], note: string | null) {
   const admin = createAdminClient();
   const { error } = await admin
-    .from("staff_profiles")
+    .from("employee_profiles")
     .update({ review_status: review, returned_sections: [...returned], return_note: note })
     .eq("user_id", userId);
   if (error) throw new UpstreamError("supabase", `Updating review for ${userId} failed: ${error.message}`, { cause: error });
@@ -309,9 +309,9 @@ export async function setStaffReview(userId: string, review: StaffReviewStatus, 
 
 function detailsFrom(row: {
   date_of_birth: string | null;
-  gender: StaffDetails["gender"] | null;
+  gender: EmployeeDetails["gender"] | null;
   nationality: string | null;
-  marital_status: StaffDetails["maritalStatus"] | null;
+  marital_status: EmployeeDetails["maritalStatus"] | null;
   current_street: string | null;
   current_line2: string | null;
   current_city: string | null;
@@ -332,7 +332,7 @@ function detailsFrom(row: {
   key_responsibilities: string | null;
   achievements: string | null;
   resume_name: string | null;
-}): StaffDetails {
+}): EmployeeDetails {
   return {
     fullName: "",
     dateOfBirth: row.date_of_birth ?? "",
@@ -362,7 +362,7 @@ function detailsFrom(row: {
   };
 }
 
-function referencesFrom(value: Json): StaffReference[] {
+function referencesFrom(value: Json): EmployeeReference[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
@@ -377,7 +377,7 @@ function referencesFrom(value: Json): StaffReference[] {
   });
 }
 
-function employersFrom(value: Json): StaffEmployer[] {
+function employersFrom(value: Json): EmployeeEmployer[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];

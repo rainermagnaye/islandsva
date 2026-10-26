@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
-import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, TIME_FORMAT_LABELS, type RegistrationStep, type StaffDetails } from "../contract";
-import { formatProfileDate, type StaffProfileMeta } from "../profile-fields";
+import { GENDER_LABELS, MARITAL_LABELS, REGISTRATION_STATUS_LABELS, TIME_FORMAT_LABELS, type RegistrationStep, type EmployeeDetails } from "../contract";
+import { formatProfileDate, type EmployeeProfileMeta } from "../profile-fields";
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
@@ -18,7 +18,7 @@ function shownDate(value: string) {
 }
 
 /** Read-only profile sections. Editing replaces each value with a field and keeps these cards. */
-export function StaffProfileView({ userId, details, email, meta }: { userId: string; details: StaffDetails; email: string; meta: StaffProfileMeta }) {
+export function EmployeeProfileView({ userId, details, email, meta }: { userId: string; details: EmployeeDetails; email: string; meta: EmployeeProfileMeta }) {
   const emergency = [details.emergencyName, details.emergencyRelationship, details.emergencyPhone].map((part) => part.trim()).filter(Boolean);
   const jobs = details.employers.filter((job) => job.company.trim() || job.position.trim() || job.duration.trim());
   const people = details.references.filter((person) => person.name.trim() || person.phone.trim() || person.relationship.trim() || person.company.trim() || person.email.trim());

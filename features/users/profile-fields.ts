@@ -1,5 +1,5 @@
 import { COUNTRIES } from "@/content/countries";
-import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type StaffGender, type TimeFormat } from "./contract";
+import { GENDER_CHOICES, MARITAL_CHOICES, type MaritalStatus, type RegistrationStatus, type EmployeeGender, type TimeFormat } from "./contract";
 
 export { COUNTRIES };
 
@@ -49,7 +49,7 @@ export function withCurrent<T extends string>(choices: readonly T[], current: st
   return [current as T, ...choices];
 }
 
-export function genderChoices(current: StaffGender | "") {
+export function genderChoices(current: EmployeeGender | "") {
   return withCurrent(GENDER_CHOICES, current);
 }
 
@@ -57,7 +57,7 @@ export function maritalChoices(current: MaritalStatus | "") {
   return withCurrent(MARITAL_CHOICES, current);
 }
 
-export type StaffProfileMeta = {
+export type EmployeeProfileMeta = {
   registrationStatus: RegistrationStatus;
   invitationSentAt: string;
   registrationCompletedAt: string | null;

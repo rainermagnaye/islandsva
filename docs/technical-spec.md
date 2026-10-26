@@ -7,12 +7,12 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | Table | Holds | Status |
 |---|---|---|
 | tenants · profiles · roles | Agencies; accounts; roles per user | Built |
-| staff_profiles | VA and Lead Gen details, résumé, avatar, references | Built |
+| employee_profiles | VA and Lead Gen details, résumé, avatar, references | Built |
 | leads · lead_events | Enquiries and timeline; `owner_id` = the Lead Gen who confirmed the call | Built; add owner (M8) |
 | discovery_times | Admin-set daily times of day (PHT), at most 6 active | New (M8) |
 | meetings | Every call: kind, organizer, scheduled by, attendees, start, end, status, Google event id, Meet link | New (M8–M9) |
 | meeting_events | Meeting history: scheduled, rescheduled (old → new), cancelled (by whom, app or Google), done, no-show, note | New (M8–M9) |
-| google_connections | A staff member's encrypted refresh token, calendar id, push channel | New (M9) |
+| google_connections | An employee's encrypted refresh token, calendar id, push channel | New (M9) |
 | va_working_hours | A VA's weekly hours (PHT) when clients may request meetings | New (M10) |
 | clients · client_packets · client_notes | Company and package; registration; notes | Built |
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined) | New (M10) |
@@ -32,10 +32,10 @@ One model for every call; one Google integration; one history.
 | intro | VA | Client | During VA Match, before any VA works for the client: the client requests a free time; the VA confirms or rejects; one open intro call per client |
 | client_va | VA | Client, plus guests either side adds | Only between an active client and a VA actively assigned to them: the client or the VA schedules; it is booked at once, with its Meet link |
 
-- **No approval step once the VA works for the client:** for `client_va` meetings, whoever schedules creates the event and Meet link straight away (on the VA's Google calendar, which is why only staff connect Google). What is tracked is the meeting's status and history. The two calls before that relationship exists keep a confirm: a discovery call (the Lead Gen's confirm assigns the lead's owner) and an intro call (the VA hasn't agreed to work with the client yet).
+- **No approval step once the VA works for the client:** for `client_va` meetings, whoever schedules creates the event and Meet link straight away (on the VA's Google calendar, which is why only employees connect Google). What is tracked is the meeting's status and history. The two calls before that relationship exists keep a confirm: a discovery call (the Lead Gen's confirm assigns the lead's owner) and an intro call (the VA hasn't agreed to work with the client yet).
 - **Length is open-ended:** whoever schedules sets start and end. Validation only: ends after it starts, at most 8 hours, no overlap with the VA's other platform meetings. A client picks from the VA's working hours minus Google busy times; a VA can schedule any time.
 - **Free times:** working hours minus Google `freeBusy` for the organizer. Only "busy" is read — the content of anyone's calendar never reaches the app.
-- **Only staff connect Google** (their own Google account, personal Gmail allowed). Clients and visitors need no Google account: Google emails the invite and every update to their address.
+- **Only employees connect Google** (their own Google account, personal Gmail allowed). Clients and visitors need no Google account: Google emails the invite and every update to their address.
 - **Shown in the app:** only meetings created through the platform. Client, VA, Lead Gen and admin each see the meetings in their scope, with history and notes.
 - **Notes:** each attendee can add a short note per meeting; it is a `meeting_events` row, shown in the history.
 - **Meet limits:** on free Google accounts, a Meet with 3 or more participants ends at 60 minutes; one-to-one calls run up to 24 hours.
@@ -59,9 +59,9 @@ One model for every call; one Google integration; one history.
 - **Schedule** (or a Lead Gen's confirm; Server Actions) creates the event as the organizer: Calendar API, `conferenceData` for Meet, attendees, `sendUpdates=all`. If Google fails, nothing changes and the user sees "try again".
 - **Reschedule / cancel in the app** patch or delete the Google event; Google notifies the attendees.
 - **Changes in Google** (cancelled, moved) arrive through a push channel at `POST /api/v1/google/calendar-events` (verified by the channel token) and are written to `meeting_events`; channels are renewed before they expire.
-- **Disconnected or revoked Google:** no new meetings can be scheduled with that staff member until they reconnect; the admin overview flags it.
+- **Disconnected or revoked Google:** no new meetings can be scheduled with that employee until they reconnect; the admin overview flags it.
 - Google is called over REST with `fetch` — no SDK dependency. Scopes: `calendar.events`, `calendar.freebusy`.
-- The OAuth app is **External** (staff use their own Google accounts), so production needs Google's verification for sensitive scopes: verified `islandsva.com`, the privacy policy, a demo video. While unverified, refresh tokens expire after 7 days — start verification in M9.
+- The OAuth app is **External** (employees use their own Google accounts), so production needs Google's verification for sensitive scopes: verified `islandsva.com`, the privacy policy, a demo video. While unverified, refresh tokens expire after 7 days — start verification in M9.
 
 ## Audit log
 
@@ -83,7 +83,7 @@ Roles and `tenant_id` come from the token; pages call `requireRole`, RLS checks 
 | Lead Gen | The shared inbox of requested discovery calls; leads, meetings and clients they own, with full history; audit entries for those records |
 | Client | Their own tasks, shortlist, VAs, package, and meetings with their VAs |
 | VA | Their own tasks; every meeting they attend (intro calls and client↔VA meetings) with its full history and notes; for intro calls, the prospective client's company name and the shortlist outcome; the clients they are assigned to |
-| Admin | Everything in their tenant, including the full audit log; changes discovery-call times, shortlists, staff and registrations |
+| Admin | Everything in their tenant, including the full audit log; changes discovery-call times, shortlists, employees and registrations |
 
 ## Planned modules
 
@@ -100,7 +100,7 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 
 ## Integrations
 
-Supabase (database, auth) · Resend (email) · Cloudflare Turnstile · Google Calendar + Meet (OAuth per staff member).
+Supabase (database, auth) · Resend (email) · Cloudflare Turnstile · Google Calendar + Meet (OAuth per employee).
 
 New env vars (M9): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_KEY` (encrypts stored refresh tokens).
 

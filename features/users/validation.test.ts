@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { USER_LIMITS } from "./contract";
-import { parseInvite, parseMyProfile, parseReferences, parseStaffDetails, parseStaffId } from "./validation";
+import { parseInvite, parseMyProfile, parseReferences, parseEmployeeDetails, parseEmployeeId } from "./validation";
 
 const valid = { email: " Vi@Islandsva.com ", fullName: " Vi Santos ", role: "va" };
 
 describe("parseInvite", () => {
-  it("accepts a staff invite and normalises it", () => {
+  it("accepts an employee invite and normalises it", () => {
     expect(parseInvite(valid)).toEqual({ ok: true, value: { email: "vi@islandsva.com", fullName: "Vi Santos", role: "va" } });
   });
 
@@ -45,15 +45,15 @@ describe("parseMyProfile", () => {
   });
 });
 
-describe("parseStaffId", () => {
+describe("parseEmployeeId", () => {
   it("accepts a user id", () => {
     const userId = "11111111-1111-4111-8111-111111111111";
-    expect(parseStaffId({ userId })).toEqual({ ok: true, value: { userId } });
+    expect(parseEmployeeId({ userId })).toEqual({ ok: true, value: { userId } });
   });
 
   it("rejects anything that is not an id", () => {
-    expect(parseStaffId({ userId: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
-    expect(parseStaffId({ userId: "11111111-1111-4111-8111-111111111111", extra: true })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseEmployeeId({ userId: "me" })).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseEmployeeId({ userId: "11111111-1111-4111-8111-111111111111", extra: true })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });
 
@@ -71,14 +71,14 @@ describe("parseReferences", () => {
   });
 });
 
-describe("parseStaffDetails — date of birth", () => {
+describe("parseEmployeeDetails — date of birth", () => {
   const blank = {
     fullName: "Vi Santos", dateOfBirth: "", gender: "", nationality: "", maritalStatus: "",
     currentStreet: "", currentLine2: "", currentCity: "", currentProvince: "", currentPostalCode: "", currentCountry: "",
     mobileNumber: "", alternatePhone: "", emergencyName: "", emergencyRelationship: "", emergencyPhone: "",
     highestEducation: "", certifications: "", skills: "", languages: "", keyResponsibilities: "", achievements: "",
   };
-  const withDate = (dateOfBirth: string) => parseStaffDetails({ ...blank, dateOfBirth });
+  const withDate = (dateOfBirth: string) => parseEmployeeDetails({ ...blank, dateOfBirth });
 
   it("accepts a real past date, a leap day, or no date", () => {
     for (const date of ["1990-07-15", "2000-02-29", ""]) expect(withDate(date).ok).toBe(true);

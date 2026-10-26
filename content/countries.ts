@@ -1,4 +1,4 @@
-/** Country names for dropdowns. Shared by the discovery form and staff profiles. */
+/** Country names for dropdowns. Shared by the discovery form and employee profiles. */
 export const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
   "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan",

@@ -8,11 +8,11 @@ import { Form } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
 import type { SubmitResult } from "@/types/form";
-import { REVIEW_SECTIONS, REVIEW_SECTION_LABELS, STAFF_LIMITS } from "../contract";
-import { confirmStaffMember, returnStaffMember } from "../actions";
+import { REVIEW_SECTIONS, REVIEW_SECTION_LABELS, EMPLOYEE_LIMITS } from "../contract";
+import { confirmEmployee, returnEmployee } from "../actions";
 
 /** Confirm is the one primary action. Return opens a dialog for the sections that need a change. The menu sits after both. */
-export function StaffReviewActions({ userId, name, menu }: { userId: string; name: string; menu: ReactNode }) {
+export function EmployeeReviewActions({ userId, name, menu }: { userId: string; name: string; menu: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
@@ -21,7 +21,7 @@ export function StaffReviewActions({ userId, name, menu }: { userId: string; nam
     setPending(true);
     setError(undefined);
     try {
-      const result = await confirmStaffMember(userId);
+      const result = await confirmEmployee(userId);
       if (!result.ok) setError(result.message);
     } catch {
       setError("We couldn't confirm that profile. Check your connection and try again.");
@@ -33,7 +33,7 @@ export function StaffReviewActions({ userId, name, menu }: { userId: string; nam
   async function sendBack(formData: FormData): Promise<SubmitResult<"note" | "sections">> {
     formData.set("userId", userId);
     try {
-      const result = await returnStaffMember(formData);
+      const result = await returnEmployee(formData);
       if (result.ok) setOpen(false);
       return result;
     } catch {
@@ -76,7 +76,7 @@ export function StaffReviewActions({ userId, name, menu }: { userId: string; nam
                 <Checkbox key={section} name="section" value={section} label={REVIEW_SECTION_LABELS[section]} />
               ))}
               {fieldErrors.sections && <Alert tone="danger" title={fieldErrors.sections} />}
-              <TextField label="Note" name="note" optional multiline maxLength={STAFF_LIMITS.returnNote} placeholder="What should they change?" error={fieldErrors.note} />
+              <TextField label="Note" name="note" optional multiline maxLength={EMPLOYEE_LIMITS.returnNote} placeholder="What should they change?" error={fieldErrors.note} />
               <span className="sr-only">{sending ? "Sending" : ""}</span>
             </div>
           )}

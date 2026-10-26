@@ -21,7 +21,7 @@ const columns = (hrefFor: (id: string) => string): Column<ClientSummary>[] => [
     key: "company",
     label: "Company",
     render: (client) => (
-      <Link href={hrefFor(client.id)} className="staff-row-link" title={client.companyName}>
+      <Link href={hrefFor(client.id)} className="row-link" title={client.companyName}>
         {client.companyName}
       </Link>
     ),

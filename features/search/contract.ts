@@ -16,5 +16,5 @@ export type SearchHit = {
 export type SearchResults = {
   leads: SearchHit[];
   clients: SearchHit[];
-  staff: SearchHit[];
+  employees: SearchHit[];
 };
