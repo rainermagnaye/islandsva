@@ -13,6 +13,7 @@ import { countClients, listActivePackageRows } from "@/features/clients/dal";
 import { vaLoad } from "@/features/clients/load";
 import { packageMix } from "@/features/clients/mix";
 import { LeadsTable } from "@/features/leads/components/leads-table";
+import { listDiscoveryTimes } from "@/features/meetings/dal";
 import { countLeads, listLeads } from "@/features/leads/dal";
 import { recurringRevenue } from "@/features/sales/dal";
 import { listTaskMetrics } from "@/features/tasks/dal";
@@ -41,7 +42,7 @@ export default function AdminHomePage() {
 async function AdminHome() {
   await requireRole(["admin"]);
   // Independent reads, fetched in parallel. Each runs as the signed-in admin, so RLS applies too.
-  const [leadCounts, clientCount, openRequests, recentLeads, recentUsers, recurring, packageRows, assignments, roster, taskMetrics] = await Promise.all([
+  const [leadCounts, clientCount, openRequests, recentLeads, recentUsers, recurring, packageRows, assignments, roster, taskMetrics, discovery] = await Promise.all([
     countLeads(),
     countClients(),
     countOpenRequests(),
@@ -52,6 +53,7 @@ async function AdminHome() {
     listActiveAssignmentLoads(),
     listVaRoster(),
     listTaskMetrics(),
+    listDiscoveryTimes(),
   ]);
   const openVas = roster
     .filter((va) => va.roles.includes("va") && vaPortalOpen(va.status, va.reviewStatus))
@@ -59,6 +61,11 @@ async function AdminHome() {
 
   return (
     <Workspace title="Dashboard" lead="Pipeline, clients, packages and how your VAs are loaded.">
+      {discovery.times.length === 0 && (
+        <p className="m-0 type-body-sm text-ink-muted">
+          Visitors can&apos;t request a discovery call yet. <Link href={appRoutes.adminSettings}>Set discovery times</Link>
+        </p>
+      )}
       <section aria-label="Pipeline" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Total leads" value={leadCounts.total} icon="inbox" href={appRoutes.adminLeads} />
         <StatCard label="New" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />
