@@ -24,8 +24,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 
 - Reuse `ui/` and `layout/`; add variants via props, not one-off styles — a new variant when a second screen needs it.
 - Surfaces: a bordered white/lagoon box is a `Card` (`cardSurface` when the element must be a `<form>` or link); a titled portal section is a `Panel` (`boxed` to sit on a Card).
-- Server Components by default; `'use client'` only on the smallest leaf that needs state, effects or browser APIs. Prefer platform features (`<details>`, `<dialog>`, popover, CSS) over libraries.
-- Forms use `<Form>` (`useActionState`: pending state, error summary as a danger `Alert`, focus on the first invalid field). Inputs have a visible label and are at least 44px tall.
+- Forms use `<Form>` (`useActionState`: pending state, error summary as a danger `Alert`, focus on the first invalid field). Inputs have a visible label.
 - Status is a `Badge`: icon or dot + word + tint, never colour alone.
 - Icons: `<Icon name>` draws a `<symbol>` from `IconSprite` (root layout), so icon shapes ship once in the HTML, not in every client bundle. A new icon = its shape in `ui/icon-sprite.tsx` + its name in `types/icon.ts`.
 - Images: `getImageProps()` + `<img>` / `<picture>` in Server Components (no client JS — `<Image>` adds ~5 KB per page); a `prefers-color-scheme` `<picture>` source for themed images.
@@ -36,7 +35,7 @@ Sources: the live Islands VA design system (https://claude.ai/artifact/Ha5kSyvZ7
 - Sentence case; verb-first buttons ("Request my team", never "Submit"); "you / we / your VA".
 - One sunrise (primary) button per view; the CTA band uses ocean because the nav already shows the sunrise one. Orange is a fill, never text on a light background.
 - Logo: the Sand & Sea mark plus the live wordmark (`layout/logo.tsx`).
-- Never copy showcase content (logos, quotes, prices, phone numbers); never invent testimonials, logos or business claims — real content or `TODO(content)`. Placeholder quotes stay labelled with a Sample badge until real ones replace them (`content/testimonials.ts`).
+- Never copy showcase content (logos, quotes, prices, phone numbers). Invented content: `CLAUDE.md` §6.
 
 ## Synced with the design system
 

@@ -1,9 +1,9 @@
-// Values the staff profile form needs in the browser. Kept apart from contract.ts so the form's bundle
+// Values the employee profile form needs in the browser. Kept apart from contract.ts so the form's bundle
 // (first load of /va) doesn't carry the rest of it; contract.ts re-exports all of these.
 
 export const USER_LIMITS = { fullName: 120, email: 254 } as const;
 
-export const STAFF_LIMITS = {
+export const EMPLOYEE_LIMITS = {
   nationality: 80,
   street: 160,
   city: 80,
@@ -29,8 +29,8 @@ export const STAFF_LIMITS = {
 } as const;
 
 export const GENDERS = ["female", "male", "non_binary", "prefer_not_to_say"] as const;
-export type StaffGender = (typeof GENDERS)[number];
-export const GENDER_LABELS: Record<StaffGender, string> = {
+export type EmployeeGender = (typeof GENDERS)[number];
+export const GENDER_LABELS: Record<EmployeeGender, string> = {
   female: "Female",
   male: "Male",
   non_binary: "Other",
@@ -38,7 +38,7 @@ export const GENDER_LABELS: Record<StaffGender, string> = {
 };
 
 /** The choices the profile form offers. Stored values stay on the existing gender set. */
-export const GENDER_CHOICES = ["male", "female", "non_binary"] as const satisfies readonly StaffGender[];
+export const GENDER_CHOICES = ["male", "female", "non_binary"] as const satisfies readonly EmployeeGender[];
 
 export const MARITAL_STATUSES = ["single", "married", "widowed", "divorced", "separated", "prefer_not_to_say"] as const;
 export type MaritalStatus = (typeof MARITAL_STATUSES)[number];

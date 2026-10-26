@@ -11,18 +11,18 @@ import { Modal } from "@/components/ui/modal";
 import { appRoutes } from "@/content/routes";
 import { cx } from "@/lib/cx";
 import type { IconName } from "@/types/icon";
-import { disableStaffMember, removeStaffMember } from "../actions";
-import { type AccessBadge, type RegistrationStep, type StaffDetails, type StaffReviewStatus, type UserSummary } from "../contract";
-import type { StaffProfileMeta } from "../profile-fields";
-import { StaffReviewActions } from "./staff-review-actions";
-import { StaffProfileForm } from "./staff-profile-form";
-import { RegistrationStepper, StaffProfileView } from "./staff-profile-view";
+import { disableEmployee, removeEmployee } from "../actions";
+import { type AccessBadge, type RegistrationStep, type EmployeeDetails, type EmployeeReviewStatus, type UserSummary } from "../contract";
+import type { EmployeeProfileMeta } from "../profile-fields";
+import { EmployeeReviewActions } from "./employee-review-actions";
+import { EmployeeProfileForm } from "./employee-profile-form";
+import { RegistrationStepper, EmployeeProfileView } from "./employee-profile-view";
 
 /**
  * The profile opens read-only. Confirm and return sit on the right; edit, disable and delete are in the menu beside them.
  * Delete stays available only when the account has no client or assignment history.
  */
-export function StaffProfileScreen({
+export function EmployeeProfileScreen({
   user,
   actorId,
   details,
@@ -35,13 +35,13 @@ export function StaffProfileScreen({
 }: {
   user: UserSummary;
   actorId: string;
-  details: StaffDetails;
+  details: EmployeeDetails;
   steps: RegistrationStep[];
-  meta: StaffProfileMeta;
+  meta: EmployeeProfileMeta;
   hasHistory: boolean;
   access: AccessBadge;
   /** Set for a VA. Null for a Closer or an admin, who are not on this gate. */
-  review: StaffReviewStatus | null;
+  review: EmployeeReviewStatus | null;
   returnNote: string | null;
 }) {
   const [editing, setEditing] = useState(false);
@@ -90,7 +90,7 @@ export function StaffProfileScreen({
           {access.label}
         </Badge>
         {review === "pending_review" && !editing ? (
-          <StaffReviewActions
+          <EmployeeReviewActions
             userId={user.id}
             name={name}
             menu={
@@ -126,7 +126,7 @@ export function StaffProfileScreen({
         </Alert>
       )}
       {editing ? (
-        <StaffProfileForm
+        <EmployeeProfileForm
           userId={user.id}
           email={user.email}
           details={details}
@@ -136,7 +136,7 @@ export function StaffProfileScreen({
           onCancel={() => stopEditing(false)}
         />
       ) : (
-        <StaffProfileView userId={user.id} details={details} email={user.email} meta={meta} />
+        <EmployeeProfileView userId={user.id} details={details} email={user.email} meta={meta} />
       )}
     </div>
   );
@@ -264,7 +264,7 @@ function DisableProfile({ userId, name, open, onClose }: { userId: string; name:
     setError(undefined);
     try {
       // The action re-renders the page itself (refresh()), so the badge shows "Deactivated" on success.
-      const result = await disableStaffMember(userId);
+      const result = await disableEmployee(userId);
       if (result.ok) onClose();
       else setError(result.message);
     } catch {
@@ -309,7 +309,7 @@ function DeleteProfile({ userId, name, open, onClose }: { userId: string; name: 
     setPending(true);
     setError(undefined);
     try {
-      const result = await removeStaffMember(userId);
+      const result = await removeEmployee(userId);
       if (result.ok) router.push(appRoutes.adminUsers);
       else setError(result.message);
     } catch {

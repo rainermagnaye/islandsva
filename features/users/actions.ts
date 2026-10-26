@@ -6,15 +6,15 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { emailField, FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { emptyStaffDetails, openReviewSections, registrationStatus, REVIEW_SECTION_LABELS, REVIEW_SECTIONS, reviewSectionFilled, STAFF_LIMITS, USER_LIMITS, staffSections, type InviteField, type MyProfileField, type ReviewSection, type StaffDetailField, type StaffDetails, type UserSummary } from "./contract";
-import { getStaffProfile, getUser, saveStaffProfile, setStaffReview, updateStaffEmail } from "./dal";
-import { confirmStaffProfile, deactivateStaff, inviteStaff as invite, removeStaff, returnStaffProfile, submitStaffForReview } from "./service";
-import { parseEmployers, parseInvite, parseMyProfile, parseReferences, parseReviewReturn, parseStaffDetails, parseStaffId, withEmployers } from "./validation";
+import { emptyEmployeeDetails, openReviewSections, registrationStatus, REVIEW_SECTION_LABELS, REVIEW_SECTIONS, reviewSectionFilled, EMPLOYEE_LIMITS, USER_LIMITS, employeeSections, type InviteField, type MyProfileField, type ReviewSection, type EmployeeDetailField, type EmployeeDetails, type UserSummary } from "./contract";
+import { getEmployeeProfile, getUser, saveEmployeeProfile, setEmployeeReview, updateEmployeeEmail } from "./dal";
+import { confirmEmployeeProfile, deactivateEmployee, inviteEmployee as invite, removeEmployeeAccount, returnEmployeeProfile, submitEmployeeForReview } from "./service";
+import { parseEmployers, parseInvite, parseMyProfile, parseReferences, parseReviewReturn, parseEmployeeDetails, parseEmployeeId, withEmployers } from "./validation";
 import { parseResumeText, resumeText } from "./resume-text";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
 
-export async function inviteStaff(formData: FormData): Promise<SubmitResult<InviteField>> {
+export async function inviteEmployee(formData: FormData): Promise<SubmitResult<InviteField>> {
   const admin = await requireRole(["admin"]);
   const parsed = parseInvite(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
@@ -34,7 +34,7 @@ export async function inviteStaff(formData: FormData): Promise<SubmitResult<Invi
     }
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff invite failed", { service: error.service, error });
+    console.error("Employee invite failed", { service: error.service, error });
     return { ok: false, message: "We couldn't send the invitation. Please try again in a moment." };
   }
 
@@ -42,18 +42,18 @@ export async function inviteStaff(formData: FormData): Promise<SubmitResult<Invi
   return { ok: true };
 }
 
-/** Soft-deactivates a staff account. Their history stays; they can no longer sign in. */
-export async function disableStaffMember(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+/** Soft-deactivates an employee account. Their history stays; they can no longer sign in. */
+export async function disableEmployee(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
   const admin = await requireRole(["admin"]);
-  const parsed = parseStaffId({ userId });
+  const parsed = parseEmployeeId({ userId });
   if (!parsed.ok) return { ok: false, message: "That account couldn't be found." };
 
   try {
-    const result = await deactivateStaff(parsed.value.userId, admin.id);
+    const result = await deactivateEmployee(parsed.value.userId, admin.id);
     if (!result.ok) return result;
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff deactivation failed", { service: error.service, error });
+    console.error("Employee deactivation failed", { service: error.service, error });
     return { ok: false, message: "We couldn't disable that account. Please try again." };
   }
 
@@ -61,18 +61,18 @@ export async function disableStaffMember(userId: string): Promise<{ ok: true } |
   return { ok: true };
 }
 
-/** Deletes a staff account that has no client or assignment history. */
-export async function removeStaffMember(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+/** Deletes an employee account that has no client or assignment history. */
+export async function removeEmployee(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
   const admin = await requireRole(["admin"]);
-  const parsed = parseStaffId({ userId });
+  const parsed = parseEmployeeId({ userId });
   if (!parsed.ok) return { ok: false, message: "That account couldn't be found." };
 
   try {
-    const result = await removeStaff(parsed.value.userId, admin.id);
+    const result = await removeEmployeeAccount(parsed.value.userId, admin.id);
     if (!result.ok) return result;
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff removal failed", { service: error.service, error });
+    console.error("Employee removal failed", { service: error.service, error });
     return { ok: false, message: "We couldn't delete that account. Please try again." };
   }
 
@@ -95,20 +95,20 @@ export async function saveMyProfile(formData: FormData): Promise<SubmitResult<My
   const photo = formData.get("avatar");
   if (photo instanceof File && photo.size > 0) {
     if (!AVATAR_TYPES.has(photo.type)) return { ok: false, message: "Upload a JPEG, PNG or WebP picture." };
-    if (photo.size > STAFF_LIMITS.avatarBytes) return { ok: false, message: "Keep the profile picture under 512 KB." };
+    if (photo.size > EMPLOYEE_LIMITS.avatarBytes) return { ok: false, message: "Keep the profile picture under 512 KB." };
     avatar = { type: photo.type, bytes: new Uint8Array(await photo.arrayBuffer()) };
   }
 
   try {
     const account = await getUser(user.id);
     if (!account) return { ok: false, message: "That account couldn't be found." };
-    const current = await getStaffProfile(user.id);
+    const current = await getEmployeeProfile(user.id);
     const details = {
-      ...(current?.details ?? emptyStaffDetails(account.fullName)),
+      ...(current?.details ?? emptyEmployeeDetails(account.fullName)),
       fullName: current?.details.fullName || account.fullName,
       mobileNumber: parsed.value.mobileNumber,
     };
-    await saveStaffProfile(account.id, account.createdAt, details, undefined, avatar, parsed.value.timeFormat);
+    await saveEmployeeProfile(account.id, account.createdAt, details, undefined, avatar, parsed.value.timeFormat);
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("My profile save failed", { service: error.service, error });
@@ -124,45 +124,45 @@ const RESUME_TYPES: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** Saves the staff profile. A résumé fills any section the form left blank when the file has those headings. */
-export async function saveStaffProfileForm(formData: FormData): Promise<SubmitResult<StaffDetailField | "email">> {
+/** Saves the employee profile. A résumé fills any section the form left blank when the file has those headings. */
+export async function saveEmployeeProfileForm(formData: FormData): Promise<SubmitResult<EmployeeDetailField | "email">> {
   await requireRole(["admin"]);
-  const parsedId = parseStaffId({ userId: formData.get("userId") });
+  const parsedId = parseEmployeeId({ userId: formData.get("userId") });
   if (!parsedId.ok) return { ok: false, message: "That account couldn't be found." };
   const user = await getUser(parsedId.value.userId);
   if (!user) return { ok: false, message: "That account couldn't be found." };
-  return persistStaffForm(formData, user, { updateEmail: true, forReview: false, allowed: REVIEW_SECTIONS });
+  return persistEmployeeForm(formData, user, { updateEmail: true, forReview: false, allowed: REVIEW_SECTIONS });
 }
 
 /** Saves the VA's profile and sends it once every section is valid. */
-export async function saveOwnStaffProfile(formData: FormData): Promise<SubmitResult<StaffDetailField | "email">> {
+export async function saveOwnEmployeeProfile(formData: FormData): Promise<SubmitResult<EmployeeDetailField | "email">> {
   const va = await requireRole(["va"]);
   try {
     const user = await getUser(va.id);
     if (!user || user.status === "inactive") return { ok: false, message: "That account couldn't be found." };
-    const current = await getStaffProfile(va.id);
+    const current = await getEmployeeProfile(va.id);
     if (current?.reviewStatus === "pending_review") return { ok: false, message: "This profile is already with the admin." };
     if (current?.reviewStatus === "approved") return { ok: false, message: "This profile is already confirmed." };
-    const allowed = openReviewSections(current?.sections ?? staffSections(emptyStaffDetails(user.fullName)), current?.returnedSections ?? []);
-    return await persistStaffForm(formData, user, { updateEmail: false, forReview: true, allowed, clearReturned: true });
+    const allowed = openReviewSections(current?.sections ?? employeeSections(emptyEmployeeDetails(user.fullName)), current?.returnedSections ?? []);
+    return await persistEmployeeForm(formData, user, { updateEmail: false, forReview: true, allowed, clearReturned: true });
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff profile save failed", { service: error.service, error });
+    console.error("Employee profile save failed", { service: error.service, error });
     return { ok: false, message: "We couldn't save the profile. Please try again." };
   }
 }
 
 /** Confirms a profile that is waiting for review and opens the VA portal. */
-export async function confirmStaffMember(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function confirmEmployee(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
   await requireRole(["admin"]);
-  const parsed = parseStaffId({ userId });
+  const parsed = parseEmployeeId({ userId });
   if (!parsed.ok) return { ok: false, message: "That account couldn't be found." };
   try {
-    const result = await confirmStaffProfile(parsed.value.userId);
+    const result = await confirmEmployeeProfile(parsed.value.userId);
     if (!result.ok) return result;
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff confirmation failed", { service: error.service, error });
+    console.error("Employee confirmation failed", { service: error.service, error });
     return { ok: false, message: "We couldn't confirm that profile. Please try again." };
   }
   refresh();
@@ -170,7 +170,7 @@ export async function confirmStaffMember(userId: string): Promise<{ ok: true } |
 }
 
 /** Sends a profile back to the sections that need a change. */
-export async function returnStaffMember(formData: FormData): Promise<SubmitResult<"note" | "sections">> {
+export async function returnEmployee(formData: FormData): Promise<SubmitResult<"note" | "sections">> {
   await requireRole(["admin"]);
   const parsed = parseReviewReturn({
     userId: formData.get("userId"),
@@ -179,11 +179,11 @@ export async function returnStaffMember(formData: FormData): Promise<SubmitResul
   });
   if (!parsed.ok) return toSubmitResult(parsed);
   try {
-    const result = await returnStaffProfile(parsed.value.userId, parsed.value.sections, parsed.value.note);
+    const result = await returnEmployeeProfile(parsed.value.userId, parsed.value.sections, parsed.value.note);
     if (!result.ok) return { ok: false, message: result.message };
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff return failed", { service: error.service, error });
+    console.error("Employee return failed", { service: error.service, error });
     return { ok: false, message: "We couldn't send that profile back. Please try again." };
   }
   refresh();
@@ -196,21 +196,21 @@ const SECTION_FIELDS = {
   contact: ["mobileNumber", "alternatePhone", "emergencyName", "emergencyRelationship", "emergencyPhone"],
   skills: ["highestEducation", "certifications", "skills", "languages"],
   experience: ["keyResponsibilities", "achievements"],
-} as const satisfies Record<ReviewSection, readonly (keyof StaffDetails)[]>;
+} as const satisfies Record<ReviewSection, readonly (keyof EmployeeDetails)[]>;
 
 /** Saves the posted sections and, for a VA, sends the profile on once every section is complete. */
-async function persistStaffForm(
+async function persistEmployeeForm(
   formData: FormData,
   user: UserSummary,
   options: { updateEmail: boolean; forReview: boolean; allowed: readonly ReviewSection[]; clearReturned?: boolean },
-): Promise<SubmitResult<StaffDetailField | "email">> {
+): Promise<SubmitResult<EmployeeDetailField | "email">> {
   const allowed = new Set(options.allowed);
   const posted = formEntries(formData);
   const emailValue = posted.email;
   const skillDraft = allowed.has("skills") && typeof posted.skillDraft === "string" ? posted.skillDraft.trim() : "";
   const resumeTitle = posted.resumeName;
-  const current = await getStaffProfile(user.id);
-  const base = current?.details ?? emptyStaffDetails(user.fullName);
+  const current = await getEmployeeProfile(user.id);
+  const base = current?.details ?? emptyEmployeeDetails(user.fullName);
   const raw: Record<string, unknown> = {
     fullName: base.fullName,
     dateOfBirth: base.dateOfBirth,
@@ -242,7 +242,7 @@ async function persistStaffForm(
     const skills = typeof raw.skills === "string" ? raw.skills.trim() : "";
     raw.skills = skills ? `${skills}, ${skillDraft}` : skillDraft;
   }
-  const parsed = parseStaffDetails(raw);
+  const parsed = parseEmployeeDetails(raw);
   if (!parsed.ok) return toSubmitResult(parsed);
 
   const jobs = allowed.has("experience")
@@ -273,13 +273,13 @@ async function persistStaffForm(
   if (file instanceof File && file.size > 0) {
     const type = RESUME_TYPES[file.type] ?? (file.name.toLowerCase().endsWith(".pdf") ? RESUME_TYPES["application/pdf"] : file.name.toLowerCase().endsWith(".docx") ? RESUME_TYPES["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] : "");
     if (!type) return { ok: false, message: "Upload a PDF or DOCX résumé." };
-    if (file.size > STAFF_LIMITS.resumeBytes) return { ok: false, message: "Keep the résumé under 2 MB." };
+    if (file.size > EMPLOYEE_LIMITS.resumeBytes) return { ok: false, message: "Keep the résumé under 2 MB." };
     const bytes = new Uint8Array(await file.arrayBuffer());
     const extracted = parseResumeText(resumeText(bytes, type));
     const typed = typeof resumeTitle === "string" ? resumeTitle : "";
     const extension = file.name.toLowerCase().endsWith(".docx") ? ".docx" : ".pdf";
     const stem = (typed || file.name).trim().replace(/[^\w.\- ()]+/g, "").replace(/\.[^.]+$/, "").trim() || "resume";
-    resumeName = `${stem}${extension}`.slice(0, STAFF_LIMITS.resumeName);
+    resumeName = `${stem}${extension}`.slice(0, EMPLOYEE_LIMITS.resumeName);
     resume = { name: resumeName, type, bytes };
     (Object.keys(extracted) as (keyof typeof extracted)[]).forEach((key) => {
       if (!parsed.value[key] && extracted[key]) parsed.value[key] = extracted[key];
@@ -290,23 +290,23 @@ async function persistStaffForm(
   const photo = formData.get("avatar");
   if (photo instanceof File && photo.size > 0) {
     if (!AVATAR_TYPES.has(photo.type)) return { ok: false, message: "Upload a JPEG, PNG or WebP picture." };
-    if (photo.size > STAFF_LIMITS.avatarBytes) return { ok: false, message: "Keep the profile picture under 512 KB." };
+    if (photo.size > EMPLOYEE_LIMITS.avatarBytes) return { ok: false, message: "Keep the profile picture under 512 KB." };
     avatar = { type: photo.type, bytes: new Uint8Array(await photo.arrayBuffer()) };
   }
 
   const details = withEmployers(parsed.value, jobs.value, people.value, resumeName);
   try {
-    await saveStaffProfile(user.id, user.createdAt, details, resume, avatar);
+    await saveEmployeeProfile(user.id, user.createdAt, details, resume, avatar);
     if (options.updateEmail && email.data !== user.email) {
-      const updated = await updateStaffEmail(user.id, email.data);
+      const updated = await updateEmployeeEmail(user.id, email.data);
       if (!updated.ok) return { ok: false, message: FIELD_ERRORS, fieldErrors: { email: "That email already has an account." } };
     }
-    const filled = staffSections(details);
+    const filled = employeeSections(details);
     let returned = current?.returnedSections ?? [];
     if (options.clearReturned && current?.reviewStatus === "pending" && returned.length > 0) {
       returned = returned.filter((item) => !reviewSectionFilled(filled, item));
       if (returned.length !== current.returnedSections.length) {
-        await setStaffReview(user.id, "pending", returned, current.returnNote);
+        await setEmployeeReview(user.id, "pending", returned, current.returnNote);
       }
     }
     if (options.forReview) {
@@ -314,12 +314,12 @@ async function persistStaffForm(
         refresh();
         return { ok: false, message: unfinishedSections(filled) };
       }
-      const sent = await submitStaffForReview(user.id);
+      const sent = await submitEmployeeForReview(user.id);
       if (!sent.ok) return { ok: false, message: sent.message };
     }
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
-    console.error("Staff profile save failed", { service: error.service, error });
+    console.error("Employee profile save failed", { service: error.service, error });
     return { ok: false, message: "We couldn't save the profile. Please try again." };
   }
 

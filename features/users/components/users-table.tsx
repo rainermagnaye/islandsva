@@ -4,7 +4,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { adminUserHref } from "@/content/routes";
 import { ROLE_LABELS } from "@/lib/auth/roles";
-import { staffAccessBadge, type UserSummary } from "../contract";
+import { employeeAccessBadge, type UserSummary } from "../contract";
 
 function accessOf(user: UserSummary) {
   return { roles: user.roles, accountStatus: user.status, review: user.reviewStatus, signedIn: user.signedInAt !== null };
@@ -23,7 +23,7 @@ const COLUMNS: Column<UserSummary>[] = [
     key: "name",
     label: "Name",
     render: (user) => (
-      <Link href={adminUserHref(user.id)} className="staff-row-link" title={user.fullName || undefined}>
+      <Link href={adminUserHref(user.id)} className="row-link" title={user.fullName || undefined}>
         {user.fullName || "—"}
       </Link>
     ),
@@ -36,7 +36,7 @@ const COLUMNS: Column<UserSummary>[] = [
     label: "Status",
     nowrap: true,
     render: (user) => {
-      const access = staffAccessBadge(accessOf(user));
+      const access = employeeAccessBadge(accessOf(user));
       return (
         <Badge tone={access.tone} size="sm" dot={access.tone === "neutral"}>
           {access.label}

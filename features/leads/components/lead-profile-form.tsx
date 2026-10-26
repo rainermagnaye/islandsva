@@ -71,7 +71,7 @@ export function LeadProfileForm({ lead }: { lead: LeadDetail }) {
               </Section>
               <Section title="Business">
                 <Select compact label="Years in service" name="yearsInService" optional placeholder="Choose years in service" defaultValue={profile.yearsInService} options={withCurrent(YEARS_IN_SERVICE, profile.yearsInService)} error={fieldErrors.yearsInService} />
-                <Select compact label="Number of staff" name="staffCount" optional placeholder="Choose number of staff" defaultValue={profile.staffCount} options={withCurrent(STAFF_COUNTS, profile.staffCount)} error={fieldErrors.staffCount} />
+                <Select compact label="Number of employees" name="staffCount" optional placeholder="Choose number of employees" defaultValue={profile.staffCount} options={withCurrent(STAFF_COUNTS, profile.staffCount)} error={fieldErrors.staffCount} />
                 <ReadOnly label="Lead status" value={LEAD_STATUS_LABELS[lead.status]} />
                 <TextField compact label="Dropped reason" name="droppedReason" optional placeholder="Enter dropped reason" maxLength={LEAD_PROFILE_LIMITS.droppedReason} defaultValue={profile.droppedReason} error={fieldErrors.droppedReason} />
               </Section>

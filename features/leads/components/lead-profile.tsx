@@ -98,7 +98,7 @@ function LeadOverview({ lead, events }: { lead: LeadDetail; events: readonly Lea
           </FieldCard>
           <FieldCard title="Business">
             <Field label="Years in service" value={profile.yearsInService || EMPTY} />
-            <Field label="Number of staff" value={profile.staffCount || EMPTY} />
+            <Field label="Number of employees" value={profile.staffCount || EMPTY} />
             <Field label="Lead status" value={<LeadStatusBadge status={lead.status} />} />
             <Field label="Dropped reason" value={profile.droppedReason || EMPTY} />
           </FieldCard>
@@ -226,7 +226,7 @@ function LeadMark({ name }: { name: string }) {
   );
 }
 
-/** Same read-only profile card as a staff profile: a title bar over a two-column field list. */
+/** Same read-only profile card as an employee profile: a title bar over a two-column field list. */
 function FieldCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card as="section" padding="none">

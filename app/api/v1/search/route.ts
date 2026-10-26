@@ -6,7 +6,7 @@ import { createGetHandler } from "@/lib/api/handler";
 import { ok } from "@/lib/api/response";
 import { getSessionUser, needsSecondFactor } from "@/lib/auth/session";
 
-const EMPTY: SearchResults = { leads: [], clients: [], staff: [] };
+const EMPTY: SearchResults = { leads: [], clients: [], employees: [] };
 
 export const GET = createGetHandler({ unavailableMessage: "Search is unavailable. Please try again in a moment." }, async ({ req }) => {
   const user = await getSessionUser();

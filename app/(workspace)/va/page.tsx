@@ -14,7 +14,7 @@ import { AssignedClientsTable } from "@/features/clients/components/assigned-cli
 import { listVaDemos } from "@/features/demos/booking-dal";
 import { VaDemoList } from "@/features/demos/components/va-demo-list";
 import { LazyVaRegistration } from "@/features/users/components/lazy-va-registration";
-import { staffAccessBadge } from "@/features/users/contract";
+import { employeeAccessBadge } from "@/features/users/contract";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
 
@@ -35,7 +35,7 @@ async function VaHome() {
   if (!access.account) return <Workspace title="Dashboard" />;
   const account = access.account;
   const review = access.profile?.reviewStatus ?? "pending";
-  const badge = staffAccessBadge({ roles: account.roles, accountStatus: account.status, review: access.profile?.reviewStatus ?? null, signedIn: account.signedInAt !== null });
+  const badge = employeeAccessBadge({ roles: account.roles, accountStatus: account.status, review: access.profile?.reviewStatus ?? null, signedIn: account.signedInAt !== null });
 
   return (
     <Container className="grid gap-4 py-10 md:py-12">

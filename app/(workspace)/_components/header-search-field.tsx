@@ -10,10 +10,10 @@ import { SEARCH_MIN_LENGTH, type SearchHit, type SearchResults } from "@/feature
 const GROUPS = [
   ["leads", "Leads"],
   ["clients", "Clients"],
-  ["staff", "Team"],
+  ["employees", "Team"],
 ] as const;
 
-/** Header search. The list stays closed until three letters, then shows leads, clients, and staff. */
+/** Header search. The list stays closed until three letters, then shows leads, clients, and employees. */
 export function HeaderSearchField() {
   const router = useRouter();
   const listId = useId();

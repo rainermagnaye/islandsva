@@ -21,7 +21,7 @@ const columns: Column<AdminDemo>[] = [
     key: "company",
     label: "Client",
     render: (demo) => (
-      <Link href={adminClientHref(demo.clientId)} className="staff-row-link" title={demo.companyName}>
+      <Link href={adminClientHref(demo.clientId)} className="row-link" title={demo.companyName}>
         {demo.companyName}
       </Link>
     ),

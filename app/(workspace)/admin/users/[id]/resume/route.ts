@@ -1,5 +1,5 @@
-import { getStaffResume } from "@/features/users/dal";
-import { parseStaffId } from "@/features/users/validation";
+import { getEmployeeResume } from "@/features/users/dal";
+import { parseEmployeeId } from "@/features/users/validation";
 import { needsSecondFactor, requireUser } from "@/lib/auth/session";
 import { appRoutes } from "@/content/routes";
 import { redirect } from "next/navigation";
@@ -12,11 +12,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const user = await requireUser();
   if (needsSecondFactor(user)) redirect(appRoutes.mfa);
   const { id } = await context.params;
-  if (!parseStaffId({ userId: id }).ok) return new Response(null, { status: 404 });
+  if (!parseEmployeeId({ userId: id }).ok) return new Response(null, { status: 404 });
   if (user.id !== id && !user.roles.includes("admin")) return new Response(null, { status: 404 });
 
   try {
-    const resume = await getStaffResume(id);
+    const resume = await getEmployeeResume(id);
     if (!resume || !TYPES.has(resume.type)) return new Response(null, { status: 404 });
     const filename = resume.name.replace(/["\r\n]/g, "");
     return new Response(Buffer.from(resume.bytes), {

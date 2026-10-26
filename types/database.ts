@@ -159,12 +159,12 @@ type AssignmentRow = {
   created_at: string;
 };
 
-type StaffProfileRow = {
+type EmployeeProfileRow = {
   user_id: string;
   date_of_birth: string | null;
-  gender: Enum<"staff_gender"> | null;
+  gender: Enum<"employee_gender"> | null;
   nationality: string | null;
-  marital_status: Enum<"staff_marital_status"> | null;
+  marital_status: Enum<"employee_marital_status"> | null;
   current_street: string | null;
   current_line2: string | null;
   current_city: string | null;
@@ -189,8 +189,8 @@ type StaffProfileRow = {
   resume_bytes: string | null;
   avatar_type: string | null;
   avatar_bytes: string | null;
-  registration_status: Enum<"staff_registration_status">;
-  review_status: Enum<"staff_review_status">;
+  registration_status: Enum<"employee_registration_status">;
+  review_status: Enum<"employee_review_status">;
   returned_sections: string[];
   return_note: string | null;
   invitation_sent_at: string;
@@ -335,13 +335,13 @@ export type Database = {
           ProfilesFk<"client_va_assignments_assigned_by_fkey", "assigned_by">,
         ];
       };
-      staff_profiles: {
-        Row: StaffProfileRow;
-        Insert: InsertOf<StaffProfileRow, "user_id">;
-        Update: Optional<StaffProfileRow>;
+      employee_profiles: {
+        Row: EmployeeProfileRow;
+        Insert: InsertOf<EmployeeProfileRow, "user_id">;
+        Update: Optional<EmployeeProfileRow>;
         Relationships: [
           {
-            foreignKeyName: "staff_profiles_user_id_fkey";
+            foreignKeyName: "employee_profiles_user_id_fkey";
             columns: ["user_id"];
             isOneToOne: true;
             referencedRelation: "profiles";
@@ -445,10 +445,10 @@ export type Database = {
       assignment_status: "active" | "ended";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
       lead_event_kind: "call" | "qualification" | "conversion" | "junk" | "note" | "remark";
-      staff_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
-      staff_marital_status: "single" | "married" | "widowed" | "divorced" | "separated" | "prefer_not_to_say";
-      staff_registration_status: "pending" | "in_progress" | "completed";
-      staff_review_status: "pending" | "pending_review" | "approved";
+      employee_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
+      employee_marital_status: "single" | "married" | "widowed" | "divorced" | "separated" | "prefer_not_to_say";
+      employee_registration_status: "pending" | "in_progress" | "completed";
+      employee_review_status: "pending" | "pending_review" | "approved";
       payment_provider: "manual";
       payment_status: "paid" | "void";
       demo_status: "pending" | "confirmed" | "rejected" | "cancelled" | "completed" | "expired";

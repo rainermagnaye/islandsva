@@ -4,10 +4,7 @@ How to set up, change and run the live project. Rules for writing code are in `C
 
 ## Environment and secrets
 
-- `.env` (committed) holds non-secret defaults and lists every other key as a comment. Real values and all secrets go in `.env.local` (git-ignored), which overrides `.env`. `npm test` fails if a secret is set in `.env`.
-- Server code reads env only through `lib/env.ts`; a missing key fails just the request that needs it.
-- `SUPABASE_SECRET_KEY` bypasses row-level security — server only, never `NEXT_PUBLIC_`.
-- Production keys live in Vercel, marked Sensitive.
+`.env` (committed) holds non-secret defaults and names every other key in a comment; `.env.local` (git-ignored) overrides it. The rules for secrets are in `CLAUDE.md` §6.
 
 ## Supabase
 
@@ -80,16 +77,11 @@ The server log names the Supabase Auth code (`Sign-in failed (configuration): <c
 
 Reset or invite emails: "We couldn't send the reset email" is Supabase answering 5xx, logged as `Supabase Auth unavailable (supabase-auth, <status>, <code>): <message>`. Usually the email can't be sent: custom SMTP is on but the Resend domain isn't verified yet, or the sender address isn't on that domain (steps 3 in Supabase above). Supabase → Authentication → Logs shows the SMTP error. Without custom SMTP, Supabase only emails the project's team members — others are logged as `Password reset email not sent: <code>` while the visitor still sees success.
 
-## Local development
-
-- `npm run dev` on port 3000 — one dev server per folder. Restart it after a `next build` in the same folder.
-- Run `npm run lint`, `typecheck`, `test` and `build` one after another before every push.
-
 ## Staging
 
 - **URL:** https://islandsva-staging.vercel.app — Vercel project `islandsva` (team Islands VA), behind Vercel Authentication.
 - **Deploys:** a push to the `staging` branch runs `.github/workflows/deploy-staging.yml`: the full CI suite, then `vercel build` + `vercel deploy --prebuilt` and the alias above. Vercel's own Git deploys are off for `staging` (`vercel.json`), so nothing reaches the URL unless every check passes. To ship: merge `main` into `staging` and push.
-- **Environment:** a Preview deployment (`VERCEL_ENV=preview`), so it reads the project's **Preview** env vars. **For now there is one Supabase project:** staging, PR previews and local development all use the same project as production, so they read and write live data — test only with test accounts and test leads. A separate staging project is planned (`docs/roadmap.md`); once it exists, Preview gets its keys and production keys go only in **Production**. `NODE_ENV` stays `production` (Next.js sets it) — tell staging apart with `VERCEL_ENV`. PR previews from Vercel's Git integration share the same Preview keys.
+- **Environment:** a Preview deployment (`VERCEL_ENV=preview`), so it reads the project's **Preview** env vars. **For now there is one Supabase project:** staging, PR previews and local development all use the same project as production, so they read and write live data — test only with test accounts and test leads. A separate staging project is planned (`docs/mvp.md`); once it exists, Preview gets its keys and production keys go only in **Production**. `NODE_ENV` stays `production` (Next.js sets it) — tell staging apart with `VERCEL_ENV`. PR previews from Vercel's Git integration share the same Preview keys.
 - **Secrets:** GitHub environment `staging` holds `VERCEL_TOKEN` (a Vercel token scoped to the Islands VA team). Team and project ids are in the workflow; they aren't secret.
 - **Supabase (when the staging project is created):** apply every migration, enable `custom_access_token_hook`, set Site URL to the staging URL and add `https://islandsva-staging.vercel.app/auth/confirm` (and `/accept-invite` while the temporary invite flow exists) to the redirect URLs.
 

@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { ChangePasswordButton } from "@/features/auth/components/change-password-button";
 import { ProfileMenu } from "@/features/auth/components/profile-menu";
-import { STAFF_LIMITS, TIME_FORMATS, TIME_FORMAT_LABELS, type MyProfileField, type TimeFormat } from "../contract";
+import { EMPLOYEE_LIMITS, TIME_FORMATS, TIME_FORMAT_LABELS, type MyProfileField, type TimeFormat } from "../contract";
 import { saveMyProfile } from "../actions";
 
 const PHOTO_TOO_LARGE = "Keep the profile picture under 512 KB.";
@@ -17,7 +17,7 @@ const SAVE_FAILED = "We couldn't save the profile. Check your connection and try
 
 /**
  * Opens as a read-only view. Edit reveals the phone, time format and picture.
- * Name and email stay as text: the name changes on the staff profile, and email is not edited here.
+ * Name and email stay as text: the name changes on the employee profile, and email is not edited here.
  */
 export function MyProfile({
   email,
@@ -90,7 +90,7 @@ export function MyProfile({
           key={formKey}
           aria-label="My profile"
           onSubmit={async (formData) => {
-            if (photo && photo.size > STAFF_LIMITS.avatarBytes) return { ok: false, message: PHOTO_TOO_LARGE };
+            if (photo && photo.size > EMPLOYEE_LIMITS.avatarBytes) return { ok: false, message: PHOTO_TOO_LARGE };
             if (photo) formData.set("avatar", photo);
             try {
               const result = await saveMyProfile(formData);
@@ -114,7 +114,7 @@ export function MyProfile({
               <Section title="Basic info">
                 <Readout label="Logged in as" value={email} />
                 <Readout label="Full name" value={fullName || "Not provided"} />
-                <TextField compact label="Phone" name="mobileNumber" type="tel" optional maxLength={STAFF_LIMITS.phone} defaultValue={phone} error={fieldErrors.mobileNumber} />
+                <TextField compact label="Phone" name="mobileNumber" type="tel" optional maxLength={EMPLOYEE_LIMITS.phone} defaultValue={phone} error={fieldErrors.mobileNumber} />
                 <Select compact label="Time format" name="timeFormat" defaultValue={timeFormat} options={TIME_FORMATS.map((value) => ({ value, label: TIME_FORMAT_LABELS[value] }))} error={fieldErrors.timeFormat} />
               </Section>
               {twoFactorEnabled && <TwoFactor />}

@@ -11,7 +11,7 @@ major_version = 17
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000/auth/confirm", "http://localhost:3000/accept-invite"]
 jwt_expiry = 3600
-# Invite-only: admins invite staff, Closers invite clients (M3).
+# Invite-only: admins invite employees, Closers invite clients (M3).
 enable_signup = false
 enable_anonymous_sign_ins = false
 # 10–72 characters with letters and digits (PASSWORD_RULES in features/auth/contract.ts).

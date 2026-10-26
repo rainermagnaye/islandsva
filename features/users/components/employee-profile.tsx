@@ -1,12 +1,12 @@
-import { emptyStaffDetails, isVaAccount, registrationStatus, registrationSteps, staffAccessBadge, staffSections, type StaffDetails, type UserSummary } from "../contract";
-import type { StaffProfileRecord } from "../dal";
-import type { StaffProfileMeta } from "../profile-fields";
-import { StaffProfileScreen } from "./staff-profile-screen";
+import { emptyEmployeeDetails, isVaAccount, registrationStatus, registrationSteps, employeeAccessBadge, employeeSections, type EmployeeDetails, type UserSummary } from "../contract";
+import type { EmployeeProfileRecord } from "../dal";
+import type { EmployeeProfileMeta } from "../profile-fields";
+import { EmployeeProfileScreen } from "./employee-profile-screen";
 
 /**
- * One staff member. The page reads the saved profile; the screen switches between that view and the form.
+ * One employee. The page reads the saved profile; the screen switches between that view and the form.
  */
-export function StaffProfile({
+export function EmployeeProfile({
   user,
   actorId,
   profile,
@@ -14,17 +14,17 @@ export function StaffProfile({
 }: {
   user: UserSummary;
   actorId: string;
-  profile: StaffProfileRecord | null;
+  profile: EmployeeProfileRecord | null;
   hasHistory: boolean;
 }) {
-  const details: StaffDetails = { ...(profile?.details ?? emptyStaffDetails(user.fullName)), fullName: profile?.details.fullName || user.fullName };
-  const sections = profile?.sections ?? staffSections(details);
+  const details: EmployeeDetails = { ...(profile?.details ?? emptyEmployeeDetails(user.fullName)), fullName: profile?.details.fullName || user.fullName };
+  const sections = profile?.sections ?? employeeSections(details);
   const status = registrationStatus(sections);
   const review = profile?.reviewStatus ?? "pending";
   const signedIn = user.signedInAt !== null;
   const steps = registrationSteps(sections, { signedIn, review, returned: profile?.returnedSections ?? [] });
-  const access = staffAccessBadge({ roles: user.roles, accountStatus: user.status, review: profile?.reviewStatus ?? null, signedIn });
-  const meta: StaffProfileMeta = {
+  const access = employeeAccessBadge({ roles: user.roles, accountStatus: user.status, review: profile?.reviewStatus ?? null, signedIn });
+  const meta: EmployeeProfileMeta = {
     registrationStatus: status,
     invitationSentAt: profile?.invitationSentAt ?? user.createdAt,
     registrationCompletedAt: status === "completed" ? (profile?.registrationCompletedAt ?? null) : null,
@@ -33,7 +33,7 @@ export function StaffProfile({
   };
 
   return (
-    <StaffProfileScreen
+    <EmployeeProfileScreen
       user={user}
       actorId={actorId}
       details={details}

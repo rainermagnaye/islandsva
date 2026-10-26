@@ -664,68 +664,83 @@ describe("client notes", () => {
   });
 });
 
-describe("staff profiles", () => {
+describe("employee profiles", () => {
   it("lets a person save their own profile, and an admin with two-factor sign-in read and update it", async () => {
-    await asUser(asVa, `insert into public.staff_profiles (user_id, nationality) values ('${VA}', 'Filipino')`);
-    expect(await asUser(asVa, `select nationality from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ nationality: "Filipino" }]);
-    await asUser(asAdmin, `update public.staff_profiles set current_city = 'Cebu' where user_id = '${VA}'`);
-    expect(await asUser(asAdmin, `select current_city from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ current_city: "Cebu" }]);
-    await asUser(asVa, `update public.staff_profiles set current_country = 'Philippines' where user_id = '${VA}'`);
-    expect(await asUser(asVa, `select current_country from public.staff_profiles where user_id = '${VA}'`)).toEqual([{ current_country: "Philippines" }]);
-    await expect(asServer("select permanent_street from public.staff_profiles")).rejects.toThrow(/permanent_street/);
+    await asUser(asVa, `insert into public.employee_profiles (user_id, nationality) values ('${VA}', 'Filipino')`);
+    expect(await asUser(asVa, `select nationality from public.employee_profiles where user_id = '${VA}'`)).toEqual([{ nationality: "Filipino" }]);
+    await asUser(asAdmin, `update public.employee_profiles set current_city = 'Cebu' where user_id = '${VA}'`);
+    expect(await asUser(asAdmin, `select current_city from public.employee_profiles where user_id = '${VA}'`)).toEqual([{ current_city: "Cebu" }]);
+    await asUser(asVa, `update public.employee_profiles set current_country = 'Philippines' where user_id = '${VA}'`);
+    expect(await asUser(asVa, `select current_country from public.employee_profiles where user_id = '${VA}'`)).toEqual([{ current_country: "Philippines" }]);
+    await expect(asServer("select permanent_street from public.employee_profiles")).rejects.toThrow(/permanent_street/);
   });
 
   it("stores up to three references and refuses a fourth", async () => {
     const people = JSON.stringify([{ name: "Ana Cruz", phone: "0917", relationship: "Manager", company: "North", email: "ana@x.co" }]);
-    await asUser(asVa, `update public.staff_profiles set job_references = $1::jsonb where user_id = '${VA}'`, [people]);
-    expect(await asUser(asVa, `select job_references from public.staff_profiles where user_id = '${VA}'`)).toEqual([
+    await asUser(asVa, `update public.employee_profiles set job_references = $1::jsonb where user_id = '${VA}'`, [people]);
+    expect(await asUser(asVa, `select job_references from public.employee_profiles where user_id = '${VA}'`)).toEqual([
       { job_references: [{ name: "Ana Cruz", phone: "0917", relationship: "Manager", company: "North", email: "ana@x.co" }] },
     ]);
     const four = JSON.stringify([1, 2, 3, 4].map(() => ({ name: "A", company: "", phone: "", email: "" })));
-    await expect(asServer(`update public.staff_profiles set job_references = $1::jsonb where user_id = '${VA}'`, [four])).rejects.toThrow(/check constraint/);
+    await expect(asServer(`update public.employee_profiles set job_references = $1::jsonb where user_id = '${VA}'`, [four])).rejects.toThrow(/check constraint/);
   });
 
   it("hides a profile from other people, from an admin without two-factor sign-in, and from anon", async () => {
-    expect(await asUser(asVa2, `select user_id from public.staff_profiles where user_id = '${VA}'`)).toEqual([]);
-    expect(await asUser(asCloser, `select user_id from public.staff_profiles where user_id = '${VA}'`)).toEqual([]);
-    expect(await asUser(token(ADMIN, ["admin"], "aal1"), `select user_id from public.staff_profiles where user_id = '${VA}'`)).toEqual([]);
-    await expect(as("anon", {}, "select user_id from public.staff_profiles")).rejects.toThrow(/permission denied/);
+    expect(await asUser(asVa2, `select user_id from public.employee_profiles where user_id = '${VA}'`)).toEqual([]);
+    expect(await asUser(asCloser, `select user_id from public.employee_profiles where user_id = '${VA}'`)).toEqual([]);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), `select user_id from public.employee_profiles where user_id = '${VA}'`)).toEqual([]);
+    await expect(as("anon", {}, "select user_id from public.employee_profiles")).rejects.toThrow(/permission denied/);
   });
 
   it("refuses writing someone else's profile, deleting one, or storing the résumé through the API", async () => {
-    await expect(asUser(asVa, `insert into public.staff_profiles (user_id) values ('${VA2}')`)).rejects.toThrow(/row-level security/);
-    await expect(asUser(asAdmin, `delete from public.staff_profiles where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
-    await expect(asUser(asVa, `update public.staff_profiles set resume_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
-    await expect(asUser(asVa, `update public.staff_profiles set avatar_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    await expect(asUser(asVa, `insert into public.employee_profiles (user_id) values ('${VA2}')`)).rejects.toThrow(/row-level security/);
+    await expect(asUser(asAdmin, `delete from public.employee_profiles where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    await expect(asUser(asVa, `update public.employee_profiles set resume_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+    await expect(asUser(asVa, `update public.employee_profiles set avatar_bytes = '\\x00' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
   });
 
   it("rejects a nationality that is too long", async () => {
-    await expect(asServer(`insert into public.staff_profiles (user_id, nationality) values ('${VA2}', $1)`, ["n".repeat(81)])).rejects.toThrow(/check constraint/);
+    await expect(asServer(`insert into public.employee_profiles (user_id, nationality) values ('${VA2}', $1)`, ["n".repeat(81)])).rejects.toThrow(/check constraint/);
   });
 
   it("leaves registration progress to the server: nobody sets it through the API", async () => {
     for (const claims of [asVa, asAdmin]) {
-      await expect(asUser(claims, `update public.staff_profiles set registration_status = 'completed' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
-      await expect(asUser(claims, `update public.staff_profiles set registration_completed_at = now() where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+      await expect(asUser(claims, `update public.employee_profiles set registration_status = 'completed' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+      await expect(asUser(claims, `update public.employee_profiles set registration_completed_at = now() where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
     }
-    await expect(asUser(asVa2, `insert into public.staff_profiles (user_id, registration_status) values ('${VA2}', 'completed')`)).rejects.toThrow(/permission denied/);
-    expect(await asServer(`update public.staff_profiles set registration_status = 'completed' where user_id = '${VA}' returning user_id`)).toHaveLength(1);
+    await expect(asUser(asVa2, `insert into public.employee_profiles (user_id, registration_status) values ('${VA2}', 'completed')`)).rejects.toThrow(/permission denied/);
+    expect(await asServer(`update public.employee_profiles set registration_status = 'completed' where user_id = '${VA}' returning user_id`)).toHaveLength(1);
   });
 
   it("leaves the review to the server, and only allows the sections an admin can send back", async () => {
     for (const claims of [asVa, asAdmin]) {
-      await expect(asUser(claims, `update public.staff_profiles set review_status = 'approved' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
+      await expect(asUser(claims, `update public.employee_profiles set review_status = 'approved' where user_id = '${VA}'`)).rejects.toThrow(/permission denied/);
     }
-    expect(await asServer(`update public.staff_profiles set review_status = 'pending_review', returned_sections = '{basic}' where user_id = '${VA}' returning review_status`)).toEqual([
+    expect(await asServer(`update public.employee_profiles set review_status = 'pending_review', returned_sections = '{basic}' where user_id = '${VA}' returning review_status`)).toEqual([
       { review_status: "pending_review" },
     ]);
-    await expect(asServer(`update public.staff_profiles set returned_sections = '{salary}' where user_id = '${VA}'`)).rejects.toThrow(/check constraint/);
-    await asServer(`update public.staff_profiles set review_status = 'pending', returned_sections = '{}' where user_id = '${VA}'`);
+    await expect(asServer(`update public.employee_profiles set returned_sections = '{salary}' where user_id = '${VA}'`)).rejects.toThrow(/check constraint/);
+    await asServer(`update public.employee_profiles set review_status = 'pending', returned_sections = '{}' where user_id = '${VA}'`);
   });
 
-  it("only staff have a staff profile: a client can't create one for themselves", async () => {
-    await expect(asUser(asClient, `insert into public.staff_profiles (user_id) values ('${CLIENT}')`)).rejects.toThrow(/row-level security/);
-    await expect(asUser(asVa2, `insert into public.staff_profiles (user_id) values ('${VA2}') returning user_id`)).resolves.toHaveLength(1);
+  it("only employees have an employee profile: a client can't create one for themselves", async () => {
+    await expect(asUser(asClient, `insert into public.employee_profiles (user_id) values ('${CLIENT}')`)).rejects.toThrow(/row-level security/);
+    await expect(asUser(asVa2, `insert into public.employee_profiles (user_id) values ('${VA2}') returning user_id`)).resolves.toHaveLength(1);
+  });
+
+  it("keeps no staff names after the rename: table, types, constraints, indexes, triggers, policies, function bodies", async () => {
+    const [left] = await db.query<{ n: number }>(`
+      select ((select count(*) from pg_class c join pg_namespace s on s.oid = c.relnamespace
+                where s.nspname = 'public' and c.relname like 'staff%')
+           + (select count(*) from pg_type t join pg_namespace s on s.oid = t.typnamespace
+                where s.nspname = 'public' and t.typname like 'staff%')
+           + (select count(*) from pg_constraint where conname like 'staff%')
+           + (select count(*) from pg_trigger where tgname like 'staff%')
+           + (select count(*) from pg_policies where policyname ilike '%staff%')
+           + (select count(*) from pg_proc p join pg_namespace s on s.oid = p.pronamespace
+                where s.nspname in ('public', 'private') and p.prosrc like '%staff\\_profiles%'))::int as n`).then((r) => r.rows);
+    expect(left.n).toBe(0);
+    expect(await asServer("select to_regclass('public.employee_profiles')::text as t")).toEqual([{ t: "employee_profiles" }]);
   });
 });
 
@@ -877,11 +892,11 @@ describe("tenants", () => {
     ).resolves.toHaveLength(1);
   });
 
-  it("moving a user carries their roles and staff profile; it's refused while they own clients", async () => {
-    await asServer("insert into public.staff_profiles (user_id) values ($1)", [VA_B]);
+  it("moving a user carries their roles and employee profile; it's refused while they own clients", async () => {
+    await asServer("insert into public.employee_profiles (user_id) values ($1)", [VA_B]);
     await asServer("update public.profiles set tenant_id = $1 where id = $2", [tenantA, VA_B]);
     expect((await asServer<{ tenant_id: string }>("select tenant_id from public.roles where user_id = $1", [VA_B]))[0].tenant_id).toBe(tenantA);
-    expect((await asServer<{ tenant_id: string }>("select tenant_id from public.staff_profiles where user_id = $1", [VA_B]))[0].tenant_id).toBe(tenantA);
+    expect((await asServer<{ tenant_id: string }>("select tenant_id from public.employee_profiles where user_id = $1", [VA_B]))[0].tenant_id).toBe(tenantA);
     await expect(asServer("update public.profiles set tenant_id = $1 where id = $2", [tenantA, CLOSER_B])).rejects.toThrow(/foreign key/);
   });
 
@@ -1393,7 +1408,7 @@ describe("demo scheduling", () => {
     await asServer("insert into public.roles (user_id, role) values ($1, 'va')", [VA_X]);
     await asServer(`insert into public.roles (user_id, role) values ('${OWNER}', 'client'), ('${OTHER}', 'client')`);
     await asServer("update public.profiles set full_name = 'Vera Cruz', status = 'active' where id = $1", [VA]);
-    await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+    await asServer("update public.employee_profiles set review_status = 'approved' where user_id = $1", [VA]);
     demoCo = await newActiveClient("Demo Co", OWNER);
     otherCo = await newActiveClient("Other Co", OTHER);
     pendingCo = await newActiveClient("Pending Co", null, "pending");
@@ -1449,9 +1464,9 @@ describe("demo scheduling", () => {
 
     it("hides slots of a VA who isn't open, and slots in another tenant", async () => {
       const slot = await addSlot(asVa, VA, at(42));
-      await asServer("update public.staff_profiles set review_status = 'pending' where user_id = $1", [VA]);
+      await asServer("update public.employee_profiles set review_status = 'pending' where user_id = $1", [VA]);
       expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.demo_slots"))).not.toContain(slot);
-      await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+      await asServer("update public.employee_profiles set review_status = 'approved' where user_id = $1", [VA]);
       const [{ id: inB }] = await asServer<{ id: string }>("insert into public.demo_slots (va_id, starts_at, ends_at) values ($1, $2, $3) returning id", [VA_X, at(44), end(at(44))]);
       expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.demo_slots"))).not.toContain(inB);
       await expect(book(demoCo, inB, OWNER)).rejects.toMatchObject({ code: "IVA18" });
@@ -1576,9 +1591,9 @@ describe("demo scheduling", () => {
       await asServer("update public.profiles set status = 'inactive' where id = $1", [OWNER]);
       await expect(cancel(r.id, OWNER)).rejects.toMatchObject({ code: "IVA14" });
       await asServer("update public.profiles set status = 'active' where id = $1", [OWNER]);
-      await asServer("update public.staff_profiles set review_status = 'pending' where user_id = $1", [VA]);
+      await asServer("update public.employee_profiles set review_status = 'pending' where user_id = $1", [VA]);
       await expect(decide(r.id, VA, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
-      await asServer("update public.staff_profiles set review_status = 'approved' where user_id = $1", [VA]);
+      await asServer("update public.employee_profiles set review_status = 'approved' where user_id = $1", [VA]);
       await asServer("update public.profiles set status = 'inactive' where id = $1", [VA]);
       await expect(decide(r.id, VA, "confirmed")).rejects.toMatchObject({ code: "IVA14" });
       await asServer("update public.profiles set status = 'active' where id = $1", [VA]);

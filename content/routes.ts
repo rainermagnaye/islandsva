@@ -42,7 +42,7 @@ export const appRoutes = {
   adminSales: "/admin/sales",
   adminUsers: "/admin/users",
   adminSettings: "/admin/settings",
-  /** The signed-in person's own profile. Separate from a staff record in Teams. */
+  /** The signed-in person's own profile. Separate from an employee record in Teams. */
   profile: "/profile",
 } as const;
 
@@ -57,7 +57,7 @@ export function contactHref(packageSlug?: string) {
 /** One lead in the admin system. Lead ids are random UUIDs, so the URL carries no personal data. */
 export const adminLeadHref = (id: string) => `${appRoutes.adminLeads}/${id}`;
 
-/** One staff profile. The id is a random UUID, so the URL carries no personal data. */
+/** One employee profile. The id is a random UUID, so the URL carries no personal data. */
 export const adminUserHref = (id: string) => `${appRoutes.adminUsers}/${id}`;
 
 /** One client profile. The id is a random UUID, so the URL carries no personal data. */

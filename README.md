@@ -13,6 +13,4 @@ Copy the keys listed in `.env` into `.env.local` with real values first (`docs/o
 
 ## Read next
 
-- `CLAUDE.md` — how the project is built and the rules for every change (also loaded by AI agents).
-- `supabase/CLAUDE.md` and `components/CLAUDE.md` — the database and UI rules, loaded when working there.
-- `docs/operations.md` · `docs/decisions.md` · `docs/roadmap.md` — runbooks, decisions, roadmap.
+`CLAUDE.md` — the rules for every change and the map of every other doc.
