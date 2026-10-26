@@ -184,7 +184,7 @@ export const privacyFaqs: Faq[] = [
   },
   {
     question: "How long do you keep an enquiry?",
-    answer: "If an enquiry doesn't become a client relationship, we keep it for up to 24 months, then delete or anonymise it.",
+    answer: "We keep it as long as we need it for our records; you can ask us to delete it at any time. Retention periods are being finalised.", // TODO(legal): retention periods
   },
   {
     question: "Can I ask you to delete my information?",
