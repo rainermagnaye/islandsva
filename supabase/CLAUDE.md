@@ -42,7 +42,36 @@ Loaded when working in `supabase/`. Project-wide rules are in the root `CLAUDE.m
 - Invariants as constraints (`CHECK`, unique, FKs), mirroring the limits in each feature's `contract.ts`.
 - Index foreign keys, RLS columns and list sort orders.
 - Money in cents with a currency (M4). Secrets such as invite tokens stored only as SHA-256 (M3).
-- Custom errors use their own SQLSTATE (`IVA01`…) so the app can map them to messages.
+- Custom errors use their own SQLSTATE (`IVA01`…) so the app can map them to messages (see Error codes).
+
+## Error codes
+
+A code means something only together with the function that raised it: each `dal.ts` maps the codes of the functions it calls, never with one app-wide map. Some numbers mean different things in different functions (the registration packet reused `IVA06`–`IVA09`), so read this table by function. Live functions keep their codes; **a new refusal takes the next unused number, never an existing one, and is added here in the same PR.** Next free: `IVA21` (claimed by `accept_client_review_paid` in #72 once it merges), then `IVA22`.
+
+| Code | Meaning | Raised by |
+|---|---|---|
+| `IVA01` | Not found (lead, client, payment or booking) | `convert_lead`, `convert_lead_noted`, `record_lead_step`/`_call`/`_note`, `record_client_note`, `issue_onboarding_link`, `revoke_onboarding_link`, `record_manual_payment`, `void_payment`, `activate_client`, `book_demo`, `decide_demo`, `cancel_demo` |
+| `IVA02` | Lead already converted | `convert_lead` |
+| `IVA03` | Lead is closed | `convert_lead` |
+| `IVA04` | Lead disabled, step not available, or a converted lead changing | `convert_lead_noted`, `record_lead_step`, `record_lead_call`, `guard_lead_status` |
+| `IVA05` | A lead with history can't be deleted | `guard_lead_delete` |
+| `IVA06` | Registration packet: client or link not found · elsewhere: client in the wrong status (not pending, or not active for `book_demo`) | packet: `issue_client_onboarding_link`, `save_client_review`, `accept_client_review`, `record_client_invite`, `submit_client_packet` · status: `issue_onboarding_link`, `submit_onboarding`, `record_manual_payment`, `void_payment`, `activate_client`, `book_demo` |
+| `IVA07` | Registration packet: a link or login already exists · elsewhere: client disabled | packet: `issue_client_onboarding_link`, `record_client_invite` · disabled: `issue_onboarding_link`, `submit_onboarding`, `record_manual_payment`, `activate_client`, `book_demo` |
+| `IVA08` | Registration packet: wrong step (not in review, not open, not ready to activate) · `submit_onboarding`: unknown link | packet: `save_client_review`, `accept_client_review`, `record_client_invite`, `submit_client_packet` · `submit_onboarding` |
+| `IVA09` | Registration packet: client disabled · `submit_onboarding`: link expired | packet: `issue_client_onboarding_link`, `save_client_review`, `accept_client_review`, `record_client_invite`, `submit_client_packet` · `submit_onboarding` |
+| `IVA10` | Link already used or withdrawn | `submit_onboarding` |
+| `IVA11` | Onboarding form not sent yet | `activate_client` |
+| `IVA12` | No payment recorded | `activate_client` |
+| `IVA13` | A form was sent moments ago | `issue_onboarding_link` |
+| `IVA14` | The actor isn't allowed (not the client's Closer, an admin, the client or the booking's VA) | `issue_onboarding_link`, `revoke_onboarding_link`, `record_manual_payment`, `void_payment`, `activate_client`, `book_demo`, `decide_demo`, `cancel_demo` |
+| `IVA15` | The login already belongs to someone | `activate_client` |
+| `IVA16` | The client already has a VA | `book_demo` |
+| `IVA17` | The client already has an open demo | `book_demo` |
+| `IVA18` | The slot is gone or taken | `book_demo` |
+| `IVA19` | Outside the booking window (4 hours to 14 days ahead) | `book_demo` |
+| `IVA20` | The demo can't change now (started, or already answered) · a booked slot can't be deleted | `decide_demo`, `cancel_demo`, `guard_slot_delete` |
+
+`issue_onboarding_link`, `revoke_onboarding_link`, `submit_onboarding`, `record_manual_payment`, `void_payment` and `activate_client` are live but unused since the registration packet replaced them (roadmap: cleanup migration).
 
 ## Tests (`supabase/tests/database.test.ts`)
 
