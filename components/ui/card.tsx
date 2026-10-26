@@ -1,8 +1,8 @@
 import { useId, type HTMLAttributes, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
+import { cardSurface } from "./card-surface";
 
-/** The card surface alone, for an element that can't be a Card (a `<form>`, a link). */
-export const cardSurface = "rounded-lg border border-border bg-surface-card";
+export { cardSurface };
 
 const paddings = {
   none: "",
