@@ -26,7 +26,7 @@ export async function listAllDemos({ page = 1, filter }: { page?: number; filter
   if (error) throw new UpstreamError("supabase", `Listing demos failed (${error.code})`);
 
   // Admins read every profile, so show the VA's full name; the booking's first-name snapshot covers the rest.
-  const names = await vaNames([...new Set(data.map((row) => row.va_id))]);
+  const [names, withVa] = await Promise.all([vaNames([...new Set(data.map((row) => row.va_id))]), clientsWithVa([...new Set(data.map((row) => row.client_id))])]);
   const total = count ?? 0;
   return {
     demos: data.map((row) => ({
@@ -39,11 +39,21 @@ export async function listAllDemos({ page = 1, filter }: { page?: number; filter
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       createdAt: row.created_at,
+      clientHasVa: withVa.has(row.client_id),
     })),
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
   };
+}
+
+/** Which of these clients have an active VA now (admins read every assignment of their agency under RLS). */
+async function clientsWithVa(ids: readonly string[]) {
+  if (ids.length === 0) return new Set<string>();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("client_va_assignments").select("client_id").eq("status", "active").in("client_id", ids);
+  if (error) throw new UpstreamError("supabase", `Reading VA assignments failed (${error.code})`);
+  return new Set(data.map((row) => row.client_id));
 }
 
 async function vaNames(ids: readonly string[]) {

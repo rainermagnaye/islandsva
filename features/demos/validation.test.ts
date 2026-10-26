@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SLOT_TIMES, bookableTimes, demoState, formatInZone, manilaDate, manilaToIso } from "./contract";
+import { SLOT_TIMES, adminNextStep, bookableTimes, demoState, formatInZone, manilaDate, manilaToIso } from "./contract";
 import { parseBooking, parseBookingId, parseDecision, parseNewSlots, parseSlotId } from "./validation";
 
 const NOW = new Date("2026-11-02T00:00:00Z"); // 08:00 on 2 November in Manila
@@ -89,5 +89,18 @@ describe("booking", () => {
     expect(formatInZone("2026-11-03T14:30:00.000Z", "America/New_York")).toBe("Tue, Nov 3, 9:30 AM EST");
     expect(formatInZone("2026-11-03T14:30:00.000Z", "Asia/Manila")).toBe("Tue, Nov 3, 10:30 PM GMT+8");
     expect(formatInZone("2026-11-03T14:30:00.000Z", "Not/AZone")).toBe("Tue, Nov 3, 2:30 PM UTC");
+  });
+});
+
+describe("adminNextStep", () => {
+  it("after a done demo, asks for a VA only while the client has none", () => {
+    expect(adminNextStep("completed", false)).toBe("assign_va");
+    expect(adminNextStep("completed", true)).toBeNull();
+  });
+
+  it("shows the open demo's state, and nothing for closed ones", () => {
+    expect(adminNextStep("pending", false)).toBe("await_va_answer");
+    expect(adminNextStep("confirmed", false)).toBe("call_booked");
+    for (const state of ["rejected", "cancelled", "expired"] as const) expect(adminNextStep(state, false)).toBeNull();
   });
 });

@@ -117,6 +117,18 @@ export type AdminDemo = {
   startsAt: string;
   endsAt: string;
   createdAt: string;
+  /** Whether the client has an active VA now (after a done demo, the next step is assigning one). */
+  clientHasVa: boolean;
 };
 
 export type AdminDemoPage = { demos: AdminDemo[]; total: number; page: number; pageCount: number };
+
+/** What the agency does next for a demo, as the admin list shows it: after a done demo, the client still needs a VA. */
+export type AdminNextStep = "assign_va" | "await_va_answer" | "call_booked" | null;
+
+export function adminNextStep(state: DemoStatus, clientHasVa: boolean): AdminNextStep {
+  if (state === "completed") return clientHasVa ? null : "assign_va";
+  if (state === "pending") return "await_va_answer";
+  if (state === "confirmed") return "call_booked";
+  return null;
+}

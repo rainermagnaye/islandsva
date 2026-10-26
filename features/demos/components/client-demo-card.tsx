@@ -18,7 +18,7 @@ export function ClientDemoCard({ demo, timeZone }: { demo: ClientDemo | null; ti
         : state === "expired"
           ? "Your last request wasn't answered in time. Please pick another time."
           : state === "completed"
-            ? "Thanks for your demo call. Your Islands VA contact will be in touch about next steps. You can book another if you'd like."
+            ? "Thanks for your demo call. Next, we match you with a VA, and they'll appear on this dashboard. You can book another call if you'd like."
             : "Meet a VA in a short 30-minute call before you're matched.";
     return (
       <div className="grid gap-3">
@@ -41,7 +41,9 @@ export function ClientDemoCard({ demo, timeZone }: { demo: ClientDemo | null; ti
       </div>
       <p className="m-0 type-body text-ink">{formatInZone(demo.startsAt, timeZone)}</p>
       <p className="m-0 type-body-sm text-ink-muted">
-        {state === "confirmed" ? `With ${demo.vaName}. We'll see you then.` : `Waiting for ${demo.vaName} to confirm. We'll email you either way.`}
+        {state === "confirmed"
+          ? `With ${demo.vaName}. After the call, we match you with a VA, and they'll appear here.`
+          : `Waiting for ${demo.vaName} to confirm. We'll email you either way.`}
       </p>
       <CancelDemoButton bookingId={demo.id} />
     </div>
