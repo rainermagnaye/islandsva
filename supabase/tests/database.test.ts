@@ -3044,7 +3044,7 @@ describe("audit log", () => {
           "select c.relname as name from pg_trigger t join pg_class c on c.oid = t.tgrelid where t.tgfoid = 'private.write_audit()'::regprocedure order by 1",
         )
       ).rows.map((r) => r.name);
-      expect(tables).toEqual(["client_va_assignments", "clients", "leads", "meetings", "profiles", "roles"]);
+      expect(tables).toEqual(["client_va_assignments", "clients", "leads", "meetings", "profiles", "roles", "tasks", "va_shortlists"]);
       const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.write_audit()'::regprocedure")).rows;
       const [{ def }] = (await db.query<{ def: string }>("select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'audit_log_record_type_check'")).rows;
       const ownerRules = src.slice(src.indexOf("case tg_table_name\n    when 'leads' then\n      owner"));
@@ -3052,6 +3052,150 @@ describe("audit log", () => {
         expect(def).toContain(`'${name}'`);
         expect(ownerRules).toContain(`when '${name}' then`);
       }
+    });
+  });
+});
+
+describe("audit log: tasks and VA match", () => {
+  // Own users and company so the tasks and VA match suites stay as they left theirs. The company is CLOSER's,
+  // so CLOSER is the owning Lead Gen of every entry here.
+  const AC = "33333333-3333-4333-8333-333333333301"; // the client's login
+  const AV = "33333333-3333-4333-8333-333333333302"; // a VA the client accepts
+  const AV2 = "33333333-3333-4333-8333-333333333303"; // a VA offered by the server, then withdrawn
+  const asAc = token(AC, ["client"]);
+  const asAv = token(AV, ["va"]);
+  let company = "";
+
+  type Entry = { actor_kind: string; actor_id: string | null; action: string; owner_id: string | null; client_id: string | null; changes: Record<string, unknown> };
+  const entries = async (type: string, id: string) =>
+    (await db.query<Entry>(
+      "select actor_kind::text as actor_kind, actor_id, action::text as action, owner_id, client_id, changes from public.audit_log where record_type = $1 and record_id = $2 order by at, action",
+      [type, id],
+    )).rows;
+  const last = async (type: string, id: string) => (await entries(type, id)).at(-1);
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email, raw_user_meta_data) values
+        ('${AC}', 'audit-client@x.co', '{"full_name":"Ava Client"}'),
+        ('${AV}', 'audit-va@x.co', '{"full_name":"Rosa Villanueva"}'),
+        ('${AV2}', 'audit-va2@x.co', '{"full_name":"Tess Ramos"}')`);
+    await asServer(`update public.profiles set status = 'active' where id in ('${AC}', '${AV}', '${AV2}')`);
+    await asServer(`insert into public.roles (user_id, role) values ('${AC}', 'client'), ('${AV}', 'va'), ('${AV2}', 'va')`);
+    [{ id: company }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Audit Match Co', 'Ava', 'ava@audit.co', $1) returning id",
+      [CLOSER],
+    );
+    await asServer(
+      `update public.clients set user_id = $2, status = 'active', activated_at = now(), timezone = 'America/New_York',
+         package_code = 'essentials', hours_per_week = 20, term_months = 6, monthly_cents = 85500, starts_on = '2026-11-01'
+       where id = $1`,
+      [company, AC],
+    );
+  });
+
+  describe("shortlists and the accept path", () => {
+    let offerId = "";
+
+    it("an admin's offer is theirs; ids and status keep values, the name snapshots are names only", async () => {
+      [{ id: offerId }] = await asUser<{ id: string }>(asAdmin, "insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id", [company, AV, ADMIN]);
+      const [entry] = await entries("va_shortlists", offerId);
+      expect(entry).toMatchObject({
+        action: "insert",
+        actor_kind: "user",
+        actor_id: ADMIN,
+        owner_id: null,
+        client_id: company,
+        changes: { client_id: company, va_id: AV, status: "offered", offered_by: ADMIN, va_first_name: null, company_name: null },
+      });
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Rosa|Audit Match/);
+    });
+
+    it("the client's accept is theirs: the shortlist update and the assignment it inserts", async () => {
+      await asUser(asAc, "update public.va_shortlists set status = 'accepted' where id = $1", [offerId]);
+      const decided = await last("va_shortlists", offerId);
+      expect(decided).toMatchObject({ action: "update", actor_id: AC, owner_id: null, client_id: company, changes: { status: ["offered", "accepted"] } });
+      expect(Object.keys(decided!.changes).sort()).toEqual(["decided_at", "status"]);
+
+      const [{ id: assignment }] = await asServer<{ id: string }>("select id from public.client_va_assignments where client_id = $1 and va_id = $2 and status = 'active'", [company, AV]);
+      const [entry] = await entries("client_va_assignments", assignment);
+      // The client accepted it, though assigned_by records who offered the VA.
+      expect(entry).toMatchObject({
+        action: "insert",
+        actor_kind: "user",
+        actor_id: AC,
+        owner_id: CLOSER,
+        client_id: company,
+        changes: { va_id: AV, status: "active", assigned_by: ADMIN, va_first_name: null },
+      });
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Rosa/);
+    });
+
+    it("the secret key's offer names whoever offered it; an admin's withdrawal is theirs", async () => {
+      const [{ id }] = await asServer<{ id: string }>("insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id", [company, AV2, ADMIN]);
+      expect(await last("va_shortlists", id)).toMatchObject({ action: "insert", actor_id: ADMIN, owner_id: null });
+      expect(await asUser(asAdmin, "delete from public.va_shortlists where id = $1 returning id", [id])).toHaveLength(1);
+      expect(await last("va_shortlists", id)).toMatchObject({ action: "delete", actor_id: ADMIN, changes: { status: "offered", va_first_name: null } });
+    });
+
+    it("the secret key's assignment insert still falls back to assigned_by", async () => {
+      await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and va_id = $2", [company, AV2]);
+      const [{ id }] = await asServer<{ id: string }>("insert into public.client_va_assignments (client_id, va_id, assigned_by) values ($1, $2, $3) returning id", [company, AV2, ADMIN]);
+      expect(await last("client_va_assignments", id)).toMatchObject({ actor_id: ADMIN, changes: { va_first_name: null } });
+      await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [id]);
+    });
+  });
+
+  describe("tasks", () => {
+    let task = "";
+
+    it("the client's task is theirs: never the title or the name snapshots, values for ids, status and dates", async () => {
+      [{ id: task }] = await asUser<{ id: string }>(
+        asAc,
+        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Secret plan for the merger', current_date + 10, $3) returning id",
+        [company, AV, AC],
+      );
+      const [entry] = await entries("tasks", task);
+      expect(entry).toMatchObject({
+        action: "insert",
+        actor_id: AC,
+        owner_id: null,
+        client_id: company,
+        changes: { client_id: company, va_id: AV, status: "todo", deadline_timezone: "America/New_York", created_by: AC, title: null, company_name: null, va_first_name: null },
+      });
+      expect(entry.changes.deadline).toEqual(expect.any(String));
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Secret plan|Audit Match|Rosa/);
+    });
+
+    it("the VA's status change is theirs; the client's title change is a name only; closing records done_at and closed_by", async () => {
+      await asUser(asAv, "update public.tasks set status = 'in_progress' where id = $1", [task]);
+      expect(await last("tasks", task)).toMatchObject({ actor_id: AV, changes: { status: ["todo", "in_progress"] } });
+      expect(Object.keys((await last("tasks", task))!.changes)).toEqual(["status"]);
+
+      await asUser(asAc, "update public.tasks set title = 'Another secret' where id = $1", [task]);
+      expect(await last("tasks", task)).toMatchObject({ actor_id: AC, changes: { title: null } });
+
+      await asUser(asAc, "update public.tasks set status = 'done' where id = $1", [task]);
+      const closed = await last("tasks", task);
+      expect(closed).toMatchObject({ actor_id: AC, changes: { status: ["in_progress", "done"], closed_by: [null, AC] } });
+      expect((closed!.changes.done_at as unknown[])[1]).toEqual(expect.any(String));
+      expect(JSON.stringify(await entries("tasks", task))).not.toMatch(/secret/i);
+    });
+
+    it("a secret-key task names its creator", async () => {
+      const [{ id }] = await asServer<{ id: string }>(
+        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Server task', current_date + 5, $3) returning id",
+        [company, AV, AC],
+      );
+      expect(await last("tasks", id)).toMatchObject({ actor_kind: "user", actor_id: AC });
+    });
+
+    it("admins with two-factor read task and shortlist entries; the owning Lead Gen sees only the client and its assignments; the client, the VA and other Lead Gens see none", async () => {
+      const seen = async (claims: Claims) =>
+        (await asUser<{ record_type: string }>(claims, "select distinct record_type from public.audit_log where client_id = $1 order by 1", [company])).map((r) => r.record_type);
+      expect(await seen(asCloser)).toEqual(["client_va_assignments", "clients"]);
+      expect(await seen(asAdmin)).toEqual(["client_va_assignments", "clients", "tasks", "va_shortlists"]);
+      for (const claims of [asCloser2, asAc, asAv, token(ADMIN, ["admin"], "aal1")]) expect(await seen(claims)).toEqual([]);
     });
   });
 });

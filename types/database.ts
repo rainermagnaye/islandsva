@@ -194,7 +194,7 @@ type AuditLogRow = {
   /** Null when actor_kind is "system" (shown as "System"). */
   actor_id: string | null;
   action: Enum<"audit_action">;
-  record_type: "leads" | "meetings" | "clients" | "client_va_assignments" | "roles" | "profiles";
+  record_type: "leads" | "meetings" | "clients" | "client_va_assignments" | "tasks" | "va_shortlists" | "roles" | "profiles";
   record_id: string;
   owner_id: string | null;
   client_id: string | null;

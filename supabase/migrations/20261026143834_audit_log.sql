@@ -1,9 +1,10 @@
 -- Audit log (M8, slice 2): who changed what, written by database triggers so no write path can skip it — the
 -- app, an admin, the secret key, a discovery-call function or another trigger.
 --
--- Audited: leads, meetings, clients, client_va_assignments, roles, and profiles.status. Not audited: the
--- timelines (lead_events, meeting_events, client_notes — they are the readable story), discovery_times,
--- payments (for now) and the demo tables (retired in M10).
+-- Audited: leads, meetings, clients, client_va_assignments, tasks, va_shortlists, roles, and profiles.status.
+-- Not audited: the timelines (lead_events, meeting_events, client_notes, task_comments — they are the readable
+-- story), discovery_times, va_working_hours, payments (for now) and the demo tables (retired in M10).
+-- Runs after tasks, va_match and restore_assign_tenant_cases; it doesn't touch private.assign_tenant().
 --
 -- Each row records the changed field names. Values only for an allow-list of safe columns (statuses, ids,
 -- times, package terms); contact details, free text and anything not on the list are names only, so a new
@@ -28,7 +29,7 @@ create table public.audit_log (
   -- rolls back a failed invite. They are history, resolved when shown (an unknown id shows as unknown).
   actor_id uuid,
   action public.audit_action not null,
-  record_type text not null check (record_type in ('leads', 'meetings', 'clients', 'client_va_assignments', 'roles', 'profiles')),
+  record_type text not null check (record_type in ('leads', 'meetings', 'clients', 'client_va_assignments', 'tasks', 'va_shortlists', 'roles', 'profiles')),
   record_id uuid not null,
   -- The Lead Gen whose record this is (they read its entries); null for accounts and roles.
   owner_id uuid,
@@ -92,7 +93,11 @@ language sql immutable set search_path = '' as $$
     when 'clients' then array['status', 'onboarding_status', 'created_by', 'user_id', 'activated_at', 'disabled_at', 'package_code',
       'hours_per_week', 'term_months', 'monthly_cents', 'currency', 'starts_on', 'consented_at', 'onboarding_submitted_at',
       'registration_email_sent_at']
+    -- va_first_name (a snapshot of a person's name) is left out: name only.
     when 'client_va_assignments' then array['client_id', 'va_id', 'status', 'started_at', 'ended_at', 'assigned_by']
+    -- Never the title (the client's free text) or the name snapshots (company_name, va_first_name).
+    when 'tasks' then array['client_id', 'va_id', 'status', 'deadline', 'deadline_timezone', 'done_at', 'closed_by', 'created_by']
+    when 'va_shortlists' then array['client_id', 'va_id', 'status', 'offered_by', 'decided_at']
     when 'roles' then array['user_id', 'role', 'assigned_by']
     when 'profiles' then array['status']
     else '{}'::text[]
@@ -155,11 +160,13 @@ begin
       when 'roles' then (r ->> 'assigned_by')::uuid
       when 'client_va_assignments' then (r ->> 'assigned_by')::uuid
       when 'clients' then (r ->> 'created_by')::uuid
+      when 'tasks' then (r ->> 'created_by')::uuid
+      when 'va_shortlists' then (r ->> 'offered_by')::uuid
     end;
   end if;
 
   -- The owning Lead Gen. A meeting's is its lead's owner, else whoever organises or decided it (a confirm
-  -- updates the meeting before it sets the lead's owner).
+  -- updates the meeting before it sets the lead's owner). A task's, shortlist's or assignment's is its client's creator.
   case tg_table_name
     when 'leads' then
       owner := (r ->> 'closer_id')::uuid;
@@ -173,6 +180,14 @@ begin
       client := (r ->> 'id')::uuid;
     when 'client_va_assignments' then
       owner := (select c.created_by from public.clients c where c.id = (r ->> 'client_id')::uuid);
+      client := (r ->> 'client_id')::uuid;
+    -- Tasks and shortlists have no owning Lead Gen: Lead Gens can't read either table, so their entries are for
+    -- admins only (owner null), while client_id still ties them to the client.
+    when 'tasks' then
+      owner := null;
+      client := (r ->> 'client_id')::uuid;
+    when 'va_shortlists' then
+      owner := null;
       client := (r ->> 'client_id')::uuid;
     when 'roles' then
       owner := null;
@@ -216,6 +231,10 @@ create trigger clients_audit after insert or update or delete on public.clients
 create trigger client_va_assignments_audit after insert or update or delete on public.client_va_assignments
   for each row execute function private.write_audit();
 create trigger roles_audit after insert or update or delete on public.roles
+  for each row execute function private.write_audit();
+create trigger tasks_audit after insert or update or delete on public.tasks
+  for each row execute function private.write_audit();
+create trigger va_shortlists_audit after insert or update or delete on public.va_shortlists
   for each row execute function private.write_audit();
 create trigger profiles_audit after update of status on public.profiles
   for each row when (old.status is distinct from new.status) execute function private.write_audit();
