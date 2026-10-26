@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClientDetails, parseClientFlag, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parseVaAssignment, parsePaymentReceived } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parsePaymentReceived } from "./validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
 
@@ -206,18 +206,6 @@ describe("parseClientReview", () => {
 
   it("rejects a section that is not part of the review", () => {
     expect(parseClientReview({ clientId, sections: ["notes"], note: "" }).ok).toBe(false);
-  });
-});
-
-describe("parseVaAssignment", () => {
-  const vaId = "1c8d7b63-6b5f-4f1c-8b9f-3c2d4e5f6a71";
-  it("takes a client and a VA", () => {
-    expect(parseVaAssignment({ clientId, vaId })).toEqual({ ok: true, value: { clientId, vaId } });
-  });
-  it("asks for a VA when none is chosen, and treats a bad client id or extra key as tampering", () => {
-    expect(parseVaAssignment({ clientId, vaId: "" })).toMatchObject({ ok: false, fieldErrors: { vaId: "Choose a VA." } });
-    expect(parseVaAssignment({ clientId: "x", vaId })).toMatchObject({ ok: false, formError: expect.any(String) });
-    expect(parseVaAssignment({ clientId, vaId, assignedBy: vaId })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });
 

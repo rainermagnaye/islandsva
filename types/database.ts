@@ -156,6 +156,35 @@ type MeetingEventRow = {
   created_at: string;
 };
 
+/** Signed-in users insert title, deadline and the people columns; triggers fill the snapshots, zone, done_at and closed_by. */
+type TaskRow = {
+  id: string;
+  client_id: string;
+  va_id: string;
+  title: string;
+  deadline: string;
+  deadline_timezone: string;
+  company_name: string;
+  va_first_name: string;
+  status: Enum<"task_status">;
+  done_at: string | null;
+  closed_by: string | null;
+  created_by: string;
+  tenant_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type TaskCommentRow = {
+  id: string;
+  task_id: string;
+  author_id: string;
+  author_first_name: string;
+  body: string;
+  tenant_id: string;
+  created_at: string;
+};
+
 /** Signed-in users may read every column except token_hash (column grant); the server reads all. */
 type OnboardingLinkRow = {
   id: string;
@@ -194,8 +223,34 @@ type AssignmentRow = {
   started_at: string;
   ended_at: string | null;
   assigned_by: string | null;
+  va_first_name: string;
   tenant_id: string;
   created_at: string;
+};
+
+type ShortlistRow = {
+  id: string;
+  client_id: string;
+  va_id: string;
+  status: Enum<"shortlist_status">;
+  va_first_name: string;
+  company_name: string;
+  offered_by: string;
+  decided_at: string | null;
+  tenant_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type WorkingHoursRow = {
+  id: string;
+  va_id: string;
+  weekday: number;
+  start_minute: number;
+  end_minute: number;
+  tenant_id: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type EmployeeProfileRow = {
@@ -370,10 +425,34 @@ export type Database = {
         Update: Optional<MeetingEventRow>;
         Relationships: [];
       };
+      tasks: {
+        Row: TaskRow;
+        Insert: InsertOf<TaskRow, "client_id" | "va_id" | "title" | "deadline" | "created_by">;
+        Update: Optional<TaskRow>;
+        Relationships: [];
+      };
+      task_comments: {
+        Row: TaskCommentRow;
+        Insert: InsertOf<TaskCommentRow, "task_id" | "author_id" | "body">;
+        Update: Optional<TaskCommentRow>;
+        Relationships: [];
+      };
       client_onboarding_links: {
         Row: OnboardingLinkRow;
         Insert: InsertOf<OnboardingLinkRow, "client_id" | "token_hash" | "created_by">;
         Update: Optional<OnboardingLinkRow>;
+        Relationships: [];
+      };
+      va_shortlists: {
+        Row: ShortlistRow;
+        Insert: InsertOf<ShortlistRow, "client_id" | "va_id" | "offered_by">;
+        Update: Optional<ShortlistRow>;
+        Relationships: [];
+      };
+      va_working_hours: {
+        Row: WorkingHoursRow;
+        Insert: InsertOf<WorkingHoursRow, "va_id" | "weekday" | "start_minute" | "end_minute">;
+        Update: Optional<WorkingHoursRow>;
         Relationships: [];
       };
       client_va_assignments: {
@@ -540,6 +619,7 @@ export type Database = {
       client_status: "pending" | "active" | "inactive";
       client_onboarding_status: "ready" | "pending_customer" | "pending_review" | "changes_requested" | "approved" | "invite_sent";
       assignment_status: "active" | "ended";
+      shortlist_status: "offered" | "accepted" | "declined";
       lead_status: "new" | "contacted" | "qualified" | "converted" | "closed";
       lead_event_kind: "call" | "qualification" | "conversion" | "junk" | "note" | "remark";
       employee_gender: "female" | "male" | "non_binary" | "prefer_not_to_say";
@@ -552,6 +632,7 @@ export type Database = {
       meeting_kind: "discovery";
       meeting_status: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "cancelled" | "expired";
       meeting_event_kind: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "note" | "expired";
+      task_status: "todo" | "in_progress" | "done";
     };
     CompositeTypes: { [_ in never]: never };
   };

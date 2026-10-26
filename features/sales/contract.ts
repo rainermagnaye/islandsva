@@ -30,6 +30,9 @@ export function summarizeByMonth(payments: readonly Pick<SalesPayment, "amountCe
   return [...rows.values()];
 }
 
+/** Cents as US dollars. Accounting figures stay in cents until this formats them. */
+export const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
 /** The sum of every row, for the table's footer and the year's cards. */
 export function totalOf(months: readonly SalesMonth[]) {
   return months.reduce((sum, row) => ({ payments: sum.payments + row.payments, grossCents: sum.grossCents + row.grossCents, feeCents: sum.feeCents + row.feeCents, netCents: sum.netCents + row.netCents }), { payments: 0, grossCents: 0, feeCents: 0, netCents: 0 });

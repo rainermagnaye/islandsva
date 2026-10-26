@@ -7,23 +7,27 @@ import type { ClientDetail } from "../contract";
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" });
 
 /** The client's dashboard: their VA (or, before one, their demo call) and their package. Server-rendered. */
-export function ClientDashboard({ client, va, beforeVa }: { client: ClientDetail; va: { firstName: string | null; startedAt: string } | null; beforeVa: ReactNode }) {
+export function ClientDashboard({ client, vas, beforeVa }: { client: ClientDetail; vas: readonly { id: string; firstName: string; startedAt: string }[]; beforeVa: ReactNode }) {
   const pkg = packages.find((item) => item.slug === client.packageCode);
   const term = terms.find((item) => item.months === client.termMonths);
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <Panel title="Your VA">
-        {va ? (
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-pill bg-status-info-bg text-action-secondary" aria-hidden="true">
-              <Icon name="user" />
-            </span>
-            <div className="grid">
-              <span className="type-label">{va.firstName ?? "Your VA"}</span>
-              <span className="type-body-sm text-ink-muted">Working with you since {day.format(new Date(va.startedAt))}</span>
-            </div>
-          </div>
+        {vas.length > 0 ? (
+          <ul className="m-0 grid list-none gap-3 p-0">
+            {vas.map((va) => (
+              <li key={va.id} className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-pill bg-status-info-bg text-action-secondary" aria-hidden="true">
+                  <Icon name="user" />
+                </span>
+                <div className="grid">
+                  <span className="type-label">{va.firstName}</span>
+                  <span className="type-body-sm text-ink-muted">Working with you since {day.format(new Date(va.startedAt))}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : (
           beforeVa
         )}

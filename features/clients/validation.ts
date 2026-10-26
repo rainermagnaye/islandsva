@@ -173,12 +173,11 @@ export const parseOnboarding = (input: unknown) => parseWith(packetSchema, input
 
 const idSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }) });
 
-const assignSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }), vaId: z.uuid({ error: "Choose a VA." }) });
-
-/** Assigning a VA: a bad client id is a tampered form; a missing VA is a field error. */
-export const parseVaAssignment = (input: unknown) => parseWith(assignSchema, input, ["vaId"]);
-
 export const parseClientId = (input: unknown) => parseWith(idSchema, input, []);
+
+const assignmentIdSchema = z.strictObject({ assignmentId: z.uuid({ error: FORM_ERROR }) });
+
+export const parseAssignmentId = (input: unknown) => parseWith(assignmentIdSchema, input, []);
 
 const noteSchema = z.strictObject({
   clientId: z.uuid({ error: FORM_ERROR }),

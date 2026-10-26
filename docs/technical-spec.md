@@ -13,11 +13,11 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | meetings | Every call: kind, organizer, decided by, start, end, status, Google event id, Meet link | Built for discovery calls (M8); attendees and Google (M9); intro and client↔VA kinds (M10, M12) |
 | meeting_events | Meeting history: requested, scheduled, rejected, done, no-show, note, expired | Built (M8); rescheduled (old → new) and cancelled (by whom, app or Google) with M9 |
 | google_connections | An employee's encrypted refresh token, calendar id, push channel | New (M9) |
-| va_working_hours | A VA's weekly hours (PHT) when clients may request meetings | New (M10) |
+| va_working_hours | A VA's weekly hours (PHT), one half-hour window per weekday. Read when intro calls exist | Built (M10); unused until meetings and Google |
 | clients · client_packets · client_notes | Company and package; registration; notes | Built |
-| va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined) | New (M10) |
-| client_va_assignments | Client ↔ VA | Built; allow several active VAs (M10) |
-| tasks · task_comments | Client, VA, title, deadline, status, comments | New (M11) |
+| va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined). Accept creates the assignment | Built (M10) |
+| client_va_assignments | Client ↔ VA, several active VAs, one active row per pair | Built |
+| tasks · task_comments | Client, VA, title, deadline, status, comments | In the migration (built in the app; the audit trigger still waits on audit_log) |
 | audit_log | Append-only: actor (user, Google sync or system), action, record type + id, owning Lead Gen / client, before → after (changed fields only, no PII), at | New (M8) |
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
 | client_onboarding_links · payments | Replaced by the registration packet | Drop |

@@ -5,19 +5,30 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Panel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
-import { countOpenRequests } from "@/features/demos/admin-dal";
-import { listHref } from "./_components/search-params";
+import { packages } from "@/content/packages";
 import { appRoutes } from "@/content/routes";
-import { countClients } from "@/features/clients/dal";
+import { countOpenRequests } from "@/features/demos/admin-dal";
+import { listActiveAssignmentLoads } from "@/features/clients/assignment-dal";
+import { countClients, listActivePackageRows } from "@/features/clients/dal";
+import { vaLoad } from "@/features/clients/load";
+import { packageMix } from "@/features/clients/mix";
 import { LeadsTable } from "@/features/leads/components/leads-table";
 import { countLeads, listLeads } from "@/features/leads/dal";
+import { recurringRevenue } from "@/features/sales/dal";
+import { listTaskMetrics } from "@/features/tasks/dal";
+import { TaskMetrics } from "@/features/tasks/components/task-metrics";
+import { performanceByVa } from "@/features/tasks/metrics";
+import { vaPortalOpen } from "@/features/users/contract";
+import { listUsers, listVaRoster } from "@/features/users/dal";
 import { UsersTable } from "@/features/users/components/users-table";
-import { listUsers } from "@/features/users/dal";
 import { requireRole } from "@/lib/auth/session";
+import { PackageMix, RevenueCard, VaLoad } from "./_components/overview-tables";
+import { listHref } from "./_components/search-params";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
 const RECENT = 5;
+const packageNames = Object.fromEntries(packages.map((item) => [item.slug, item.name]));
 
 export default function AdminHomePage() {
   return (
@@ -30,22 +41,43 @@ export default function AdminHomePage() {
 async function AdminHome() {
   await requireRole(["admin"]);
   // Independent reads, fetched in parallel. Each runs as the signed-in admin, so RLS applies too.
-  const [leadCounts, clientCount, openRequests, recentLeads, recentUsers] = await Promise.all([
+  const [leadCounts, clientCount, openRequests, recentLeads, recentUsers, recurring, packageRows, assignments, roster, taskMetrics] = await Promise.all([
     countLeads(),
     countClients(),
     countOpenRequests(),
     listLeads({ pageSize: RECENT }),
     listUsers(RECENT),
+    recurringRevenue(),
+    listActivePackageRows(),
+    listActiveAssignmentLoads(),
+    listVaRoster(),
+    listTaskMetrics(),
   ]);
+  const openVas = roster
+    .filter((va) => va.roles.includes("va") && vaPortalOpen(va.status, va.reviewStatus))
+    .map((va) => ({ id: va.id, firstName: va.fullName }));
 
   return (
-    <Workspace title="Dashboard" lead="Leads, clients and your team at a glance.">
-      <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <Workspace title="Dashboard" lead="Pipeline, clients, packages and how your VAs are loaded.">
+      <section aria-label="Pipeline" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Total leads" value={leadCounts.total} icon="inbox" href={appRoutes.adminLeads} />
-        <StatCard label="New leads" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />
+        <StatCard label="New" value={leadCounts.new} icon="bell" href={appRoutes.adminLeads} />
+        <StatCard label="Contacted" value={leadCounts.contacted} icon="inbox" href={listHref(appRoutes.adminLeads, { status: "contacted" })} />
+        <StatCard label="Qualified" value={leadCounts.qualified} icon="inbox" href={appRoutes.adminLeads} />
+        <StatCard label="Converted" value={leadCounts.converted} icon="check" href={listHref(appRoutes.adminLeads, { status: "converted" })} />
+        <StatCard label="Closed" value={leadCounts.closed} icon="inbox" href={listHref(appRoutes.adminLeads, { status: "closed" })} caption="Junk leads" />
+      </section>
+
+      <section aria-label="Clients" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total clients" value={clientCount} icon="briefcase" href={appRoutes.adminClients} />
+        <StatCard label="Active clients" value={recurring.clients} icon="briefcase" href={appRoutes.adminClients} />
+        <RevenueCard cents={recurring.cents} />
         <StatCard label="Demo requests" value={openRequests} icon="calendar" href={listHref(appRoutes.adminDemos, { status: "requested" })} caption="Waiting for a VA" />
       </section>
+
+      <PackageMix rows={packageMix(packageRows, packageNames)} />
+      <TaskMetrics tasks={taskMetrics} />
+      <VaLoad rows={vaLoad(openVas, assignments, performanceByVa(taskMetrics, new Date()))} />
 
       <Panel title="Latest leads" action={<ViewAll href={appRoutes.adminLeads}>All leads</ViewAll>}>
         <LeadsTable

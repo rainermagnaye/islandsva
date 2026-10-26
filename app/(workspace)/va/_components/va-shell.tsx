@@ -11,6 +11,8 @@ export function VaShell({ children }: { children: ReactNode }) {
         items={[
           { href: appRoutes.va, label: "Dashboard", icon: "home", exact: true },
           { href: appRoutes.vaClients, label: "Clients", icon: "briefcase" },
+          { href: appRoutes.vaTasks, label: "Tasks", icon: "check" },
+          { href: appRoutes.vaHours, label: "Hours", icon: "clock" },
           { href: appRoutes.vaCalendar, label: "Calendar", icon: "calendar" },
         ]}
       />

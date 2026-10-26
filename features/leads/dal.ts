@@ -192,10 +192,17 @@ const countLeadsWith = cache(async (status?: LeadStatus, search?: string, disabl
 /** Leads waiting for a first reply — the sidebar badge. */
 export const countNewLeads = () => countLeadsWith("new");
 
-/** Lead totals for the dashboard. */
+/** Lead totals for the dashboard. Disabled leads are excluded. There is no "won" status; converted is that count. */
 export async function countLeads() {
-  const [total, fresh] = await Promise.all([countLeadsWith(), countLeadsWith("new")]);
-  return { total, new: fresh };
+  const [total, fresh, contacted, qualified, converted, closed] = await Promise.all([
+    countLeadsWith(),
+    countLeadsWith("new"),
+    countLeadsWith("contacted"),
+    countLeadsWith("qualified"),
+    countLeadsWith("converted"),
+    countLeadsWith("closed"),
+  ]);
+  return { total, new: fresh, contacted, qualified, converted, closed };
 }
 
 /**

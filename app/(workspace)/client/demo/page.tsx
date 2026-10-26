@@ -8,7 +8,7 @@ import { Panel } from "@/components/ui/card";
 import { todayIn, wallClockIn } from "@/components/ui/date-math";
 import { EmptyState } from "@/components/ui/empty-state";
 import { appRoutes } from "@/content/routes";
-import { getActiveAssignment } from "@/features/clients/assignment-dal";
+import { listActiveAssignments } from "@/features/clients/assignment-dal";
 import { getClient, getOwnClientId } from "@/features/clients/dal";
 import { getLatestDemo, listOpenSlots } from "@/features/demos/booking-dal";
 import { BookDemoForm, type BookableSlot } from "@/features/demos/components/book-demo-form";
@@ -31,8 +31,8 @@ async function ClientDemo() {
   const clientId = await getOwnClientId(user.id);
   const client = clientId ? await getClient(clientId) : null;
   if (!client) redirect(appRoutes.client);
-  const [assignment, latest] = await Promise.all([getActiveAssignment(client.id), getLatestDemo(client.id)]);
-  if (assignment || (latest && isOpenDemo(demoState(latest)))) redirect(appRoutes.client);
+  const [assignments, latest] = await Promise.all([listActiveAssignments(client.id), getLatestDemo(client.id)]);
+  if (assignments.length > 0 || (latest && isOpenDemo(demoState(latest)))) redirect(appRoutes.client);
 
   const zone = safeTimeZone(client.timezone);
   // Each time as the wall clock in the client's zone, which the calendar and the time picker show.

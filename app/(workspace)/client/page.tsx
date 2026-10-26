@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ComingSoon, Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
-import { getActiveAssignment, getVaFirstName } from "@/features/clients/assignment-dal";
+import { appRoutes } from "@/content/routes";
+import { listActiveAssignments } from "@/features/clients/assignment-dal";
 import { ClientDashboard } from "@/features/clients/components/client-dashboard";
 import { getLatestDemo } from "@/features/demos/booking-dal";
 import { ClientDemoCard } from "@/features/demos/components/client-demo-card";
 import { getClient, getOwnClientId } from "@/features/clients/dal";
+import { TaskMetrics } from "@/features/tasks/components/task-metrics";
+import { listTasks } from "@/features/tasks/dal";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Your dashboard" };
@@ -30,13 +33,15 @@ async function ClientHome() {
       </Workspace>
     );
   }
-  const assignment = await getActiveAssignment(client.id);
-  const va = assignment ? { firstName: await getVaFirstName(assignment.vaId), startedAt: assignment.startedAt } : null;
-  const demo = va ? null : await getLatestDemo(client.id);
+  const assignments = await listActiveAssignments(client.id);
+  const tasks = await listTasks();
+  const vas = assignments.map((assignment) => ({ id: assignment.id, firstName: assignment.vaName, startedAt: assignment.startedAt }));
+  const demo = vas.length > 0 ? null : await getLatestDemo(client.id);
 
   return (
     <Workspace title={`Welcome, ${client.companyName}`} lead="Your VA and your plan, in one place.">
-      <ClientDashboard client={client} va={va} beforeVa={<ClientDemoCard demo={demo} timeZone={client.timezone} />} />
+      <TaskMetrics tasks={tasks} href={appRoutes.clientTasks} />
+      <ClientDashboard client={client} vas={vas} beforeVa={<ClientDemoCard demo={demo} timeZone={client.timezone} />} />
     </Workspace>
   );
 }
