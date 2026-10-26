@@ -42,6 +42,25 @@ const asUser = <T = Record<string, unknown>>(claims: Claims, sql: string, params
 const asServer = <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => as<T>("service_role", {}, sql, params);
 const ids = (rows: { id: string }[]) => rows.map((r) => r.id).sort();
 
+/** Runs fn in a transaction that is always rolled back, so the shared fixtures stay as they were. */
+async function rolledBack(fn: () => Promise<void>) {
+  await db.exec("begin");
+  try {
+    await fn();
+  } finally {
+    await db.exec("rollback");
+  }
+}
+/**
+ * Inside rolledBack: SQL with the given claims, transaction-local. With a role it switches the way PostgREST does
+ * (`set_config('role', …, true)`); without one it stays a direct session, whose claims anyone could have written.
+ */
+async function direct<T = Record<string, unknown>>(claims: Claims, sql: string, params: unknown[] = [], role?: string) {
+  await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+  if (role) await db.query("select set_config('role', $1, true)", [role]);
+  return (await db.query<T>(sql, params)).rows;
+}
+
 async function hookRoles(userId: string) {
   const event = { user_id: userId, claims: { sub: userId, aal: "aal1", app_metadata: { provider: "email" } } };
   const [row] = await as<{ e: { claims: { app_metadata: { roles: string[]; provider: string } } } }>(
@@ -327,7 +346,17 @@ describe("VA assignments", () => {
     await expect(assign(asCloser)).rejects.toThrow(/permission denied/);
     await expect(assign(asVa)).rejects.toThrow(/permission denied/);
     await expect(assign(asAdmin)).rejects.toThrow(/permission denied/);
-    await expect(as("service_role", asAdmin, "insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientB, VA2])).rejects.toMatchObject({ code: "IVA28" });
+  });
+
+  // The API role decides, not the claims: request.jwt.claims is a setting anyone in a session can write.
+  it("an insert with a user's claims is still the server's under the secret key or in a direct session", async () => {
+    const insert = "insert into public.client_va_assignments (client_id, va_id) values ($1, $2) returning va_id";
+    await rolledBack(async () => {
+      expect(await as("service_role", asAdmin, insert, [clientB, VA2])).toEqual([{ va_id: VA2 }]);
+    });
+    await rolledBack(async () => {
+      expect(await direct(asAdmin, insert, [clientB, VA2])).toEqual([{ va_id: VA2 }]);
+    });
   });
 
   it("only a VA can be assigned, and the same pair cannot be active twice", async () => {
@@ -2543,7 +2572,11 @@ describe("tasks", () => {
     } finally {
       await db.exec("alter table public.task_comments enable trigger task_comments_guard");
     }
-    await expect(as("service_role", asWorker, "update public.tasks set status = 'done' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA24" });
+    // The guard refuses the VA even where RLS would let the write through.
+    await rolledBack(async () => {
+      await db.exec("alter table public.tasks disable row level security");
+      await expect(direct(asWorker, "update public.tasks set status = 'done' where id = $1", [taskId], "authenticated")).rejects.toMatchObject({ code: "IVA24" });
+    });
     await expect(as("service_role", asWorker, "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Still here')", [taskId, WORKER])).rejects.toMatchObject({ code: "IVA24" });
     expect(await asUser(asWorker, "select id from public.tasks where id = $1", [taskId])).toEqual([{ id: taskId }]);
 
@@ -2570,6 +2603,23 @@ describe("tasks", () => {
     await expect(asUser(asWorker, "delete from public.task_comments where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
     await expect(asUser(asOwner, "delete from public.tasks where id = $1", [taskId])).rejects.toThrow(/permission denied/);
     await expect(asUser(asAdmin, "delete from public.tasks where id = $1", [taskId])).rejects.toThrow(/permission denied/);
+  });
+
+  it("a close is the server's in a direct session with a client's claims, and the client's under PostgREST's role", async () => {
+    const closeAs = async (role?: string) => {
+      const [task] = await direct<{ id: string }>(
+        {},
+        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Role check', current_date + 10, $3) returning id",
+        [otherCo, WORKER2, OTHER],
+      );
+      return direct(asOther, "update public.tasks set status = 'done' where id = $1 returning closed_by", [task.id], role);
+    };
+    await rolledBack(async () => {
+      expect(await closeAs()).toEqual([{ closed_by: null }]);
+    });
+    await rolledBack(async () => {
+      expect(await closeAs("authenticated")).toEqual([{ closed_by: OTHER }]);
+    });
   });
 });
 
@@ -2673,5 +2723,41 @@ describe("VA match", () => {
     expect(await asUser(asMatch, "select id from public.va_working_hours where va_id = $1", [VA_M])).toEqual([]);
     await expect(asUser(asCloser, "insert into public.va_working_hours (va_id, weekday, start_minute, end_minute) values ($1, 2, 540, 1020)", [VA_M])).rejects.toMatchObject({ code: "IVA29" });
     expect(await asUser(asAdmin, "select weekday from public.va_working_hours where va_id = $1", [VA_M])).toEqual([{ weekday: 1 }]);
+  });
+
+  it("clears the accept flag after its own insert, so a second signed-in insert in that transaction is refused", async () => {
+    await rolledBack(async () => {
+      // A grant the API doesn't have, so the guard is reached rather than the privilege check.
+      await db.exec("grant insert (client_id, va_id) on public.client_va_assignments to authenticated");
+      const [pending] = await direct<{ id: string }>(
+        asAdmin,
+        "insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id",
+        [company, VA_P, ADMIN],
+        "authenticated",
+      );
+      await direct(asMatch, "update public.va_shortlists set status = 'accepted' where id = $1", [pending.id], "authenticated");
+      await expect(
+        direct(asMatch, "insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [company, VA_N], "authenticated"),
+      ).rejects.toMatchObject({ code: "IVA28" });
+    });
+  });
+
+  it("treats a direct session's claims as the server, and PostgREST's role as a signed-in user", async () => {
+    const offerAsCloser = "insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning va_id";
+    const hours = "insert into public.va_working_hours (va_id, weekday, start_minute, end_minute) values ($1, 3, 540, 1020) returning weekday";
+    await rolledBack(async () => {
+      expect(await direct(asCloser, offerAsCloser, [company, VA_P, ADMIN])).toEqual([{ va_id: VA_P }]);
+    });
+    await rolledBack(async () => {
+      const [pending] = await direct<{ id: string }>({}, "insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3) returning id", [company, VA_P, ADMIN]);
+      // Only the company's signed-in login decides an offer.
+      await expect(direct(asMatch, "update public.va_shortlists set status = 'accepted' where id = $1", [pending.id])).rejects.toMatchObject({ code: "IVA27" });
+    });
+    await rolledBack(async () => {
+      expect(await direct(asCloser, hours, [VA_N])).toEqual([{ weekday: 3 }]);
+    });
+    await rolledBack(async () => {
+      await expect(direct(asCloser, hours, [VA_N], "authenticated")).rejects.toMatchObject({ code: "IVA29" });
+    });
   });
 });
