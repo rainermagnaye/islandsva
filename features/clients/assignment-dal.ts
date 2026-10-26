@@ -68,11 +68,13 @@ export async function getVaFirstName(vaId: string) {
  * assignments and the clients behind them; the va_id filter keeps it to them even for a reader with more access.
  */
 export async function listAssignedClients(vaId: string): Promise<AssignedClient[]> {
+  // Named foreign key: clients is linked twice (client_id, and the (client_id, tenant_id) tenant key), so an
+  // unnamed embed is ambiguous and PostgREST refuses it (PGRST201).
   if (!isUuid(vaId)) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("client_va_assignments")
-    .select("started_at, client:clients!inner(id, company_name, contact_name, contact_email, timezone, hours_per_week)")
+    .select("started_at, client:clients!client_va_assignments_client_id_fkey!inner(id, company_name, contact_name, contact_email, timezone, hours_per_week)")
     .eq("va_id", vaId)
     .eq("status", "active")
     .order("started_at", { ascending: false });
