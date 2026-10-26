@@ -1,49 +1,53 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Form } from "@/components/ui/form";
 import { TextField } from "@/components/ui/text-field";
+import { TimeSlotPicker } from "@/components/ui/time-slot-picker";
 import { bookDemoAction } from "../booking-actions";
-import { DEMO_LIMITS, type BookField } from "../contract";
+import { DEMO_LIMITS, VA_TIME_ZONE, type BookField } from "../contract";
 
-export type TimeGroup = { day: string; times: { slotId: string; label: string }[] };
+/** One bookable time: the slot to book and its wall-clock start in the client's zone ("2026-11-03T09:30"). */
+export type BookableSlot = { slotId: string; start: string };
 
 /**
- * "Book a demo": open times grouped by day in the client's time zone (formatted on the server), picked with
- * native radio buttons, plus an optional note for the VA.
+ * "Book a demo": a calendar of the days with open times (the rest can't be picked), then that day's times in the
+ * client's zone with the VA's Manila time under each, and an optional note. The form posts the slot id; the
+ * server books it and refuses one taken meanwhile.
  */
-export function BookDemoForm({ groups, zoneLabel }: { groups: readonly TimeGroup[]; zoneLabel: string }) {
+type BookDemoFormProps = {
+  slots: readonly BookableSlot[];
+  timeZone: string;
+  /** Today in the client's zone, computed on the server: client components don't read the clock while rendering. */
+  today: string;
+};
+
+export function BookDemoForm({ slots, timeZone, today }: BookDemoFormProps) {
+  const days = [...new Set(slots.map((slot) => slot.start.slice(0, 10)))].sort();
+  const [day, setDay] = useState(days[0]);
+  const daySlots = slots.filter((slot) => slot.start.startsWith(day));
+
   return (
     <Form<BookField> aria-label="Book a demo call" onSubmit={bookDemoAction} className="gap-5">
       {({ pending, fieldErrors }) => (
         <>
-          <fieldset className="m-0 grid gap-4 border-0 p-0" aria-describedby={fieldErrors.slotId ? "slot-error" : "slot-hint"}>
-            <legend className="mb-1 type-label text-ink">Pick a time</legend>
-            <p id="slot-hint" className="m-0 type-body-sm text-ink-muted">
-              Times are in {zoneLabel}. Each call is 30 minutes.
-            </p>
-            {groups.map((group) => (
-              <div key={group.day} className="grid gap-2">
-                <p className="m-0 type-body-sm text-ink-muted">{group.day}</p>
-                <div className="flex flex-wrap gap-2">
-                  {group.times.map((time) => (
-                    <label
-                      key={time.slotId}
-                      className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border px-3 type-body-sm text-ink has-[:checked]:border-action-secondary has-[:checked]:bg-status-info-bg"
-                    >
-                      <input type="radio" name="slotId" value={time.slotId} required />
-                      {time.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {fieldErrors.slotId && (
-              <p id="slot-error" className="m-0 type-label text-status-danger">
-                {fieldErrors.slotId}
-              </p>
-            )}
-          </fieldset>
+          <div className="grid items-start gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
+            <Calendar
+              value={day}
+              onChange={setDay}
+              min={days[0]}
+              max={days.at(-1)}
+              defaultMonth={days[0]}
+              isDateDisabled={(date) => !days.includes(date)}
+              today={today}
+            />
+            <div className="grid gap-2">
+              <TimeSlotPicker key={day} date={day} timeZone={timeZone} otherTimeZone={VA_TIME_ZONE} name="slotId" slots={daySlots.map((slot) => ({ start: slot.start, value: slot.slotId }))} />
+              {fieldErrors.slotId && <p className="m-0 type-label text-status-danger">{fieldErrors.slotId}</p>}
+            </div>
+          </div>
           <TextField
             label="Anything your VA should know?"
             name="note"

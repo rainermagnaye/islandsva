@@ -14,6 +14,7 @@ import {
   partOfDay,
   startOfWeek,
   todayIn,
+  wallClockIn,
 } from "./date-math";
 
 describe("calendar dates", () => {
@@ -74,6 +75,8 @@ describe("times and zones", () => {
     // New York leaves daylight saving on Nov 1, 2026: 9 pm is then UTC-5.
     expect(convertWallClock("2026-11-05T21:00", "America/New_York", "Asia/Manila")).toEqual({ date: "2026-11-06", time: "10:00" });
     expect(convertWallClock("2026-10-16T09:00", "Asia/Manila", "Asia/Manila")).toEqual({ date: "2026-10-16", time: "09:00" });
+    expect(wallClockIn("2026-11-03T01:30:00.000Z", "Asia/Manila")).toBe("2026-11-03T09:30");
+    expect(wallClockIn("2026-11-03T01:30:00.000Z", "America/New_York")).toBe("2026-11-02T20:30");
   });
 });
 

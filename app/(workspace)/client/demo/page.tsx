@@ -5,12 +5,13 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/card";
+import { todayIn, wallClockIn } from "@/components/ui/date-math";
 import { EmptyState } from "@/components/ui/empty-state";
 import { appRoutes } from "@/content/routes";
 import { getActiveAssignment } from "@/features/clients/assignment-dal";
 import { getClient, getOwnClientId } from "@/features/clients/dal";
 import { getLatestDemo, listOpenSlots } from "@/features/demos/booking-dal";
-import { BookDemoForm, type TimeGroup } from "@/features/demos/components/book-demo-form";
+import { BookDemoForm, type BookableSlot } from "@/features/demos/components/book-demo-form";
 import { bookableTimes, demoState, isOpenDemo, safeTimeZone } from "@/features/demos/contract";
 import { requireRole } from "@/lib/auth/session";
 
@@ -34,16 +35,8 @@ async function ClientDemo() {
   if (assignment || (latest && isOpenDemo(demoState(latest)))) redirect(appRoutes.client);
 
   const zone = safeTimeZone(client.timezone);
-  const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: zone });
-  const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: zone });
-  const groups: TimeGroup[] = [];
-  for (const slot of bookableTimes(await listOpenSlots())) {
-    const label = day.format(new Date(slot.startsAt));
-    const group = groups.at(-1)?.day === label ? groups.at(-1) : undefined;
-    const entry = { slotId: slot.slotId, label: time.format(new Date(slot.startsAt)) };
-    if (group) group.times.push(entry);
-    else groups.push({ day: label, times: [entry] });
-  }
+  // Each time as the wall clock in the client's zone, which the calendar and the time picker show.
+  const slots: BookableSlot[] = bookableTimes(await listOpenSlots()).map((slot) => ({ slotId: slot.slotId, start: wallClockIn(slot.startsAt, zone) }));
 
   return (
     <Workspace
@@ -52,8 +45,8 @@ async function ClientDemo() {
       breadcrumbs={<Breadcrumbs items={[{ label: "Dashboard", href: appRoutes.client }, { label: "Book a demo call" }]} />}
     >
       <Panel title="Available times">
-        {groups.length > 0 ? (
-          <BookDemoForm groups={groups} zoneLabel={`${zone.replace(/_/g, " ")} time`} />
+        {slots.length > 0 ? (
+          <BookDemoForm slots={slots} timeZone={zone} today={todayIn(zone)} />
         ) : (
           <EmptyState
             compact
