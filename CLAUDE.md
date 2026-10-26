@@ -8,16 +8,17 @@ Rules for the team and AI agents; change them by PR. This file holds everyday ru
 |---|---|
 | Database — migrations, grants, RLS, access model, database tests | `supabase/CLAUDE.md` (loaded when working there) |
 | UI — design system, tokens, components, voice and brand | `components/CLAUDE.md` (loaded when working there) |
-| Setup, applying migrations, launch · decisions · roadmap and pending work | `docs/operations.md` · `docs/decisions.md` · `docs/roadmap.md` (for people; not loaded) |
+| Product and users · milestones, launch and parked work · data model, status flows, integrations | `docs/product.md` · `docs/mvp.md` · `docs/technical-spec.md` (for people; not loaded) |
+| Setup, applying migrations, launch steps · decisions | `docs/operations.md` · `docs/decisions.md` (for people; not loaded) |
 | Subagent roles | `.claude/agents/` (§10) |
 
 ## 1. Project
 
-- **Product:** B2B virtual-assistant staffing platform — public site, client/VA portal, agency back office. Scope: `Island-VA-MVP.docx`.
+- **Product:** B2B virtual-assistant staffing platform — public site, client/VA portal, agency back office. Scope: `docs/product.md`.
 - **Stack:** Next.js 16 App Router (React 19, TS strict, Tailwind v4, `cacheComponents`, `partialPrefetching`) · Supabase (Singapore) · Vercel · Resend · Cloudflare Turnstile. Runtime deps stay minimal; `zod` and the Supabase packages are server-only and never reach the browser.
 - **Priorities:** secure → correct → maintainable → performant.
-- **Phase:** M7 — admin lists and sales summary; M1–M3, M5 and M6 are done and M4 (Stripe) is paused (`docs/roadmap.md`). **Build only the current phase.** Not in the MVP: blog, chatbot, client rating, VA mailer, salary deductions, Staff module, native apps, i18n.
-- **Domain:** roles Client, VA, Closer (also called lead gen), Admin, plus Super Admin across tenants (a user can hold several). *Tenant* = an agency using the platform; today there is one ("Islands VA"), and every user and record belongs to exactly one. *Lead* = contact-form submission. *Client* = a company record, `pending` until activated; it gets a login only when invited. After conversion, one stable link (no sign-in) opens that client's registration, consent and payment proof. *Staff* = VA, Closer or Admin. Accounts are invite-only, and deactivated, never deleted.
+- **Phase:** M7 — admin lists and sales summary; M1–M3, M5 and M6 are done; next M8 discovery calls, M9 Google, M10 VA Match, M11 tasks, M12 client↔VA meetings, M13 admin overview (`docs/mvp.md`). **Build only the current phase.** Not in the MVP: time tracking, call reminders, payment automation (Stripe), client rating, blog, chatbot, VA mailer, salary deductions, payroll, native apps, i18n.
+- **Domain:** roles Client, VA, Closer (also called lead gen), Admin, plus Super Admin across tenants (a user can hold several). *Tenant* = an agency using the platform; today there is one ("Islands VA"), and every user and record belongs to exactly one. *Lead* = contact-form submission with a requested discovery call; the Closer who confirms the call owns the lead. *Client* = a company record, `pending` until activated; it gets a login only when invited. After conversion, one stable link (no sign-in) opens that client's registration, consent and payment proof. *Staff* = VA, Closer or Admin. Accounts are invite-only, and deactivated, never deleted.
 
 ## 2. Commands
 
@@ -67,7 +68,7 @@ types/                shared types only (api, form, icon, turnstile, database)
 content/              typed static content; content/routes.ts is the only source of internal URLs
 supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)
 design/ · scripts/    tokens, logo sources, design-system PDF · build-tokens, check-bundle, create-admin
-docs/ · .claude/      runbooks, decisions, roadmap · launch.json (preview servers), agents/ (§10)
+docs/ · .claude/      product, MVP plan, technical spec, runbooks, decisions · launch.json (preview servers), agents/ (§10)
 proxy.ts              session refresh + convenience redirects on auth/portal routes (never authorization)
 vercel.json           function region sin1 (next to Supabase); no Git deploys of `staging` (CI deploys it)
 ```
@@ -114,7 +115,7 @@ vercel.json           function region sin1 (next to Supabase); no Git deploys of
 - **Headers** (`next.config.ts`): HSTS, nosniff, strict referrer, restrictive `Permissions-Policy`, no framing, and a static CSP without nonces (nonces would make every page dynamic); CSP and HSTS in production builds only.
 - **Sessions:** `@supabase/ssr` cookie sessions, server-side only. Verify with `getClaims()` (checks the signature); never trust `getSession()` on the server. `getSessionUser()` is cached per request.
 - **Accounts and roles:** invite-only, sign-up disabled (admins invite staff from Teams; Closers onboard and activate clients in M3). Supabase Auth owns `auth.users`; `profiles` (same id) holds `status`: `invited` → `active` on first sign-in, except a VA, who stays `invited` until an admin confirms their profile → `inactive` when deactivated. Roles live in `roles` (one row per user per role; `app_role` = `ROLES` in `lib/auth/roles.ts`, highest precedence first), written only by the server. The `custom_access_token_hook` copies them, and the user's `tenant_id`, into `app_metadata` (never `user_metadata`); inactive users get no roles; changes apply at the next token refresh (≤ 1 hour). The hook must be enabled in the Supabase dashboard — without it nobody gets a role. Only a Super Admin grants `admin` or `super_admin`; an admin grants roles only inside their tenant; an active Closer grants only `client`, inside their tenant, when activating a client they onboarded (all enforced by the database from `roles.assigned_by`).
-- **Tenants:** RLS keeps every user inside their own tenant; a Super Admin with two-factor sees all. The app doesn't act on `super_admin` yet — a Super Admin also holds `admin` (`docs/roadmap.md`). Database rules: `supabase/CLAUDE.md`.
+- **Tenants:** RLS keeps every user inside their own tenant; a Super Admin with two-factor sees all. The app doesn't act on `super_admin` yet — a Super Admin also holds `admin` (`docs/mvp.md`). Database rules: `supabase/CLAUDE.md`.
 - **Two-factor:** admins and Super Admins need TOTP (`aal2`), enforced by `requireRole` and again by RLS. `/mfa` sets up an authenticator app on first use, then asks for a code at each sign-in.
 - **Sign-in:** users go straight to their workspace (`homeFor(roles)` from the new token; admins via `/mfa`); `/dashboard` is only the fallback without a role; `?next=` goes through `safeNextPath` (same-site paths only). Credential errors share one message and "forgot password" always reports success (no account enumeration). Passwords 10–72 characters with letters and digits.
 - **Email links:** invite and reset use the `supabase/templates/` token-hash links to `/auth/confirm` — the one GET route outside `createHandler`, which accepts only `invite` / `recovery`, verifies server-side and redirects to fixed paths.

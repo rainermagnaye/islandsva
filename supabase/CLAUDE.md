@@ -8,7 +8,7 @@ Loaded when working in `supabase/`. Project-wide rules are in the root `CLAUDE.m
 - Reviewed in a `db/` PR and applied by a human, as one transaction that also records itself in `supabase_migrations.schema_migrations`, after a rehearsal on PGlite (procedure: `docs/operations.md`). No unrecorded dashboard edits.
 - Applied so far (live: 31, up to `20261026040618`): `initial_schema`, `admin_leads_access`, `staff_profiles`, `staff_profiles_hardening`, `leads_created_at_index`, `super_admin_role`, `tenants`, `staff_avatar`, `lead_industry_country`, `lead_events`, `lead_call_attachment`, `lead_note_attachment`, `staff_references`, `client_package_setup`, `client_registration`, `client_notes`, `client_disabled`, `va_review`, `staff_address_fields`, `drop_address_parking`, `client_onboarding`, `client_activation`, `demo_scheduling`, `restore_assign_tenant_cases`, `activate_client_on_sign_in`, `payment_at_review`, plus the registration-packet five from #54 (`20261024022640_client_onboarding`, `client_review`, `client_review_return`, `client_timezone_from_country`, `staff_time_format`). Check against `supabase_migrations.schema_migrations` before trusting this list.
 - `config.toml` configures only a local stack; hosted settings (auth hooks, SMTP, redirect URLs) are set in the dashboard.
-- After a schema change, `types/database.ts` must match (hand-written until it is regenerated — see `docs/roadmap.md`).
+- After a schema change, `types/database.ts` must match (hand-written until it is regenerated — see `docs/mvp.md`).
 
 ## Grants and RLS
 
@@ -71,7 +71,7 @@ A code means something only together with the function that raised it: each `dal
 | `IVA19` | Outside the booking window (4 hours to 14 days ahead) | `book_demo` |
 | `IVA20` | The demo can't change now (started, or already answered) · a booked slot can't be deleted | `decide_demo`, `cancel_demo`, `guard_slot_delete` |
 
-`issue_onboarding_link`, `revoke_onboarding_link`, `submit_onboarding`, `record_manual_payment`, `void_payment` and `activate_client` are live but unused since the registration packet replaced them (roadmap: cleanup migration).
+`issue_onboarding_link`, `revoke_onboarding_link`, `submit_onboarding`, `record_manual_payment`, `void_payment` and `activate_client` are live but unused since the registration packet replaced them (`docs/mvp.md`: cleanup migration).
 
 ## Tests (`supabase/tests/database.test.ts`)
 
