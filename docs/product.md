@@ -27,7 +27,7 @@ One platform for an agency: a public site that books discovery calls, a Lead Gen
 2. **Confirm:** any Lead Gen confirms the call — and becomes the lead's owner — or rejects it as junk. Confirming creates a Google Calendar event with a Meet link on that Lead Gen's calendar; Google emails the visitor the invite.
 3. **Outcome:** cancellations made in Google sync back; the Lead Gen records Done or No-show.
 4. **Won:** one click creates the client and emails the registration link (business and billing details, consent, payment proof). An admin approves it.
-5. **VA Match:** the admin shortlists 1–3 VAs; the client accepts one, or books an intro call with one first. Accepting assigns the VA; "Send activation" follows.
+5. **VA Match:** the admin shortlists 1–3 VAs; the client accepts one, or requests an intro call with one first (the VA confirms). Accepting assigns the VA; "Send activation" follows.
 6. **Work:** the client creates tasks with deadlines for their VAs; the VA updates status; both see progress.
 7. **Meetings:** once the client is subscribed and has VAs working for them, the client or any of those VAs schedules a meeting — no approval step; it is booked at once and Google sends the invite with a Meet link. What matters is its status: scheduled, rescheduled, cancelled, done or no-show. Both see upcoming meetings, history and notes.
 
