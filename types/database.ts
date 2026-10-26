@@ -74,6 +74,8 @@ type PaymentRow = {
   provider: Enum<"payment_provider">;
   status: Enum<"payment_status">;
   amount_cents: number;
+  /** A bank or transfer fee, at most the amount; gross minus fees is net. */
+  fee_cents: number;
   currency: string;
   term_months: number;
   provider_ref: string | null;
@@ -407,6 +409,10 @@ export type Database = {
         Returns: string;
       };
       void_payment: { Args: { payment_id: string; voided_by: string }; Returns: undefined };
+      accept_client_review_paid: {
+        Args: { client_id: string; actor: string; amount_cents: number; fee_cents: number; paid_on: string; reference: string | null };
+        Returns: string;
+      };
       activate_client: { Args: { client_id: string; user_id: string; activated_by: string }; Returns: undefined };
       issue_client_onboarding_link: { Args: { client_id: string; token: string; token_hash: string }; Returns: undefined };
       save_client_review: { Args: { client_id: string; issues: string[]; note: string }; Returns: undefined };

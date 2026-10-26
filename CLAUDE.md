@@ -47,7 +47,7 @@ app/                  routes only — thin pages and endpoints
   (workspace)/        portal: dashboard (fallback) · client · va · closer (their clients: list · new · profile) · admin (admins only)
   auth/confirm/       email-link landing (token hash → session)
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
-features/<feature>/   one business area (today: auth, leads, clients, users, demos)
+features/<feature>/   one business area (today: auth, leads, clients, users, demos, sales)
   contract.ts         [shared] payload/response types, labels, limits — no Zod, safe for client imports
   validation.ts       [server] Zod schemas + parseX()
   service.ts          [server] use cases — the business logic routes and actions call (simple CRUD skips it)

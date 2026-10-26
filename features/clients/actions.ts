@@ -7,12 +7,12 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, OnboardingField } from "./contract";
+import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, OnboardingField, PaymentReceivedField } from "./contract";
 import { acceptClientAttachment } from "./attachment";
 import { acceptPaymentProof } from "./payment-proof";
 import { registrationOrigin } from "./link";
-import { addClientNote, confirmClientReview, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, submitOnboarding, updateClientDetails } from "./service";
-import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding } from "./validation";
+import { addClientNote, confirmClientReviewPaid, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, submitOnboarding, updateClientDetails } from "./service";
+import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parsePaymentReceived } from "./validation";
 
 /** A Closer adds a pending client with the agreed package, then lands on its profile. */
 export async function addClientProfile(formData: FormData): Promise<SubmitResult<NewClientField>> {
@@ -150,15 +150,23 @@ export async function generateOnboardingLink(formData: FormData): Promise<Submit
   return { ok: true };
 }
 
-/** Accepts the registration. The profile on the page is the review. */
-export async function confirmClientRegistration(clientId: string): Promise<SubmitResult> {
-  await requireRole(["admin"]);
-  const parsed = parseClientId({ clientId });
-  if (!parsed.ok) return { ok: false, message: "This registration is not in review. Refresh the page." };
+/** Accepts the registration and records the payment received (the proof is in the packet). */
+export async function confirmClientRegistration(formData: FormData): Promise<SubmitResult<PaymentReceivedField>> {
+  const user = await requireRole(["admin"]);
+  const parsed = parsePaymentReceived(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
 
   try {
-    const result = await confirmClientReview(parsed.value.clientId);
-    if (!result.ok) return { ok: false, message: "This registration is not in review. Refresh the page." };
+    const result = await confirmClientReviewPaid(parsed.value, user.id);
+    if (!result.ok) {
+      const message =
+        result.reason === "not_allowed"
+          ? "Only an admin of this agency can confirm registrations."
+          : result.reason === "invalid"
+            ? "That amount, fee or date can't be recorded. Check them and try again."
+            : "This registration is not in review. Refresh the page.";
+      return { ok: false, message };
+    }
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Client review failed", { service: error.service, error });

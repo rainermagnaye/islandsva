@@ -8,31 +8,15 @@ import { Form } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
 import type { SubmitResult } from "@/types/form";
-import { confirmClientRegistration, returnClientRegistration } from "../actions";
+import { returnClientRegistration } from "../actions";
 import { CLIENT_REVIEW_NOTE_LIMIT, CLIENT_REVIEW_SECTIONS, CLIENT_REVIEW_SECTION_LABELS, type ClientDetail, type ClientPacketSummary } from "../contract";
 import { ClientConsents, ClientInvoices, ClientProfileView } from "./client-profile-view";
+import { ConfirmPaymentForm } from "./confirm-payment-form";
 
 /** Review opens the packet. Confirm and return stay inside it, so they are not offered before the details have been read. */
 export function ClientReviewActions({ client, packet, menu }: { client: ClientDetail; packet: ClientPacketSummary; menu: ReactNode }) {
   const [reviewing, setReviewing] = useState(false);
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
-
-  async function confirm() {
-    setPending(true);
-    setError(undefined);
-    try {
-      const result = await confirmClientRegistration(client.id);
-      if (result.ok) setReviewing(false);
-      else setError(result.message);
-    } catch {
-      setError("We couldn't confirm that registration. Check your connection and try again.");
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function sendBack(formData: FormData): Promise<SubmitResult<"note" | "sections">> {
     formData.set("clientId", client.id);
     try {
@@ -52,10 +36,7 @@ export function ClientReviewActions({ client, packet, menu }: { client: ClientDe
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
           type="button"
-          onClick={() => {
-            setError(undefined);
-            setReviewing(true);
-          }}
+          onClick={() => setReviewing(true)}
         >
           Review
         </Button>
@@ -68,15 +49,16 @@ export function ClientReviewActions({ client, packet, menu }: { client: ClientDe
           {packet.paymentProofName && (
             <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} country={client.business.country} />
           )}
-          {error && <Alert tone="danger" title={error} />}
-          <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" onClick={() => setOpen(true)} disabled={pending}>
-              Return for changes
-            </Button>
-            <Button type="button" onClick={confirm} loading={pending}>
-              {pending ? "Saving" : "Confirm registration"}
-            </Button>
-          </div>
+          <ConfirmPaymentForm
+            clientId={client.id}
+            monthlyCents={client.monthlyCents}
+            onDone={() => setReviewing(false)}
+            secondary={
+              <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
+                Return for changes
+              </Button>
+            }
+          />
         </div>
       </Modal>
       <Modal

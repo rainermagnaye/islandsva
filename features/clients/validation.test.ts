@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClientDetails, parseClientFlag, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parseVaAssignment } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parseVaAssignment, parsePaymentReceived } from "./validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
 
@@ -218,5 +218,32 @@ describe("parseVaAssignment", () => {
     expect(parseVaAssignment({ clientId, vaId: "" })).toMatchObject({ ok: false, fieldErrors: { vaId: "Choose a VA." } });
     expect(parseVaAssignment({ clientId: "x", vaId })).toMatchObject({ ok: false, formError: expect.any(String) });
     expect(parseVaAssignment({ clientId, vaId, assignedBy: vaId })).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parsePaymentReceived", () => {
+  const today = "2026-10-26";
+  const base = { clientId, amount: "855.00", fee: "", paidOn: "2026-10-20", reference: " TRX-1 " };
+
+  it("turns the amount and fee into cents and trims the reference", () => {
+    expect(parsePaymentReceived(base, today)).toEqual({ ok: true, value: { clientId, amount: 85500, fee: 0, paidOn: "2026-10-20", reference: "TRX-1" } });
+    expect(parsePaymentReceived({ ...base, fee: "15.5", reference: "" }, today)).toMatchObject({ ok: true, value: { fee: 1550, reference: null } });
+    expect(parsePaymentReceived({ ...base, amount: "0.1" }, today)).toMatchObject({ ok: true, value: { amount: 10 } });
+  });
+
+  it("asks for a positive amount and a fee no bigger than it", () => {
+    expect(parsePaymentReceived({ ...base, amount: "" }, today)).toMatchObject({ fieldErrors: { amount: expect.any(String) } });
+    expect(parsePaymentReceived({ ...base, amount: "0" }, today)).toMatchObject({ fieldErrors: { amount: "Enter an amount above 0." } });
+    expect(parsePaymentReceived({ ...base, amount: "12.345" }, today)).toMatchObject({ fieldErrors: { amount: expect.any(String) } });
+    expect(parsePaymentReceived({ ...base, amount: "10", fee: "10.01" }, today)).toMatchObject({ fieldErrors: { fee: "The fee can't be more than the amount." } });
+    expect(parsePaymentReceived({ ...base, fee: "-1" }, today)).toMatchObject({ fieldErrors: { fee: expect.any(String) } });
+  });
+
+  it("refuses a future date, a long reference and a tampered form", () => {
+    expect(parsePaymentReceived({ ...base, paidOn: "2026-10-27" }, today)).toMatchObject({ fieldErrors: { paidOn: "The date can't be in the future." } });
+    expect(parsePaymentReceived({ ...base, paidOn: "2026-10-26" }, today)).toMatchObject({ ok: true });
+    expect(parsePaymentReceived({ ...base, reference: "x".repeat(201) }, today)).toMatchObject({ fieldErrors: { reference: expect.any(String) } });
+    expect(parsePaymentReceived({ ...base, clientId: "nope" }, today)).toEqual({ ok: false, formError: expect.any(String) });
+    expect(parsePaymentReceived({ ...base, actor: clientId }, today)).toEqual({ ok: false, formError: expect.any(String) });
   });
 });

@@ -198,6 +198,10 @@ export const CLIENT_REVIEW_SECTION_LABELS: Record<ClientReviewSection, string> =
 };
 export const CLIENT_REVIEW_NOTE_LIMIT = 500;
 
+/** Recording the payment received when a registration is confirmed (the sales summary totals these). */
+export const PAYMENT_RECEIVED_LIMITS = { reference: 200, maxAmountCents: 100_000_000 } as const;
+export type PaymentReceivedField = "amount" | "fee" | "paidOn" | "reference";
+
 /** Accepts a text array, or the `{basic,address}` text Postgres can return for one. */
 export function clientReviewSections(value: unknown): ClientReviewSection[] {
   const items = Array.isArray(value) ? value : typeof value === "string" ? value.replace(/^\{|\}$/g, "").split(",") : [];
