@@ -65,6 +65,8 @@ Migrations are applied by a person, one at a time, in order. The CLI isn't linke
 
 If any statement fails, the transaction rolls back and nothing is applied.
 
+**If the audit log starts refusing writes** (the `*_audit` triggers sit on every write to leads, meetings, clients, assignments, roles and account status, so a fault there stops the contact form or sign-in): a person disables the failing trigger — `alter table public.<table> disable trigger <table>_audit;` — and fixes forward with a new migration that re-enables it. Writes made meanwhile aren't audited; note the window.
+
 ### Creating an admin
 
 1. Create the user in the dashboard (Authentication → Users), or invite them from Teams once an admin exists.
