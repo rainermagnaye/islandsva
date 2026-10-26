@@ -109,7 +109,7 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 
 | Milestone | Feature folder | Routes |
 |---|---|---|
-| M8 | `features/meetings` (discovery first) · `features/audit` | `api/v1/discovery-slots`; Lead Gen inbox, schedule, call history and activity under `closer/` |
+| M8 | `features/meetings` (started: discovery times in `/admin/settings`; now in the §3 map) · `features/audit` | `api/v1/discovery-slots`; Lead Gen inbox, schedule, call history and activity under `closer/` |
 | M9 | `features/google` | `api/v1/google/calendar-events`; Google connect / callback |
 | M10 | `features/matching` (replaces `features/demos`) | client VA Match; VA working hours |
 | M11 | `features/tasks` | client and VA task pages |
