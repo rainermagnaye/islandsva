@@ -23,8 +23,8 @@ One platform for an agency: a public site that books discovery calls, a Lead Gen
 
 ## Journey
 
-1. **Enquiry + booking:** the visitor fills in the contact form, then picks an open discovery-call time → a lead and a call request; the agency is emailed.
-2. **Confirm:** any Lead Gen confirms the call — and becomes the lead's owner — or rejects it as junk. Confirming creates a Google Calendar event with a Meet link on that Lead Gen's calendar; Google emails the visitor the invite.
+1. **Enquiry + booking:** the visitor fills in the contact form and picks an open discovery-call time → a call request; the agency is emailed, and the visitor gets an acknowledgement ("we've received your request for [time]; we'll confirm it shortly by email"). Until a Lead Gen confirms, it is a request, not a lead.
+2. **Confirm:** any Lead Gen confirms the call — the request becomes their lead — or rejects it as junk. On confirm the visitor is emailed that the call is confirmed ("see you then"); from M9 that is Google's calendar invite with the Meet link, created on the Lead Gen's calendar. A rejected request is never a lead and gets no email. A request nobody confirms by 2 hours before its time expires, and the visitor is emailed to pick another time.
 3. **Outcome:** cancellations made in Google sync back; the Lead Gen records Done or No-show.
 4. **Won:** one click creates the client and emails the registration link (business and billing details, consent, payment proof). An admin approves it.
 5. **VA Match:** the admin shortlists 1–3 VAs; the client accepts one, or requests an intro call with one first (the VA confirms). Accepting assigns the VA; "Send activation" follows.
