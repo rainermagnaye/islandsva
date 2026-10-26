@@ -103,7 +103,3 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 Supabase (database, auth) · Resend (email) · Cloudflare Turnstile · Google Calendar + Meet (OAuth per employee).
 
 New env vars (M9): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_KEY` (encrypts stored refresh tokens).
-
-## Environments
-
-Local, staging and production share one Supabase project until the staging project exists — test only with test data (`docs/operations.md`).

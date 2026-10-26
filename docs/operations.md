@@ -4,10 +4,7 @@ How to set up, change and run the live project. Rules for writing code are in `C
 
 ## Environment and secrets
 
-- `.env` (committed) holds non-secret defaults and lists every other key as a comment. Real values and all secrets go in `.env.local` (git-ignored), which overrides `.env`. `npm test` fails if a secret is set in `.env`.
-- Server code reads env only through `lib/env.ts`; a missing key fails just the request that needs it.
-- `SUPABASE_SECRET_KEY` bypasses row-level security — server only, never `NEXT_PUBLIC_`.
-- Production keys live in Vercel, marked Sensitive.
+`.env` (committed) holds non-secret defaults and names every other key in a comment; `.env.local` (git-ignored) overrides it. The rules for secrets are in `CLAUDE.md` §6.
 
 ## Supabase
 
@@ -79,11 +76,6 @@ If any statement fails, the transaction rolls back and nothing is applied.
 The server log names the Supabase Auth code (`Sign-in failed (configuration): <code>`). `email_provider_disabled` → re-enable the Email provider; `invalid_api_key` → check `SUPABASE_PUBLISHABLE_KEY`; an account that signs in but lands on "not set up yet" → the access token hook is off or the account has no role.
 
 Reset or invite emails: "We couldn't send the reset email" is Supabase answering 5xx, logged as `Supabase Auth unavailable (supabase-auth, <status>, <code>): <message>`. Usually the email can't be sent: custom SMTP is on but the Resend domain isn't verified yet, or the sender address isn't on that domain (steps 3 in Supabase above). Supabase → Authentication → Logs shows the SMTP error. Without custom SMTP, Supabase only emails the project's team members — others are logged as `Password reset email not sent: <code>` while the visitor still sees success.
-
-## Local development
-
-- `npm run dev` on port 3000 — one dev server per folder. Restart it after a `next build` in the same folder.
-- Run `npm run lint`, `typecheck`, `test` and `build` one after another before every push.
 
 ## Staging
 
