@@ -18,6 +18,7 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined) | New (M10) |
 | client_va_assignments | Client ↔ VA | Built; allow several active VAs (M10) |
 | tasks · task_comments | Client, VA, title, deadline, status, comments | New (M11) |
+| audit_log | Append-only: actor (user, Google sync or system), action, record type + id, owning Lead Gen / client, before → after (changed fields only, no PII), at | New (M8) |
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
 | client_onboarding_links · payments | Replaced by the registration packet | Drop |
 
@@ -62,6 +63,13 @@ One model for every call; one Google integration; one history.
 - Google is called over REST with `fetch` — no SDK dependency. Scopes: `calendar.events`, `calendar.freebusy`.
 - The OAuth app is **External** (staff use their own Google accounts), so production needs Google's verification for sensitive scopes: verified `islandsva.com`, the privacy policy, a demo video. While unverified, refresh tokens expire after 7 days — start verification in M9.
 
+## Audit log
+
+- Written by database triggers on leads, meetings, clients, assignments, shortlists, tasks and roles — so nothing that changes a row can skip it, whether it's the app, an admin or Google sync.
+- Append-only: no update or delete grant for anyone, the secret key included in app code.
+- Records changed field names and safe values (statuses, times, ids); free text and contact details stay out.
+- The timelines (`lead_events`, `meeting_events`, `client_notes`) stay the readable story; the audit log is the who-did-what record behind them.
+
 ## Metrics
 
 Computed from data, never typed in. On-time rate = tasks done by their deadline ÷ tasks done. Contracted revenue = active clients' `monthly_cents`. Lead Gen results = calls confirmed, done, no-show, won. Meetings = held, cancelled, no-show, per client and per VA.
@@ -72,10 +80,10 @@ Roles and `tenant_id` come from the token; pages call `requireRole`, RLS checks 
 
 | Role | Sees |
 |---|---|
-| Lead Gen | The shared inbox of requested discovery calls; leads, meetings and clients they own |
+| Lead Gen | The shared inbox of requested discovery calls; leads, meetings and clients they own, with full history; audit entries for those records |
 | Client | Their own tasks, shortlist, VAs, package, and meetings with their VAs |
 | VA | Their own tasks; every meeting they attend (intro calls and client↔VA meetings) with its full history and notes; for intro calls, the prospective client's company name and the shortlist outcome; the clients they are assigned to |
-| Admin | Everything in their tenant; changes discovery-call times, shortlists, staff and registrations |
+| Admin | Everything in their tenant, including the full audit log; changes discovery-call times, shortlists, staff and registrations |
 
 ## Planned modules
 
@@ -83,7 +91,7 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 
 | Milestone | Feature folder | Routes |
 |---|---|---|
-| M8 | `features/meetings` (discovery first) | `api/v1/discovery-slots`; Lead Gen inbox under `closer/` |
+| M8 | `features/meetings` (discovery first) · `features/audit` | `api/v1/discovery-slots`; Lead Gen inbox, schedule, call history and activity under `closer/` |
 | M9 | `features/google` | `api/v1/google/calendar-events`; Google connect / callback |
 | M10 | `features/matching` (replaces `features/demos`) | client VA Match; VA working hours |
 | M11 | `features/tasks` | client and VA task pages |
