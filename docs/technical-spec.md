@@ -8,10 +8,10 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 |---|---|---|
 | tenants · profiles · roles | Agencies; accounts; roles per user | Built |
 | employee_profiles | VA and Lead Gen details, résumé, avatar, references | Built |
-| leads · lead_events | Enquiries and timeline; `owner_id` = the Lead Gen who confirmed the call | Built; add owner (M8) |
-| discovery_times | Admin-set daily times of day (PHT), at most 6 active | New (M8) |
-| meetings | Every call: kind, organizer, scheduled by, attendees, start, end, status, Google event id, Meet link | New (M8–M9) |
-| meeting_events | Meeting history: scheduled, rescheduled (old → new), cancelled (by whom, app or Google), done, no-show, note | New (M8–M9) |
+| leads · lead_events | Enquiries and timeline; `closer_id` = the owning Lead Gen, set when they confirm the discovery call | Built; Lead Gens work their own leads (M8) |
+| discovery_times | Admin-set daily times of day (PHT), at most 6 | Built (M8; rules in `supabase/CLAUDE.md`) |
+| meetings | Every call: kind, organizer, decided by, start, end, status, Google event id, Meet link | Built for discovery calls (M8); attendees and Google (M9); intro and client↔VA kinds (M10, M12) |
+| meeting_events | Meeting history: requested, scheduled, rejected, done, no-show, note, expired | Built (M8); rescheduled (old → new) and cancelled (by whom, app or Google) with M9 |
 | google_connections | An employee's encrypted refresh token, calendar id, push channel | New (M9) |
 | va_working_hours | A VA's weekly hours (PHT) when clients may request meetings | New (M10) |
 | clients · client_packets · client_notes | Company and package; registration; notes | Built |
@@ -43,7 +43,7 @@ One model for every call; one Google integration; one history.
 ## Status flows
 
 - **Lead:** new → (call confirmed, owner set) → contacted → qualified → won (client created) · closed.
-- **Meeting:** scheduled → done | no_show | cancelled; rescheduling keeps it scheduled and logs old → new time. Discovery and intro calls start one step earlier: requested → scheduled (the Lead Gen or the VA confirms) | rejected. A `client_va` meeting starts at scheduled, and only while the client is active and the assignment is active. Either attendee on the platform records done or no-show; a past meeting with no outcome shows "needs outcome". One open discovery call per lead and one per date + time (with at most 6 times, that caps them at 6 a day); one open intro call per client; no two scheduled meetings overlap for the same organizer — all enforced by the database.
+- **Meeting:** scheduled → done | no_show | cancelled; rescheduling keeps it scheduled and logs old → new time. Discovery and intro calls start one step earlier: requested → scheduled (the Lead Gen or the VA confirms) | rejected | expired (nobody answered before its time). A `client_va` meeting starts at scheduled, and only while the client is active and the assignment is active. Either attendee on the platform records done or no-show; a past meeting with no outcome shows "needs outcome". Discovery calls are built (`supabase/CLAUDE.md` → `meetings`); still to come: one open intro call per client; no two scheduled meetings overlap for the same organizer — all enforced by the database.
 - **Client:** pending → active → inactive. **Registration:** ready → pending_customer → pending_review → approved | changes_requested → invite_sent.
 - **Shortlist:** offered → accepted (creates the assignment) | declined.
 - **Task:** todo → in_progress → done; overdue = not done after its deadline (computed, not stored).
@@ -51,8 +51,9 @@ One model for every call; one Google integration; one history.
 
 ## Discovery-call booking
 
-- Times are PHT (`Asia/Manila`) times of day, every day; a meeting's start and end are stored in UTC. Pickers show PHT and the viewer's local time.
-- The contact page stays static: the picker fetches open slots from `GET /api/v1/discovery-slots` (next 14 days — TODO: confirm the window), and the form posts the lead and slot together to `POST /api/v1/leads`. A slot taken in the meantime is a field error.
+- The database side is built: times, slots (12 hours to 14 days ahead), requests, confirm / reject, outcomes and the Lead Gens' inbox — `supabase/CLAUDE.md`. Pickers show PHT and the viewer's local time.
+- The contact page stays static: the picker fetches open slots from `GET /api/v1/discovery-slots` (secret key, `open_discovery_slots`), and the form posts the lead and slot together to `POST /api/v1/leads` (`request_discovery_call`). A slot taken in the meantime (`IVA22`, or `23505` from a request at the same moment) is a field error; `IVA24` gets a generic message.
+- Planned with the lead handover (M8 slice 6): column-level select grants on `leads`, so an owning Lead Gen can't read `ip_hash` and `user_agent`.
 
 ## Google sync
 
@@ -80,7 +81,7 @@ Roles and `tenant_id` come from the token; pages call `requireRole`, RLS checks 
 
 | Role | Sees |
 |---|---|
-| Lead Gen | The shared inbox of requested discovery calls; leads, meetings and clients they own, with full history; audit entries for those records |
+| Lead Gen | The shared inbox of requested discovery calls (no email until they confirm); leads, meetings and clients they own, with full history; audit entries for those records |
 | Client | Their own tasks, shortlist, VAs, package, and meetings with their VAs |
 | VA | Their own tasks; every meeting they attend (intro calls and client↔VA meetings) with its full history and notes; for intro calls, the prospective client's company name and the shortlist outcome; the clients they are assigned to |
 | Admin | Everything in their tenant, including the full audit log; changes discovery-call times, shortlists, employees and registrations |

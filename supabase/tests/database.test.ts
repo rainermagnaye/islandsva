@@ -427,11 +427,13 @@ describe("leads", () => {
     await expect(asServer("update public.leads set notified_at = now() where id = $1", [lead.id])).resolves.toBeDefined();
   });
 
-  it("only admins with two-factor sign-in can read leads", async () => {
+  it("only admins with two-factor sign-in read every lead; a Lead Gen only those they own", async () => {
     expect((await asUser(asAdmin, "select id from public.leads")).length).toBeGreaterThan(0);
-    for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser, asVa, asClient]) {
+    for (const claims of [token(ADMIN, ["admin"], "aal1"), asVa, asClient]) {
       expect(await asUser(claims, "select id from public.leads")).toEqual([]);
     }
+    const owners = await asUser<{ closer_id: string }>(asCloser, "select distinct closer_id from public.leads");
+    expect(owners).toEqual([{ closer_id: CLOSER }]);
     await expect(as("anon", {}, "select id from public.leads")).rejects.toThrow(/permission denied/);
   });
 
@@ -801,7 +803,7 @@ describe("tenants", () => {
     ).rows;
     const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.assign_tenant()'::regprocedure")).rows;
     const missing = tables.map((t) => t.name).filter((name) => !["profiles", "leads"].includes(name) && !src.includes(`when '${name}'`));
-    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links"]));
+    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links", "discovery_times", "meetings", "meeting_events"]));
     expect(missing).toEqual([]);
   });
 
@@ -1720,5 +1722,544 @@ describe("payment at review (sales)", () => {
 
   it("keeps a fee from exceeding the amount even outside the function", async () => {
     await expect(asServer("update public.payments set fee_cents = amount_cents + 1 where client_id = $1", [inReview])).rejects.toThrow(/payments_fee_within_amount/);
+  });
+});
+
+describe("discovery calls", () => {
+  // LG_A and LG_B are Lead Gens of the default tenant; LG_OFF is one who was deactivated (their token still carries
+  // the role for up to an hour). CLOSER_B, ADMIN_B and SUPER come from "tenants".
+  const LG_A = "00000000-0000-0000-0000-0000000000f1";
+  const LG_B = "00000000-0000-0000-0000-0000000000f2";
+  const LG_OFF = "00000000-0000-0000-0000-0000000000f3";
+  const ADMIN_ONLY = "00000000-0000-0000-0000-0000000000f4"; // an admin of the default tenant without the closer role
+  const CLOSER_B = "00000000-0000-0000-0000-0000000000b3";
+  const ADMIN_B = "00000000-0000-0000-0000-0000000000b1";
+  const SUPER = "00000000-0000-0000-0000-000000000010";
+  const asLgA = token(LG_A, ["closer"]);
+  const asLgB = token(LG_B, ["closer"]);
+  const asLgOff = token(LG_OFF, ["closer"]);
+  const asAdminB = token(ADMIN_B, ["admin"], "aal2");
+  const HOUR = 3600 * 1000;
+  const DAY = 24 * HOUR;
+  const HALF_HOUR = HOUR / 2;
+  const TIMES = ["01:00", "05:00", "09:00", "13:00", "17:00", "21:00"];
+  const IP = "c".repeat(64);
+  let tenantA = "";
+  let tenantB = "";
+
+  /** What open_discovery_slots should list for these PHT times (UTC+8, no DST), 12 hours to 14 days ahead. */
+  const expectedSlots = (times: string[], now = Date.now()) => {
+    const phtMidnight = Math.floor((now + 8 * HOUR) / DAY) * DAY;
+    const out: string[] = [];
+    for (let day = 0; day <= 14; day++) {
+      for (const time of times) {
+        const [h, m] = time.split(":").map(Number);
+        const start = phtMidnight + day * DAY + h * HOUR + m * 60 * 1000 - 8 * HOUR;
+        if (start >= now + 12 * HOUR && start <= now + 14 * DAY) out.push(new Date(start).toISOString());
+      }
+    }
+    return out.sort();
+  };
+  const iso = (value: unknown) => new Date(value as string).toISOString();
+  const aligned = (offsetMs: number) => new Date(Math.floor((Date.now() + offsetMs) / HALF_HOUR) * HALF_HOUR).toISOString();
+  const later = (start: string, ms: number) => new Date(new Date(start).getTime() + ms).toISOString();
+
+  const slots = async () => (await asServer<{ s: string }>("select public.open_discovery_slots() as s")).map((r) => iso(r.s));
+  const nextSlot = async () => (await slots())[0];
+  const timesOf = (tenant: string) =>
+    asServer<{ position: number; t: string }>("select position, time_of_day::text as t from public.discovery_times where tenant_id = $1 order by position", [tenant]);
+  const setTimes = (claims: Claims, times: (string | null)[]) => asUser(claims, "select public.set_discovery_times($1::time[])", [times]);
+  const request = async (email: string, startsAt: string, ip: string | null = null) =>
+    (await asServer<{ id: string }>(
+      "select public.request_discovery_call('Ana Cruz', $1, 'Cruz Co', 'Legal', 'Philippines', 'Inbox help, please.', 'executive', $2, 'UA', $3) as id",
+      [email, ip, startsAt],
+    ))[0].id;
+  const meetingOf = async (lead: string) => (await asServer<{ id: string }>("select id from public.meetings where lead_id = $1", [lead]))[0].id;
+  const decide = (meeting: string, actor: string, decision: string, reason: string | null = null, eventId: string | null = null, meetUrl: string | null = null) =>
+    asServer<{ r: Record<string, string> }>("select public.decide_discovery_call($1, $2, $3, $4, $5, $6) as r", [meeting, actor, decision, reason, eventId, meetUrl]);
+  const outcome = (meeting: string, actor: string, result: string, note: string | null = null) =>
+    asServer("select public.record_discovery_outcome($1, $2, $3, $4)", [meeting, actor, result, note]);
+  const inbox = (claims: Claims) => asUser<{ meeting_id: string } & Record<string, unknown>>(claims, "select * from public.discovery_inbox()");
+  const inboxIds = async (claims: Claims) => (await inbox(claims)).map((r) => r.meeting_id);
+  const statusOf = async (meeting: string) => (await asServer<{ status: string }>("select status from public.meetings where id = $1", [meeting]))[0].status;
+  const leadOf = async (lead: string) =>
+    (await asServer<{ status: string; closer_id: string | null }>("select status, closer_id from public.leads where id = $1", [lead]))[0];
+
+  beforeAll(async () => {
+    [{ id: tenantA }] = await asServer<{ id: string }>("select id from public.tenants where is_default");
+    [{ id: tenantB }] = await asServer<{ id: string }>("select id from public.tenants where slug = 'other-agency'");
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${LG_A}', 'lg-a@x.co'), ('${LG_B}', 'lg-b@x.co'), ('${LG_OFF}', 'lg-off@x.co'), ('${ADMIN_ONLY}', 'admin-only@x.co')`);
+    await asServer("insert into public.roles (user_id, role) values ($1, 'admin')", [ADMIN_ONLY]);
+    await asServer(`insert into public.roles (user_id, role) values ('${LG_A}', 'closer'), ('${LG_B}', 'closer'), ('${LG_OFF}', 'closer')`);
+    await asServer("update public.profiles set status = 'inactive' where id = $1", [LG_OFF]);
+    // Out of order on purpose: positions follow the time of day.
+    await setTimes(asAdmin, ["21:00", "01:00", "17:00", "09:00", "13:00", "05:00"]);
+  });
+
+  describe("discovery times", () => {
+    it("an admin with two-factor replaces their tenant's times; positions follow the time of day", async () => {
+      expect(await timesOf(tenantA)).toEqual(TIMES.map((t, i) => ({ position: i + 1, t: `${t}:00` })));
+      expect(await asUser(asAdmin, "select id from public.discovery_times")).toHaveLength(6);
+    });
+
+    it("refuses a seventh time, a misaligned, repeated or missing time — keeping the saved ones", async () => {
+      await expect(setTimes(asAdmin, [...TIMES, "23:00"])).rejects.toThrow(/at most 6 discovery times/);
+      await expect(setTimes(asAdmin, ["10:15"])).rejects.toThrow(/discovery_times_aligned/);
+      await expect(setTimes(asAdmin, ["10:00", "10:00"])).rejects.toThrow(/duplicate key/);
+      await expect(setTimes(asAdmin, ["10:00", null])).rejects.toThrow(/times are required/);
+      expect(await timesOf(tenantA)).toHaveLength(6);
+    });
+
+    it("only admins with two-factor call set_discovery_times; visitors can't call it at all", async () => {
+      for (const claims of [token(ADMIN, ["admin"], "aal1"), asLgA, asVa, asClient]) {
+        await expect(setTimes(claims, ["10:00"])).rejects.toThrow(/admins with two-factor sign-in only/);
+      }
+      await expect(as("anon", {}, "select public.set_discovery_times(array['10:00']::time[])")).rejects.toThrow(/permission denied for function/);
+      expect(await timesOf(tenantA)).toHaveLength(6);
+    });
+
+    it("only admins with two-factor read or write the table; nobody sets its tenant or updates a row", async () => {
+      for (const claims of [token(ADMIN, ["admin"], "aal1"), asLgA, asVa, asClient]) {
+        expect(await asUser(claims, "select id from public.discovery_times")).toEqual([]);
+        expect(await asUser(claims, "delete from public.discovery_times returning id")).toEqual([]);
+      }
+      await expect(asUser(asLgA, "insert into public.discovery_times (position, time_of_day) values (6, '22:00')")).rejects.toThrow(/row-level security/);
+      await expect(asUser(asAdmin, "insert into public.discovery_times (tenant_id, position, time_of_day) values ($1, 6, '22:00')", [tenantB])).rejects.toThrow(/permission denied/);
+      await expect(asUser(asAdmin, "update public.discovery_times set time_of_day = '22:00'")).rejects.toThrow(/permission denied/);
+      await expect(as("anon", {}, "select id from public.discovery_times")).rejects.toThrow(/permission denied/);
+      expect(await timesOf(tenantA)).toHaveLength(6);
+    });
+
+    it("a Super Admin's save replaces only their own tenant's times; another tenant's admin sees only theirs", async () => {
+      await asServer("insert into public.discovery_times (tenant_id, position, time_of_day) values ($1, 1, '03:30')", [tenantB]);
+      await setTimes(token(SUPER, ["super_admin"], "aal2"), ["10:00"]);
+      expect(await timesOf(tenantA)).toEqual([{ position: 1, t: "10:00:00" }]);
+      expect(await timesOf(tenantB)).toEqual([{ position: 1, t: "03:30:00" }]);
+      expect(await asUser(asAdminB, "select time_of_day::text as t from public.discovery_times")).toEqual([{ t: "03:30:00" }]);
+      await setTimes(asAdmin, TIMES);
+      expect(await timesOf(tenantA)).toHaveLength(6);
+    });
+  });
+
+  describe("open slots", () => {
+    it("lists every day at each PHT time, 12 hours to 14 days ahead, from the default tenant only", async () => {
+      const listed = await slots();
+      expect(listed).toEqual(expectedSlots(TIMES));
+      // 09:00 PHT is 01:00 UTC; tenant B's 03:30 PHT (19:30 UTC) is never listed.
+      expect(new Set(listed.map((s) => new Date(s).getUTCHours()))).toEqual(new Set([17, 21, 1, 5, 9, 13]));
+      expect(listed.some((s) => new Date(s).getUTCMinutes() === 30)).toBe(false);
+    });
+
+    it("is for the server only", async () => {
+      await expect(asUser(asAdmin, "select public.open_discovery_slots()")).rejects.toThrow(/permission denied for function/);
+      await expect(as("anon", {}, "select public.open_discovery_slots()")).rejects.toThrow(/permission denied for function/);
+    });
+  });
+
+  describe("requests", () => {
+    it("stores the lead, its 30-minute meeting and the first history row; the slot leaves the list", async () => {
+      const start = await nextSlot();
+      const lead = await request("first@disc.co", start, IP);
+      const [stored] = await asServer("select email, status::text as status, closer_id, tenant_id, ip_hash from public.leads where id = $1", [lead]);
+      expect(stored).toEqual({ email: "first@disc.co", status: "new", closer_id: null, tenant_id: tenantA, ip_hash: IP });
+      const [meeting] = await asServer<Record<string, unknown>>(
+        "select id, kind::text as kind, status::text as status, starts_at, ends_at, organizer_id, decided_by, tenant_id from public.meetings where lead_id = $1",
+        [lead],
+      );
+      expect(meeting).toMatchObject({ kind: "discovery", status: "requested", organizer_id: null, decided_by: null, tenant_id: tenantA });
+      expect(iso(meeting.starts_at)).toBe(start);
+      expect(iso(meeting.ends_at)).toBe(later(start, HALF_HOUR));
+      expect(await asServer("select kind::text as kind, actor_id, body, tenant_id from public.meeting_events where meeting_id = $1", [meeting.id])).toEqual([
+        { kind: "requested", actor_id: null, body: null, tenant_id: tenantA },
+      ]);
+      expect(await slots()).not.toContain(start);
+    });
+
+    it("refuses a time that isn't open — taken, misaligned, not a set time, too soon, too far — storing nothing (IVA22)", async () => {
+      const [{ starts_at: taken }] = await asServer<{ starts_at: string }>(
+        "select m.starts_at from public.meetings m join public.leads l on l.id = m.lead_id where l.email = 'first@disc.co'",
+      );
+      const open = await nextSlot();
+      for (const start of [iso(taken), later(open, 15 * 60 * 1000), later(open, HALF_HOUR), aligned(2 * HOUR), aligned(20 * DAY)]) {
+        await expect(request("nope@disc.co", start)).rejects.toMatchObject({ code: "IVA22" });
+      }
+      expect(await asServer("select id from public.leads where email = 'nope@disc.co'")).toEqual([]);
+    });
+
+    it("holds one open request per email and two per IP (IVA24), storing nothing for the refused one", async () => {
+      await expect(request("first@disc.co", await nextSlot())).rejects.toMatchObject({ code: "IVA24" });
+      await request("second@disc.co", await nextSlot(), IP);
+      await expect(request("third@disc.co", await nextSlot(), IP)).rejects.toMatchObject({ code: "IVA24" });
+      expect(await asServer("select id from public.leads where email = 'third@disc.co'")).toEqual([]);
+      expect(await asServer("select count(*)::int as n from public.leads where email = 'first@disc.co'")).toEqual([{ n: 1 }]);
+      // Without an IP hash only the email counts.
+      await expect(request("no-ip@disc.co", await nextSlot())).resolves.toBeTruthy();
+    });
+
+    it("the indexes hold past the function: one open call per start, and per lead (two requests at once)", async () => {
+      const [{ id: lead, starts_at: start }] = await asServer<{ id: string; starts_at: string }>(
+        "select l.id, m.starts_at from public.leads l join public.meetings m on m.lead_id = l.id where l.email = 'first@disc.co'",
+      );
+      const [{ id: other }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message) values ('B', 'race@disc.co', 'hi') returning id");
+      await expect(
+        asServer("insert into public.meetings (kind, lead_id, starts_at, ends_at) values ('discovery', $1, $2, $3)", [other, iso(start), later(iso(start), HALF_HOUR)]),
+      ).rejects.toThrow(/meetings_one_open_discovery_per_start/);
+      const free = await nextSlot();
+      await expect(
+        asServer("insert into public.meetings (kind, lead_id, starts_at, ends_at) values ('discovery', $1, $2, $3)", [lead, free, later(free, HALF_HOUR)]),
+      ).rejects.toThrow(/meetings_one_open_discovery_per_lead/);
+    });
+
+    it("settles a stale request to expired first, so the visitor may request again; a stale call can't be decided", async () => {
+      const past = aligned(-2 * HOUR);
+      const [{ id: oldLead }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message) values ('S', 'stale@disc.co', 'hi') returning id");
+      const [{ id: old }] = await asServer<{ id: string }>(
+        "insert into public.meetings (kind, lead_id, starts_at, ends_at) values ('discovery', $1, $2, $3) returning id",
+        [oldLead, past, later(past, HALF_HOUR)],
+      );
+      await asServer("insert into public.meeting_events (meeting_id, kind) values ($1, 'requested')", [old]);
+      await expect(decide(old, LG_A, "scheduled")).rejects.toMatchObject({ code: "IVA23" });
+      await request("stale@disc.co", await nextSlot());
+      expect(await statusOf(old)).toBe("expired");
+      expect(await asServer("select kind::text as kind, actor_id, body from public.meeting_events where meeting_id = $1 order by created_at, kind", [old])).toEqual([
+        { kind: "requested", actor_id: null, body: null },
+        { kind: "expired", actor_id: null, body: null },
+      ]);
+      // The expired call no longer holds its start.
+      const [{ id: again }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message) values ('S', 'stale2@disc.co', 'hi') returning id");
+      await expect(
+        asServer("insert into public.meetings (kind, lead_id, starts_at, ends_at) values ('discovery', $1, $2, $3) returning id", [again, past, later(past, HALF_HOUR)]),
+      ).resolves.toHaveLength(1);
+      await asServer("update public.meetings set status = 'expired' where lead_id = $1", [again]);
+    });
+
+    it("settles stale requests by IP hash too, which frees the per-IP cap", async () => {
+      const ip = "d".repeat(64);
+      const stale: string[] = [];
+      for (const [n, hours] of [[1, -3], [2, -4]] as const) {
+        const past = aligned(hours * HOUR);
+        const [{ id: l }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message, ip_hash) values ('S', $1, 'hi', $2) returning id", [`ip-stale${n}@disc.co`, ip]);
+        const [{ id: m }] = await asServer<{ id: string }>("insert into public.meetings (kind, lead_id, starts_at, ends_at) values ('discovery', $1, $2, $3) returning id", [l, past, later(past, HALF_HOUR)]);
+        stale.push(m);
+      }
+      // Two requested calls from this IP: a third would be refused if they still counted.
+      await expect(request("ip-fresh@disc.co", await nextSlot(), ip)).resolves.toBeTruthy();
+      for (const m of stale) expect(await statusOf(m)).toBe("expired");
+      expect(await asServer("select count(*)::int as n from public.meeting_events where meeting_id = any($1::uuid[]) and kind = 'expired'", [stale])).toEqual([{ n: 2 }]);
+    });
+
+    it("is for the server only", async () => {
+      const call = "select public.request_discovery_call('A', 'a@x.co', null, null, null, 'hi', null, null, null, now())";
+      await expect(asUser(asAdmin, call)).rejects.toThrow(/permission denied for function/);
+      await expect(as("anon", {}, call)).rejects.toThrow(/permission denied for function/);
+    });
+  });
+
+  describe("inbox and confirm", () => {
+    let lead = "";
+    let meeting = "";
+    beforeAll(async () => {
+      lead = await request("inbox@disc.co", await nextSlot());
+      meeting = await meetingOf(lead);
+    });
+
+    it("an active Lead Gen sees open future requests in a reduced form — no email, IP, user agent or profile", async () => {
+      const rows = await inbox(asLgA);
+      const row = rows.find((r) => r.meeting_id === meeting);
+      expect(row).toMatchObject({ full_name: "Ana Cruz", company_name: "Cruz Co", industry: "Legal", country: "Philippines", package_code: "executive", message: "Inbox help, please." });
+      expect(Object.keys(row ?? {}).sort()).toEqual(["company_name", "country", "ends_at", "full_name", "industry", "meeting_id", "message", "package_code", "starts_at"]);
+      expect(rows.every((r) => new Date(r.starts_at as string).getTime() > Date.now())).toBe(true);
+    });
+
+    it("gives nothing to a token claiming closer without the role, an inactive Lead Gen, another tenant's Lead Gen or other roles", async () => {
+      expect(await inbox(token(VA, ["closer"]))).toEqual([]);
+      expect(await inbox(asLgOff)).toEqual([]);
+      expect(await inbox(token(CLOSER_B, ["closer"]))).toEqual([]);
+      expect(await inbox(asClient)).toEqual([]);
+      expect(await inbox(asVa)).toEqual([]);
+      await expect(as("anon", {}, "select * from public.discovery_inbox()")).rejects.toThrow(/permission denied for function/);
+    });
+
+    it("gives nothing to an admin with two-factor who doesn't hold the closer role, even if the token claims it", async () => {
+      expect(await inboxIds(asLgA)).toContain(meeting);
+      expect(await inbox(token(ADMIN_ONLY, ["admin"], "aal2"))).toEqual([]);
+      expect(await inbox(token(ADMIN_ONLY, ["admin", "closer"], "aal2"))).toEqual([]);
+    });
+
+    it("a Lead Gen can't read an unowned lead, or the request, through the tables", async () => {
+      expect(await asUser(asLgA, "select id from public.leads where id = $1", [lead])).toEqual([]);
+      expect(await asUser(asLgA, "select id from public.meetings where id = $1", [meeting])).toEqual([]);
+      expect(await asUser(asLgA, "select id from public.meeting_events where meeting_id = $1", [meeting])).toEqual([]);
+    });
+
+    it("confirming makes the Lead Gen the organizer and the lead's owner; then only they (and admins with 2FA) see it", async () => {
+      const [{ r }] = await decide(meeting, LG_A, "scheduled", null, "evt-1", "https://meet.google.com/abc-defg-hij");
+      expect(r).toMatchObject({ lead_id: lead, status: "scheduled", email: "inbox@disc.co", full_name: "Ana Cruz" });
+      const [stored] = await asServer("select status::text as status, organizer_id, decided_by, google_event_id, meet_url from public.meetings where id = $1", [meeting]);
+      expect(stored).toEqual({ status: "scheduled", organizer_id: LG_A, decided_by: LG_A, google_event_id: "evt-1", meet_url: "https://meet.google.com/abc-defg-hij" });
+      expect(await leadOf(lead)).toEqual({ status: "new", closer_id: LG_A });
+
+      expect(await asUser(asLgA, "select email from public.leads where id = $1", [lead])).toEqual([{ email: "inbox@disc.co" }]);
+      expect(ids(await asUser<{ id: string }>(asLgA, "select id from public.meetings where id = $1", [meeting]))).toEqual([meeting]);
+      expect(await asUser(asLgA, "select kind::text as kind from public.meeting_events where meeting_id = $1 order by created_at", [meeting])).toEqual([
+        { kind: "requested" },
+        { kind: "scheduled" },
+      ]);
+      expect(await asUser(asLgB, "select id from public.leads where id = $1", [lead])).toEqual([]);
+      expect(await asUser(asLgB, "select id from public.meetings where id = $1", [meeting])).toEqual([]);
+      expect(await asUser(asLgB, "select id from public.meeting_events where meeting_id = $1", [meeting])).toEqual([]);
+      expect(await inboxIds(asLgA)).not.toContain(meeting);
+      expect(await inboxIds(asLgB)).not.toContain(meeting);
+      expect(await asUser(asAdmin, "select id from public.meeting_events where meeting_id = $1", [meeting])).toHaveLength(2);
+      expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.meetings")).toEqual([]);
+
+      await expect(decide(meeting, LG_A, "scheduled")).rejects.toMatchObject({ code: "IVA23" });
+    });
+
+    it("refuses an unknown call, an actor who isn't an active Lead Gen of this agency, someone else's lead, a bad decision or link", async () => {
+      const other = await request("owned@disc.co", await nextSlot());
+      const otherMeeting = await meetingOf(other);
+      await expect(decide("00000000-0000-0000-0000-00000000dead", LG_A, "scheduled")).rejects.toMatchObject({ code: "IVA01" });
+      await expect(decide(otherMeeting, LG_OFF, "scheduled")).rejects.toMatchObject({ code: "IVA14" });
+      await expect(decide(otherMeeting, CLOSER_B, "scheduled")).rejects.toMatchObject({ code: "IVA14" });
+      await expect(decide(otherMeeting, VA, "scheduled")).rejects.toMatchObject({ code: "IVA14" });
+      await expect(decide(otherMeeting, LG_A, "maybe")).rejects.toThrow(/scheduled or rejected/);
+      await expect(decide(otherMeeting, LG_A, "scheduled", null, null, "https://evil.example/abc-defg-hij")).rejects.toThrow(/check constraint/);
+      await expect(decide(otherMeeting, LG_A, "scheduled", null, "x".repeat(1025))).rejects.toThrow(/check constraint/);
+
+      // Owned by LG_B (e.g. assigned by an admin): only LG_B may decide it, and only LG_B's inbox shows it.
+      await asServer("update public.leads set closer_id = $1 where id = $2", [LG_B, other]);
+      await expect(decide(otherMeeting, LG_A, "scheduled")).rejects.toMatchObject({ code: "IVA14" });
+      expect(await inboxIds(asLgA)).not.toContain(otherMeeting);
+      expect(await inboxIds(asLgB)).toContain(otherMeeting);
+      expect(await statusOf(otherMeeting)).toBe("requested");
+      await expect(decide(otherMeeting, LG_B, "scheduled")).resolves.toHaveLength(1);
+    });
+
+    it("refuses a request whose lead is paused (IVA23), and hides it from the inbox", async () => {
+      const paused = await request("paused@disc.co", await nextSlot());
+      const pausedMeeting = await meetingOf(paused);
+      await asServer("update public.leads set disabled_at = now() where id = $1", [paused]);
+      await expect(decide(pausedMeeting, LG_A, "scheduled")).rejects.toMatchObject({ code: "IVA23" });
+      expect(await inboxIds(asLgA)).not.toContain(pausedMeeting);
+    });
+
+    it("rejecting needs a reason, closes the lead as junk and frees the slot", async () => {
+      const junk = await request("junk@disc.co", await nextSlot());
+      const junkMeeting = await meetingOf(junk);
+      const [{ starts_at: start }] = await asServer<{ starts_at: string }>("select starts_at from public.meetings where id = $1", [junkMeeting]);
+      await expect(decide(junkMeeting, LG_B, "rejected", "  ")).rejects.toThrow(/reason of 1 to 300/);
+      await expect(decide(junkMeeting, LG_B, "rejected", "x".repeat(301))).rejects.toThrow(/reason of 1 to 300/);
+      const [{ r }] = await decide(junkMeeting, LG_B, "rejected", "  Not a business  ");
+      expect(r).toMatchObject({ lead_id: junk, status: "rejected" });
+      expect(await asServer("select status::text as status, organizer_id, decided_by from public.meetings where id = $1", [junkMeeting])).toEqual([
+        { status: "rejected", organizer_id: null, decided_by: LG_B },
+      ]);
+      expect(await leadOf(junk)).toEqual({ status: "closed", closer_id: null });
+      expect(await asServer("select kind::text as kind, author_id, body from public.lead_events where lead_id = $1", [junk])).toEqual([
+        { kind: "junk", author_id: LG_B, body: "Not a business" },
+      ]);
+      expect(await asServer("select body from public.meeting_events where meeting_id = $1 and kind = 'rejected'", [junkMeeting])).toEqual([{ body: "Not a business" }]);
+      expect(await slots()).toContain(iso(start));
+      // The decider reads the call, not the lead (it has no owner).
+      expect(await asUser(asLgB, "select id from public.meetings where id = $1", [junkMeeting])).toHaveLength(1);
+      expect(await asUser(asLgB, "select id from public.leads where id = $1", [junk])).toEqual([]);
+    });
+
+    it("is for the server only", async () => {
+      await expect(asUser(asLgA, "select public.decide_discovery_call($1, $2, 'scheduled', null)", [meeting, LG_A])).rejects.toThrow(/permission denied for function/);
+      await expect(as("anon", {}, "select public.decide_discovery_call($1, $2, 'scheduled', null)", [meeting, LG_A])).rejects.toThrow(/permission denied for function/);
+    });
+
+    it("locks the meeting before its lead, in both functions that take both", async () => {
+      for (const fn of ["decide_discovery_call", "record_discovery_outcome"]) {
+        const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where proname = $1", [fn])).rows;
+        const meetingLock = src.search(/from public\.meetings m where m\.id = \w+\.meeting_id for update/);
+        const leadLock = src.search(/from public\.leads l where l\.id = meeting\.lead_id for update/);
+        expect(meetingLock).toBeGreaterThan(-1);
+        expect(leadLock).toBeGreaterThan(meetingLock);
+      }
+    });
+  });
+
+  describe("closing or pausing a lead", () => {
+    const requestOf = async (email: string) => {
+      const start = await nextSlot();
+      const lead = await request(email, start);
+      return { start, lead, meeting: await meetingOf(lead) };
+    };
+    const expectFreed = async (call: { start: string; meeting: string }, email: string) => {
+      expect(await statusOf(call.meeting)).toBe("expired");
+      expect(await asServer("select kind::text as kind, actor_id from public.meeting_events where meeting_id = $1 and kind = 'expired'", [call.meeting])).toEqual([
+        { kind: "expired", actor_id: null },
+      ]);
+      expect(await slots()).toContain(call.start);
+      // The same visitor may request again, even the same time.
+      await expect(request(email, call.start)).resolves.toBeTruthy();
+    };
+
+    it("closing a lead settles its open request: the slot reopens and the email may request again", async () => {
+      const call = await requestOf("closed@disc.co");
+      expect(await asUser(asAdmin, "update public.leads set status = 'closed' where id = $1 returning id", [call.lead])).toHaveLength(1);
+      await expectFreed(call, "closed@disc.co");
+    });
+
+    it("pausing a lead does the same", async () => {
+      const call = await requestOf("paused2@disc.co");
+      expect(await asUser(asAdmin, "update public.leads set disabled_at = now() where id = $1 returning id", [call.lead])).toHaveLength(1);
+      await expectFreed(call, "paused2@disc.co");
+    });
+
+    it("leaves confirmed calls alone, and other updates don't settle anything", async () => {
+      const call = await requestOf("kept@disc.co");
+      await asUser(asAdmin, "update public.leads set full_name = 'Ana C.' where id = $1", [call.lead]);
+      expect(await statusOf(call.meeting)).toBe("requested");
+      await decide(call.meeting, LG_A, "scheduled");
+      await asServer("update public.leads set disabled_at = now() where id = $1", [call.lead]);
+      expect(await statusOf(call.meeting)).toBe("scheduled");
+    });
+
+    it("a request the trigger skipped (being decided at that moment) doesn't hold its slot, and the next request settles it", async () => {
+      // Stand-in for the race: close the lead without the trigger, as if its meeting row was locked by a decision.
+      const call = await requestOf("raced@disc.co");
+      await db.exec("alter table public.leads disable trigger leads_settle_discovery");
+      try {
+        await asServer("update public.leads set status = 'closed' where id = $1", [call.lead]);
+      } finally {
+        await db.exec("alter table public.leads enable trigger leads_settle_discovery");
+      }
+      expect(await statusOf(call.meeting)).toBe("requested");
+      expect(await slots()).toContain(call.start);
+      await expect(request("raced-other@disc.co", call.start)).resolves.toBeTruthy();
+      expect(await statusOf(call.meeting)).toBe("expired");
+    });
+  });
+
+  describe("outcomes", () => {
+    /** A confirmed call that has already started, organised by LG_A. */
+    const startedCall = async (email: string) => {
+      const start = aligned(-HOUR);
+      const [{ id: lead }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message, closer_id) values ('O', $1, 'hi', $2) returning id", [email, LG_A]);
+      const [{ id }] = await asServer<{ id: string }>(
+        "insert into public.meetings (kind, status, lead_id, organizer_id, decided_by, decided_at, starts_at, ends_at) values ('discovery', 'scheduled', $1, $2, $2, now(), $3, $4) returning id",
+        [lead, LG_A, start, later(start, HALF_HOUR)],
+      );
+      return { lead, id };
+    };
+
+    it("the organizer records done once the call has started; a new lead moves to contacted", async () => {
+      const call = await startedCall("held@disc.co");
+      await expect(outcome(call.id, LG_B, "done")).rejects.toMatchObject({ code: "IVA14" });
+      await expect(outcome(call.id, LG_A, "later")).rejects.toThrow(/done or no_show/);
+      await outcome(call.id, LG_A, "done", "  Wants 40 hours  ");
+      expect(await statusOf(call.id)).toBe("done");
+      expect(await leadOf(call.lead)).toEqual({ status: "contacted", closer_id: LG_A });
+      expect(await asServer("select kind::text as kind, actor_id, body from public.meeting_events where meeting_id = $1", [call.id])).toEqual([
+        { kind: "done", actor_id: LG_A, body: "Wants 40 hours" },
+      ]);
+      await expect(outcome(call.id, LG_A, "no_show")).rejects.toMatchObject({ code: "IVA23" });
+    });
+
+    it("a no-show leaves the lead new; a call that hasn't started, or an inactive organizer, is refused", async () => {
+      const call = await startedCall("noshow@disc.co");
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [LG_A]);
+      await expect(outcome(call.id, LG_A, "no_show")).rejects.toMatchObject({ code: "IVA14" });
+      await asServer("update public.profiles set status = 'invited' where id = $1", [LG_A]);
+      await outcome(call.id, LG_A, "no_show");
+      expect(await statusOf(call.id)).toBe("no_show");
+      expect(await leadOf(call.lead)).toEqual({ status: "new", closer_id: LG_A });
+
+      const [{ id: upcoming }] = await asServer<{ id: string }>("select id from public.meetings where organizer_id = $1 and status = 'scheduled' and starts_at > now() limit 1", [LG_A]);
+      await expect(outcome(upcoming, LG_A, "done")).rejects.toMatchObject({ code: "IVA23" });
+      await expect(outcome("00000000-0000-0000-0000-00000000dead", LG_A, "done")).rejects.toMatchObject({ code: "IVA01" });
+      await expect(asUser(asLgA, "select public.record_discovery_outcome($1, $2, 'done', null)", [upcoming, LG_A])).rejects.toThrow(/permission denied for function/);
+    });
+
+    it("names the actor for the rest of the transaction only (app.actor, for the audit log)", async () => {
+      const call = await startedCall("actor@disc.co");
+      await db.exec("begin");
+      try {
+        await outcome(call.id, LG_A, "done");
+        expect((await db.query<{ a: string }>("select current_setting('app.actor', true) as a")).rows).toEqual([{ a: LG_A }]);
+      } finally {
+        await db.exec("rollback");
+      }
+      expect((await db.query<{ a: string | null }>("select nullif(current_setting('app.actor', true), '') as a")).rows).toEqual([{ a: null }]);
+    });
+  });
+
+  describe("integrity", () => {
+    it("history can't be changed or deleted — not through the API, and not even by the database owner", async () => {
+      const [{ id }] = await asServer<{ id: string }>("select id from public.meeting_events limit 1");
+      await expect(asServer("update public.meeting_events set body = 'x' where id = $1", [id])).rejects.toThrow(/permission denied/);
+      await expect(asServer("delete from public.meeting_events where id = $1", [id])).rejects.toThrow(/permission denied/);
+      await expect(asUser(asAdmin, "update public.meeting_events set body = 'x' where id = $1", [id])).rejects.toThrow(/permission denied/);
+      await expect(db.query("update public.meeting_events set body = 'x' where id = $1", [id])).rejects.toThrow(/append-only/);
+      await expect(db.query("delete from public.meeting_events where id = $1", [id])).rejects.toThrow(/append-only/);
+    });
+
+    it("nobody writes meetings or history through the API, and the server never deletes a meeting", async () => {
+      const [{ id, lead_id: lead }] = await asServer<{ id: string; lead_id: string }>("select id, lead_id from public.meetings limit 1");
+      await expect(
+        asUser(asAdmin, "insert into public.meetings (kind, lead_id, starts_at, ends_at) values ('discovery', $1, now(), now() + interval '30 minutes')", [lead]),
+      ).rejects.toThrow(/permission denied/);
+      await expect(asUser(asLgA, "update public.meetings set status = 'done' where id = $1", [id])).rejects.toThrow(/permission denied/);
+      await expect(asUser(asAdmin, "insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, ADMIN])).rejects.toThrow(/permission denied/);
+      await expect(asServer("delete from public.meetings where id = $1", [id])).rejects.toThrow(/permission denied/);
+      for (const table of ["meetings", "meeting_events"]) {
+        await expect(as("anon", {}, `select id from public.${table}`)).rejects.toThrow(/permission denied/);
+        expect(await asUser(asVa, `select id from public.${table}`)).toEqual([]);
+        expect(await asUser(asClient, `select id from public.${table}`)).toEqual([]);
+      }
+    });
+
+    it("a lead with a meeting can't be deleted (IVA05)", async () => {
+      const lead = await request("keep@disc.co", await nextSlot());
+      await expect(asUser(asAdmin, "delete from public.leads where id = $1", [lead])).rejects.toMatchObject({ code: "IVA05" });
+    });
+
+    it("organizers, deciders and actors must be Lead Gens; a timeline remark may now come from a Lead Gen, not a VA", async () => {
+      const [{ id, lead_id: lead }] = await asServer<{ id: string; lead_id: string }>(
+        "select id, lead_id from public.meetings where status = 'requested' and starts_at > now() limit 1",
+      );
+      await expect(asServer("update public.meetings set status = 'scheduled', organizer_id = $1, decided_by = $1, decided_at = now() where id = $2", [VA, id])).rejects.toThrow(/closer role/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, VA])).rejects.toThrow(/closer role/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind) values ($1, 'note')", [id])).rejects.toThrow(/meeting_events_actor/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'rejected', $2)", [id, LG_A])).rejects.toThrow(/meeting_events_body/);
+      await expect(asServer("insert into public.lead_events (lead_id, author_id, kind, body) values ($1, $2, 'note', 'hi')", [lead, VA])).rejects.toThrow(/admin or closer role/);
+      await expect(asServer("insert into public.lead_events (lead_id, author_id, kind, body) values ($1, $2, 'note', 'hi') returning id", [lead, LG_A])).resolves.toHaveLength(1);
+    });
+
+    it("enforces the call's shape and state", async () => {
+      const [{ id: lead }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message) values ('Z', 'shape@disc.co', 'hi') returning id");
+      const start = aligned(30 * DAY);
+      const insert = (values: string, params: unknown[]) =>
+        asServer(`insert into public.meetings (kind, lead_id, starts_at, ends_at, status, organizer_id, decided_by, decided_at) values ${values}`, params);
+      await expect(insert("('discovery', $1, $2, $3, 'requested', null, null, null)", [lead, start, later(start, 45 * 60 * 1000)])).rejects.toThrow(/meetings_discovery_shape/);
+      await expect(insert("('discovery', $1, $2, $3, 'requested', null, null, null)", [lead, later(start, 10 * 60 * 1000), later(start, 40 * 60 * 1000)])).rejects.toThrow(/meetings_discovery_shape/);
+      await expect(
+        asServer("insert into public.meetings (kind, lead_id, starts_at, ends_at, tenant_id) values ('discovery', null, $1, $2, $3)", [start, later(start, HALF_HOUR), tenantA]),
+      ).rejects.toThrow(/meetings_discovery_shape/);
+      // A discovery call's fixed length is the stricter rule; meetings_ends_after_start matters once other kinds exist.
+      await expect(insert("('discovery', $1, $2, $2, 'requested', null, null, null)", [lead, start])).rejects.toThrow(/meetings_discovery_shape|meetings_ends_after_start/);
+      await expect(insert("('discovery', $1, $2, $3, 'scheduled', null, null, null)", [lead, start, later(start, HALF_HOUR)])).rejects.toThrow(/meetings_scheduled_has_organizer/);
+      await expect(insert("('discovery', $1, $2, $3, 'requested', $4, $4, now())", [lead, start, later(start, HALF_HOUR), LG_A])).rejects.toThrow(/meetings_requested_undecided/);
+      await expect(insert("('discovery', $1, $2, $3, 'rejected', null, null, null)", [lead, start, later(start, HALF_HOUR)])).rejects.toThrow(/meetings_rejected_decided/);
+    });
+
+    it("keeps meetings and history inside their tenant", async () => {
+      const [{ id }] = await asServer<{ id: string }>("select id from public.meetings where status = 'requested' and starts_at > now() limit 1");
+      const [{ id: lead }] = await asServer<{ id: string }>("insert into public.leads (full_name, email, message) values ('T', 'tenant@disc.co', 'hi') returning id");
+      await expect(asServer("update public.meetings set status = 'scheduled', organizer_id = $1, decided_by = $1, decided_at = now() where id = $2", [CLOSER_B, id])).rejects.toThrow(/foreign key/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id, body) values ($1, 'note', $2, 'hi')", [id, CLOSER_B])).rejects.toThrow(/foreign key/);
+      await expect(
+        asServer("insert into public.meetings (kind, lead_id, starts_at, ends_at, tenant_id) values ('discovery', $1, $2, $3, $4)", [lead, aligned(40 * DAY), later(aligned(40 * DAY), HALF_HOUR), tenantB]),
+      ).rejects.toThrow(/foreign key/);
+      expect(await asUser(asAdminB, "select id from public.meetings")).toEqual([]);
+      expect(await asUser(asAdminB, "select id from public.meeting_events")).toEqual([]);
+      expect(await inbox(asAdminB)).toEqual([]);
+      expect((await asUser(token(SUPER, ["super_admin"], "aal2"), "select id from public.meetings")).length).toBeGreaterThan(0);
+      expect(await asUser(token(SUPER, ["super_admin"], "aal1"), "select id from public.meetings")).toEqual([]);
+    });
   });
 });

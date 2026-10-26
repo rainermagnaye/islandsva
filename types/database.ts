@@ -117,6 +117,45 @@ type DemoBookingRow = {
   updated_at: string;
 };
 
+/** An admin's daily discovery-call times (PHT), at most 6 per tenant; written through set_discovery_times. */
+type DiscoveryTimeRow = {
+  id: string;
+  tenant_id: string;
+  position: number;
+  /** "HH:MM:SS", on :00 or :30. */
+  time_of_day: string;
+  created_at: string;
+};
+
+/** Every call (only `discovery` so far). Written only by the discovery-call functions (secret key). */
+type MeetingRow = {
+  id: string;
+  tenant_id: string;
+  kind: Enum<"meeting_kind">;
+  status: Enum<"meeting_status">;
+  lead_id: string | null;
+  organizer_id: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  starts_at: string;
+  ends_at: string;
+  google_event_id: string | null;
+  meet_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A meeting's append-only history: no update or delete, for anyone. */
+type MeetingEventRow = {
+  id: string;
+  tenant_id: string;
+  meeting_id: string;
+  kind: Enum<"meeting_event_kind">;
+  actor_id: string | null;
+  body: string | null;
+  created_at: string;
+};
+
 /** Signed-in users may read every column except token_hash (column grant); the server reads all. */
 type OnboardingLinkRow = {
   id: string;
@@ -313,6 +352,24 @@ export type Database = {
         Update: Optional<DemoBookingRow>;
         Relationships: [];
       };
+      discovery_times: {
+        Row: DiscoveryTimeRow;
+        Insert: InsertOf<DiscoveryTimeRow, "position" | "time_of_day">;
+        Update: Optional<DiscoveryTimeRow>;
+        Relationships: [];
+      };
+      meetings: {
+        Row: MeetingRow;
+        Insert: InsertOf<MeetingRow, "kind" | "starts_at" | "ends_at">;
+        Update: Optional<MeetingRow>;
+        Relationships: [];
+      };
+      meeting_events: {
+        Row: MeetingEventRow;
+        Insert: InsertOf<MeetingEventRow, "meeting_id" | "kind">;
+        Update: Optional<MeetingEventRow>;
+        Relationships: [];
+      };
       client_onboarding_links: {
         Row: OnboardingLinkRow;
         Insert: InsertOf<OnboardingLinkRow, "client_id" | "token_hash" | "created_by">;
@@ -436,6 +493,46 @@ export type Database = {
       book_demo: { Args: { client_id: string; slot_id: string; actor: string; note: string | null }; Returns: Json };
       decide_demo: { Args: { booking_id: string; actor: string; decision: "confirmed" | "rejected"; reason: string | null }; Returns: Json };
       cancel_demo: { Args: { booking_id: string; actor: string }; Returns: Json };
+      // Discovery calls. set_discovery_times: an admin with two-factor (signed in). discovery_inbox: signed in,
+      // rows only for an active Lead Gen. The rest: the secret key only.
+      set_discovery_times: { Args: { times: string[] }; Returns: undefined };
+      open_discovery_slots: { Args: Record<PropertyKey, never>; Returns: string[] };
+      request_discovery_call: {
+        Args: {
+          full_name: string;
+          email: string;
+          company_name: string | null;
+          industry: string | null;
+          country: string | null;
+          message: string;
+          package_code: string | null;
+          ip_hash: string | null;
+          user_agent: string | null;
+          starts_at: string;
+        };
+        /** The new lead's id. */
+        Returns: string;
+      };
+      decide_discovery_call: {
+        Args: { meeting_id: string; actor: string; decision: "scheduled" | "rejected"; reason: string | null; google_event_id?: string | null; meet_url?: string | null };
+        /** { lead_id, status, starts_at, email, full_name } */
+        Returns: Json;
+      };
+      record_discovery_outcome: { Args: { meeting_id: string; actor: string; outcome: "done" | "no_show"; note: string | null }; Returns: undefined };
+      discovery_inbox: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          meeting_id: string;
+          starts_at: string;
+          ends_at: string;
+          full_name: string;
+          company_name: string | null;
+          industry: string | null;
+          country: string | null;
+          package_code: string | null;
+          message: string;
+        }[];
+      };
     };
     Enums: {
       account_status: "invited" | "active" | "inactive";
@@ -452,6 +549,9 @@ export type Database = {
       payment_provider: "manual";
       payment_status: "paid" | "void";
       demo_status: "pending" | "confirmed" | "rejected" | "cancelled" | "completed" | "expired";
+      meeting_kind: "discovery";
+      meeting_status: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "cancelled" | "expired";
+      meeting_event_kind: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "note" | "expired";
     };
     CompositeTypes: { [_ in never]: never };
   };
