@@ -20,7 +20,6 @@ What is not in the MVP is a rule for every change, so it lives in `CLAUDE.md` §
 - **Repo and tooling:** make CI a required check — branch protection (paid plan) or the free CODEOWNERS + Actions guard; Prettier (editors already reformat on save — agree on it before reformatting lands in PRs); `--max-warnings=0`; pin Node 24 (`.nvmrc` + `engines`); Playwright E2E (`tests/e2e/`) for navigation, both themes, the contact form and sign-in.
 - **Launch:** see the checklist in `docs/operations.md`.
 - **Code:**
-  - A cleanup migration for what the registration packet replaced: `client_onboarding_links`, `payments` and their functions (`issue_onboarding_link`, `submit_onboarding`, `record_manual_payment`, `void_payment`, `activate_client`) are live but unused.
   - One list of custom error codes: the registration-packet functions reuse `IVA06`–`IVA09` with meanings that differ from the earlier ones.
   - Demo screens: use the design system's DatePicker and TimeSlotPicker (`components/ui/`) instead of native inputs.
   - Decide whether client↔VA tasks are in the MVP (`ui/task-list.tsx` exists; there's no table or screens).

@@ -786,7 +786,7 @@ describe("tenants", () => {
     ).rows;
     const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.assign_tenant()'::regprocedure")).rows;
     const missing = tables.map((t) => t.name).filter((name) => !["profiles", "leads"].includes(name) && !src.includes(`when '${name}'`));
-    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links"]));
+    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_packets"]));
     expect(missing).toEqual([]);
   });
 
@@ -894,322 +894,6 @@ describe("tenants", () => {
     await expect(asUser(asClient, "select private.assign_tenant()")).rejects.toThrow(/permission denied/);
   });
 });
-
-describe("client onboarding links", () => {
-  // Fresh clients so earlier blocks can't leave them disabled or linked. Links are issued and used by the server
-  // (secret key); signed-in users only read their status.
-  const OTHER_ADMIN = "00000000-0000-0000-0000-0000000000b1"; // the second tenant's admin (see "tenants")
-  const SUPER = "00000000-0000-0000-0000-000000000010";
-  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
-  let mine = "";
-  let theirs = "";
-  let spare = "";
-  const newClient = async (name: string, closer: string) =>
-    (await asServer<{ id: string }>(
-      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'Contact', $2, $3) returning id",
-      [name, `${name.toLowerCase()}@onboard.co`, closer],
-    ))[0].id;
-  const issue = (client: string, by: string, value: string) =>
-    asServer<{ link_id: string; link_expires_at: string }>("select * from public.issue_onboarding_link($1, $2, $3)", [client, by, sha(value)]);
-  const submit = (value: string, consent = true, billing = JSON.stringify({ name: "Acme Ltd" })) =>
-    asServer<{ id: string }>(
-      "select public.submit_onboarding($1, 'Ada Lovelace', ' +1 555 0100 ', $2::jsonb, $3::jsonb, $4) as id",
-      [sha(value), JSON.stringify({ city: "Austin" }), billing, consent],
-    );
-  const ageLinks = (client: string) =>
-    asServer("update public.client_onboarding_links set created_at = created_at - interval '3 minutes' where client_id = $1", [client]);
-
-  beforeAll(async () => {
-    mine = await newClient("Onboard", CLOSER);
-    theirs = await newClient("Elsewhere", CLOSER2);
-    spare = await newClient("Spare", CLOSER);
-  });
-
-  it("only the server can issue, revoke or use a link", async () => {
-    await expect(asUser(asCloser, "select * from public.issue_onboarding_link($1, $2, $3)", [mine, CLOSER, sha("x")])).rejects.toThrow(/permission denied for function/);
-    await expect(asUser(asAdmin, "select public.revoke_onboarding_link($1, $2)", [mine, ADMIN])).rejects.toThrow(/permission denied for function/);
-    await expect(as("anon", {}, "select public.submit_onboarding($1, 'A', '', '{}', '{}', true)", [sha("x")])).rejects.toThrow(/permission denied for function/);
-    const [grants] = await asServer<Record<string, boolean>>(`
-      select
-        bool_or(has_function_privilege(r, 'public.issue_onboarding_link(uuid, uuid, text)', 'execute')) as issue,
-        bool_or(has_function_privilege(r, 'public.revoke_onboarding_link(uuid, uuid)', 'execute')) as revoke,
-        bool_or(has_function_privilege(r, 'public.submit_onboarding(text, text, text, jsonb, jsonb, boolean)', 'execute')) as submit
-      from unnest(array['anon', 'authenticated']) as r`);
-    expect(grants).toEqual({ issue: false, revoke: false, submit: false });
-  });
-
-  it("the client's Closer or an admin of the tenant issues a link, valid for 7 days; others are refused", async () => {
-    const [link] = await issue(mine, CLOSER, "first");
-    const days = (new Date(link.link_expires_at).getTime() - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(6.9);
-    expect(days).toBeLessThanOrEqual(7);
-    await expect(issue(theirs, CLOSER, "nope")).rejects.toThrow(/only the client's Closer or an admin/);
-    await expect(issue(mine, VA, "nope")).rejects.toThrow(/only the client's Closer or an admin/);
-    await expect(issue(theirs, ADMIN, "admin-sent")).resolves.toHaveLength(1);
-    await expect(asServer("select * from public.issue_onboarding_link($1, $2, 'not-a-hash')", [spare, CLOSER])).rejects.toThrow(/64 hex/);
-  });
-
-  it("a new link revokes the old one, never within two minutes, and only one link is open at a time", async () => {
-    await expect(issue(mine, CLOSER, "too-soon")).rejects.toThrow(/sent moments ago/);
-    await ageLinks(mine);
-    await issue(mine, CLOSER, "second");
-    const rows = await asServer<{ token_hash: string; revoked_at: string | null }>(
-      "select token_hash, revoked_at from public.client_onboarding_links where client_id = $1",
-      [mine],
-    );
-    expect(rows.find((r) => r.token_hash === sha("first"))?.revoked_at).not.toBeNull();
-    expect(rows.filter((r) => r.revoked_at === null)).toHaveLength(1);
-    await expect(
-      asServer("insert into public.client_onboarding_links (client_id, token_hash, created_by) values ($1, $2, $3)", [mine, sha("third"), CLOSER]),
-    ).rejects.toThrow(/client_onboarding_links_one_open_idx/);
-  });
-
-  it("links go only to pending, enabled clients", async () => {
-    await asServer("update public.clients set disabled_at = now() where id = $1", [spare]);
-    await expect(issue(spare, CLOSER, "disabled")).rejects.toThrow(/disabled/);
-    await asServer("update public.clients set disabled_at = null, status = 'inactive' where id = $1", [spare]);
-    await expect(issue(spare, CLOSER, "inactive")).rejects.toThrow(/already inactive/);
-    await asServer("update public.clients set status = 'pending' where id = $1", [spare]);
-  });
-
-  it("the Closer and admins with 2FA read a link's status, never its hash; nobody else reads or writes links", async () => {
-    const status = "select id from public.client_onboarding_links where client_id = $1";
-    expect((await asUser(asCloser, status, [mine])).length).toBeGreaterThan(0);
-    expect(await asUser(asCloser2, status, [mine])).toEqual([]);
-    expect((await asUser(asAdmin, status, [mine])).length).toBeGreaterThan(0);
-    expect(await asUser(token(ADMIN, ["admin"], "aal1"), status, [mine])).toEqual([]);
-    expect(await asUser(asClient, status, [mine])).toEqual([]);
-    expect(await asUser(asVa, status, [mine])).toEqual([]);
-    await expect(as("anon", {}, status, [mine])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asCloser, "select token_hash from public.client_onboarding_links")).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "select * from public.client_onboarding_links")).rejects.toThrow(/permission denied/);
-    await expect(
-      asUser(asCloser, "insert into public.client_onboarding_links (client_id, token_hash, created_by) values ($1, $2, $3)", [spare, sha("mine"), CLOSER]),
-    ).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "update public.client_onboarding_links set revoked_at = now() where client_id = $1", [mine])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "delete from public.client_onboarding_links where client_id = $1", [mine])).rejects.toThrow(/permission denied/);
-  });
-
-  it("links stay inside their tenant; a Super Admin with 2FA sees them all", async () => {
-    const [{ id: other }] = await asServer<{ id: string }>("select id from public.tenants where slug = 'other-agency'");
-    const otherAdmin = { ...token(OTHER_ADMIN, ["admin"], "aal2"), app_metadata: { roles: ["admin"], tenant_id: other } };
-    expect(await asUser(otherAdmin, "select id from public.client_onboarding_links")).toEqual([]);
-    await expect(issue(spare, OTHER_ADMIN, "cross-tenant")).rejects.toThrow(/only the client's Closer or an admin/);
-    expect((await asUser(token(SUPER, ["super_admin"], "aal2"), "select id from public.client_onboarding_links where client_id = $1", [mine])).length).toBeGreaterThan(0);
-    const [link] = await asServer<{ tenant_id: string }>("select tenant_id from public.client_onboarding_links where client_id = $1 limit 1", [mine]);
-    const [client] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [mine]);
-    expect(link.tenant_id).toBe(client.tenant_id);
-  });
-
-  it("a revoked or unknown link can't be used, and only the client's Closer or an admin revokes", async () => {
-    await expect(asServer("select public.revoke_onboarding_link($1, $2)", [mine, CLOSER2])).rejects.toThrow(/only the client's Closer or an admin/);
-    expect(await asServer("select public.revoke_onboarding_link($1, $2) as revoked", [theirs, ADMIN])).toEqual([{ revoked: true }]);
-    await expect(submit("admin-sent")).rejects.toThrow(/already used or withdrawn/);
-    await expect(submit("never-issued")).rejects.toThrow(/unknown link/);
-  });
-
-  it("an expired link can't be used", async () => {
-    await issue(spare, CLOSER, "old");
-    await asServer(
-      "update public.client_onboarding_links set created_at = now() - interval '8 days', expires_at = now() - interval '1 day' where token_hash = $1",
-      [sha("old")],
-    );
-    await expect(submit("old")).rejects.toThrow(/expired/);
-  });
-
-  it("a submission needs consent and fitting billing details, writes them once, and never touches the email", async () => {
-    await expect(submit("second", false)).rejects.toThrow(/consent is required/);
-    await expect(submit("second", true, JSON.stringify({ notes: "x".repeat(2100) }))).rejects.toThrow(/clients_billing_object/);
-    await expect(submit("second", true, "[]")).rejects.toThrow(/clients_billing_object/);
-    expect((await submit("second"))[0].id).toBe(mine);
-    const [row] = await asServer<{ contact_name: string; contact_phone: string; contact_email: string; billing: object; consented_at: string | null; onboarding_submitted_at: string | null }>(
-      "select contact_name, contact_phone, contact_email, billing, consented_at, onboarding_submitted_at from public.clients where id = $1",
-      [mine],
-    );
-    expect(row).toMatchObject({ contact_name: "Ada Lovelace", contact_phone: "+1 555 0100", contact_email: "onboard@onboard.co", billing: { name: "Acme Ltd" } });
-    expect(row.consented_at).not.toBeNull();
-    expect(row.onboarding_submitted_at).not.toBeNull();
-    await expect(submit("second")).rejects.toThrow(/already used or withdrawn/);
-  });
-
-  it("signed-in users can't set consent or submission times; Closers and admins may correct billing", async () => {
-    await expect(asUser(asCloser, "update public.clients set consented_at = now() where id = $1", [mine])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "update public.clients set onboarding_submitted_at = now() where id = $1", [mine])).rejects.toThrow(/permission denied/);
-    expect(await asUser(asCloser, "update public.clients set billing = $1::jsonb where id = $2 returning id", [JSON.stringify({ name: "Acme Limited" }), mine])).toHaveLength(1);
-    expect(await asUser(asCloser2, "update public.clients set billing = '{}'::jsonb where id = $1 returning id", [mine])).toHaveLength(0);
-    expect(await asUser(asVa, "update public.clients set billing = '{}'::jsonb where id = $1 returning id", [mine])).toHaveLength(0);
-  });
-
-  it("a Closer creates a client with its package in one step, only as themselves", async () => {
-    const create =
-      "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone, business) values ('Pkg', 'C', 'pkg@onboard.co', $1, 'essentials', 20, 1, 90000, '2026-11-01', 'America/New_York', '{}') returning status";
-    expect(await asUser(asCloser, create, [CLOSER])).toEqual([{ status: "pending" }]);
-    await expect(asUser(asCloser, create, [CLOSER2])).rejects.toThrow(/row-level security/);
-    await expect(asUser(asVa, create, [CLOSER])).rejects.toThrow(/row-level security/);
-  });
-});
-
-describe("client payments and activation", () => {
-  // Payments are recorded by hand (Stripe arrives in M4); activation needs the form, consent and a payment.
-  const CLOSER_B = "00000000-0000-0000-0000-0000000000b3"; // the second tenant's Closer (see "tenants")
-  const LOGIN = "00000000-0000-0000-0000-0000000000e1";
-  const LOGIN_B = "00000000-0000-0000-0000-0000000000e2";
-  const FRESH = "00000000-0000-0000-0000-0000000000e3";
-  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
-  let ready = "";
-  let unsent = "";
-  let noPackage = "";
-  let inB = "";
-  const newClient = async (name: string, closer: string, withPackage = true) =>
-    (await asServer<{ id: string }>(
-      withPackage
-        ? "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone) values ($1, 'C', $2, $3, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id"
-        : "insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'C', $2, $3) returning id",
-      [name, `${name.toLowerCase()}@activate.co`, closer],
-    ))[0].id;
-  const onboard = async (client: string, closer: string, value: string) => {
-    await asServer("select * from public.issue_onboarding_link($1, $2, $3)", [client, closer, sha(value)]);
-    await asServer("select public.submit_onboarding($1, 'C', '', '{}'::jsonb, '{}'::jsonb, true)", [sha(value)]);
-  };
-  const pay = (client: string, by: string, amount = 85500, paidOn = "2026-10-20") =>
-    asServer<{ id: string }>("select public.record_manual_payment($1, $2, $3, ' TRX-1 ', $4) as id", [client, by, amount, paidOn]);
-  const activate = (client: string, login: string, by: string) => asServer("select public.activate_client($1, $2, $3)", [client, login, by]);
-  const grant = (user: string, role: string, by: string) =>
-    asServer("insert into public.roles (user_id, role, assigned_by) values ($1, $2, $3) returning id", [user, role, by]);
-
-  beforeAll(async () => {
-    await as("supabase_auth_admin", {}, `
-      insert into auth.users (id, email) values ('${LOGIN}', 'owner@activate.co'), ('${LOGIN_B}', 'owner-b@activate.co'), ('${FRESH}', 'fresh@activate.co')`);
-    ready = await newClient("Ready", CLOSER);
-    unsent = await newClient("Unsent", CLOSER);
-    noPackage = await newClient("Bare", CLOSER, false);
-    inB = await newClient("Bravo", CLOSER_B);
-    await onboard(ready, CLOSER, "ready");
-    await onboard(inB, CLOSER_B, "bravo");
-  });
-
-  it("only the server records payments or activates", async () => {
-    await expect(asUser(asCloser, "select public.record_manual_payment($1, $2, 100, null, current_date)", [ready, CLOSER])).rejects.toThrow(/permission denied for function/);
-    await expect(asUser(asAdmin, "select public.activate_client($1, $2, $3)", [ready, LOGIN, ADMIN])).rejects.toThrow(/permission denied for function/);
-    await expect(as("anon", {}, "select public.void_payment($1, $2)", [ready, ADMIN])).rejects.toThrow(/permission denied for function/);
-    const [grants] = await asServer<Record<string, boolean>>(`
-      select
-        bool_or(has_function_privilege(r, 'public.record_manual_payment(uuid, uuid, integer, text, date)', 'execute')) as record,
-        bool_or(has_function_privilege(r, 'public.void_payment(uuid, uuid)', 'execute')) as void,
-        bool_or(has_function_privilege(r, 'public.activate_client(uuid, uuid, uuid)', 'execute')) as activate
-      from unnest(array['anon', 'authenticated']) as r`);
-    expect(grants).toEqual({ record: false, void: false, activate: false });
-  });
-
-  it("the client's Closer or an admin records a payment for the client's term; bad amounts and dates are refused", async () => {
-    const [{ id }] = await pay(ready, CLOSER);
-    const [row] = await asServer<{ term_months: number; provider_ref: string; status: string; provider: string }>(
-      "select term_months, provider_ref, status, provider from public.payments where id = $1",
-      [id],
-    );
-    expect(row).toEqual({ term_months: 6, provider_ref: "TRX-1", status: "paid", provider: "manual" });
-    await expect(pay(ready, CLOSER2)).rejects.toThrow(/only the client's Closer or an admin/);
-    await expect(pay(ready, VA)).rejects.toThrow(/only the client's Closer or an admin/);
-    await expect(pay(unsent, ADMIN)).resolves.toHaveLength(1);
-    await expect(pay(ready, CLOSER, 0)).rejects.toThrow(/payments_amount_cents_check/);
-    await expect(pay(ready, CLOSER, 100, "2999-01-01")).rejects.toThrow(/can't be in the future/);
-    await expect(pay(noPackage, CLOSER)).rejects.toThrow(/set the client's package/);
-  });
-
-  it("the Closer and admins with 2FA read payments; nobody else reads them, and no signed-in user writes them", async () => {
-    const read = "select id from public.payments where client_id = $1";
-    expect((await asUser(asCloser, read, [ready])).length).toBeGreaterThan(0);
-    expect(await asUser(asCloser2, read, [ready])).toEqual([]);
-    expect((await asUser(asAdmin, read, [ready])).length).toBeGreaterThan(0);
-    expect(await asUser(token(ADMIN, ["admin"], "aal1"), read, [ready])).toEqual([]);
-    expect(await asUser(asVa, read, [ready])).toEqual([]);
-    expect(await asUser(asClient, read, [ready])).toEqual([]);
-    await expect(as("anon", {}, read, [ready])).rejects.toThrow(/permission denied/);
-    await expect(
-      asUser(asCloser, "insert into public.payments (client_id, amount_cents, term_months, paid_on, recorded_by) values ($1, 100, 6, current_date, $2)", [ready, CLOSER]),
-    ).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "update public.payments set amount_cents = 1 where client_id = $1", [ready])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "delete from public.payments where client_id = $1", [ready])).rejects.toThrow(/permission denied/);
-  });
-
-  it("a payment marked by mistake can be voided once, by the client's Closer or an admin", async () => {
-    const [{ id }] = await pay(unsent, CLOSER);
-    await expect(asServer("select public.void_payment($1, $2)", [id, CLOSER2])).rejects.toThrow(/only the client's Closer or an admin/);
-    await asServer("select public.void_payment($1, $2)", [id, CLOSER]);
-    await expect(asServer("select public.void_payment($1, $2)", [id, ADMIN])).rejects.toThrow(/already void/);
-    expect(await asServer("select status from public.payments where id = $1", [id])).toEqual([{ status: "void" }]);
-  });
-
-  it("activation needs the form, consent, a payment, an enabled client, and the client's Closer or an admin", async () => {
-    await expect(activate(unsent, LOGIN, CLOSER)).rejects.toThrow(/hasn't sent the onboarding form/);
-    await onboard(unsent, CLOSER, "unsent");
-    await asServer("update public.payments set status = 'void', voided_at = now(), voided_by = $2 where client_id = $1", [unsent, ADMIN]);
-    await expect(activate(unsent, LOGIN, CLOSER)).rejects.toThrow(/record a payment before activating/);
-    await expect(activate(ready, LOGIN, CLOSER2)).rejects.toThrow(/only the client's Closer or an admin/);
-    await asServer("update public.clients set disabled_at = now() where id = $1", [ready]);
-    await expect(activate(ready, LOGIN, CLOSER)).rejects.toThrow(/disabled/);
-    await asServer("update public.clients set disabled_at = null where id = $1", [ready]);
-    await expect(activate(ready, VA, CLOSER)).rejects.toThrow(/already belongs to someone/);
-    expect(await asServer("select status from public.clients where id = $1", [ready])).toEqual([{ status: "pending" }]);
-  });
-
-  it("activating grants the client role, links the login, marks the client active and closes open links", async () => {
-    await asServer("update public.client_onboarding_links set created_at = created_at - interval '3 minutes' where client_id = $1", [ready]);
-    await asServer("select * from public.issue_onboarding_link($1, $2, $3)", [ready, CLOSER, sha("reissued")]);
-    await activate(ready, LOGIN, CLOSER);
-    const [client] = await asServer<{ status: string; user_id: string; activated_at: string | null }>(
-      "select status, user_id, activated_at from public.clients where id = $1",
-      [ready],
-    );
-    expect(client).toMatchObject({ status: "active", user_id: LOGIN });
-    expect(client.activated_at).not.toBeNull();
-    expect(await asServer("select role, assigned_by from public.roles where user_id = $1", [LOGIN])).toEqual([{ role: "client", assigned_by: CLOSER }]);
-    expect((await hookRoles(LOGIN)).roles).toEqual(["client"]);
-    expect(await asServer("select id from public.client_onboarding_links where client_id = $1 and submitted_at is null and revoked_at is null", [ready])).toEqual([]);
-    const asOwner = token(LOGIN, ["client"]);
-    expect(ids(await asUser<{ id: string }>(asOwner, "select id from public.clients"))).toEqual([ready]);
-    expect((await asUser(asOwner, "select id from public.payments")).length).toBeGreaterThan(0);
-  });
-
-  it("an active client can't be activated again, and its payments can't be added or voided by hand", async () => {
-    await expect(activate(ready, FRESH, CLOSER)).rejects.toThrow(/already active/);
-    await expect(pay(ready, CLOSER)).rejects.toThrow(/already active/);
-    const [{ id }] = await asServer<{ id: string }>("select id from public.payments where client_id = $1 and status = 'paid' limit 1", [ready]);
-    await expect(asServer("select public.void_payment($1, $2)", [id, ADMIN])).rejects.toThrow(/already active/);
-    await pay(unsent, CLOSER);
-    await expect(activate(unsent, LOGIN, CLOSER)).rejects.toThrow(/already belongs to someone/);
-  });
-
-  it("a fresh login moves into the client's tenant on activation", async () => {
-    await pay(inB, CLOSER_B);
-    await activate(inB, LOGIN_B, CLOSER_B);
-    const [{ tenant_id: clientTenant }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [inB]);
-    expect(await asServer("select tenant_id from public.profiles where id = $1", [LOGIN_B])).toEqual([{ tenant_id: clientTenant }]);
-    expect(await asServer("select tenant_id from public.roles where user_id = $1", [LOGIN_B])).toEqual([{ tenant_id: clientTenant }]);
-  });
-
-  it("payments stay inside their tenant; a Super Admin with 2FA sees them all", async () => {
-    const [{ tenant_id: other }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [inB]);
-    const adminB = { ...token("00000000-0000-0000-0000-0000000000b1", ["admin"], "aal2"), app_metadata: { roles: ["admin"], tenant_id: other } };
-    const clientsSeen = async (claims: Claims) => [...new Set((await asUser<{ client_id: string }>(claims, "select client_id from public.payments")).map((p) => p.client_id))];
-    expect(await clientsSeen(adminB)).toEqual([inB]);
-    expect(await clientsSeen(asAdmin)).not.toContain(inB);
-    expect(await clientsSeen(token("00000000-0000-0000-0000-000000000010", ["super_admin"], "aal2"))).toEqual(expect.arrayContaining([inB, ready]));
-  });
-
-  it("a Closer grants only the client role, only in their own tenant, only while active", async () => {
-    await expect(grant(FRESH, "va", CLOSER)).rejects.toThrow(/admin of the same tenant/);
-    await expect(grant(FRESH, "closer", CLOSER)).rejects.toThrow(/admin of the same tenant/);
-    await expect(grant(FRESH, "admin", CLOSER)).rejects.toThrow(/only a Super Admin/);
-    await expect(grant(FRESH, "client", CLOSER_B)).rejects.toThrow(/admin of the same tenant/);
-    await asServer("update public.profiles set status = 'inactive' where id = $1", [CLOSER2]);
-    await expect(grant(FRESH, "client", CLOSER2)).rejects.toThrow(/admin of the same tenant/);
-    await asServer("update public.profiles set status = 'active' where id = $1", [CLOSER2]);
-    await expect(grant(FRESH, "client", CLOSER)).resolves.toHaveLength(1);
-    await asServer("delete from public.roles where user_id = $1", [FRESH]);
-  });
-});
-
 
 describe("client onboarding", () => {
   const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456";
@@ -1640,5 +1324,49 @@ describe("demo scheduling", () => {
       ).rejects.toThrow(/foreign key/);
       await asServer("delete from public.demo_slots where id = $1", [slotB]);
     });
+  });
+});
+
+describe("payments (read rules) and the replaced onboarding", () => {
+  // Payments stay: the sales summary reads them. Written only by the server.
+  let clientOfCloser = "";
+  let otherClient = "";
+  let paymentId = "";
+
+  beforeAll(async () => {
+    const make = async (name: string, closer: string, user: string | null) =>
+      (await asServer<{ id: string }>(
+        "insert into public.clients (company_name, contact_name, contact_email, created_by, user_id, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone) values ($1, 'P', $2, $3, $4, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id",
+        [name, `${name.toLowerCase()}@pay.co`, closer, user],
+      ))[0].id;
+    clientOfCloser = await make("Payco", CLOSER, null);
+    otherClient = await make("Otherpay", CLOSER2, null);
+    [{ id: paymentId }] = await asServer<{ id: string }>(
+      "insert into public.payments (client_id, amount_cents, term_months, paid_on, recorded_by) values ($1, 85500, 6, '2026-10-20', $2) returning id",
+      [clientOfCloser, ADMIN],
+    );
+  });
+
+  it("the client's Closer and admins with 2FA read a payment; other Closers, VAs, an admin without 2FA and anon don't", async () => {
+    expect(ids(await asUser<{ id: string }>(asCloser, "select id from public.payments where id = $1", [paymentId]))).toEqual([paymentId]);
+    expect(ids(await asUser<{ id: string }>(asAdmin, "select id from public.payments where id = $1", [paymentId]))).toEqual([paymentId]);
+    expect(await asUser(asCloser2, "select id from public.payments where id = $1", [paymentId])).toEqual([]);
+    expect(await asUser(asVa, "select id from public.payments where id = $1", [paymentId])).toEqual([]);
+    expect(await asUser(token(ADMIN, ["admin"], "aal1"), "select id from public.payments where id = $1", [paymentId])).toEqual([]);
+    await expect(as("anon", {}, "select id from public.payments")).rejects.toThrow(/permission denied/);
+    expect(otherClient).not.toBe("");
+  });
+
+  it("no signed-in user writes payments", async () => {
+    await expect(asUser(asAdmin, "insert into public.payments (client_id, amount_cents, term_months, paid_on, recorded_by) values ($1, 1, 6, '2026-10-20', $2)", [clientOfCloser, ADMIN])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "update public.payments set amount_cents = 1")).rejects.toThrow(/permission denied/);
+  });
+
+  it("the emailed onboarding link and the manual payment and activation functions are gone", async () => {
+    const [{ table }] = (await db.query<{ table: string | null }>("select to_regclass('public.client_onboarding_links')::text as table")).rows;
+    expect(table).toBeNull();
+    const gone = ["issue_onboarding_link", "revoke_onboarding_link", "submit_onboarding", "record_manual_payment", "void_payment", "activate_client"];
+    const left = (await db.query<{ name: string }>("select proname as name from pg_proc where proname = any($1)", [gone])).rows;
+    expect(left).toEqual([]);
   });
 });
