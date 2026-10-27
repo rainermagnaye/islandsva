@@ -7,7 +7,7 @@ import { minutesOf, wallClockIn } from "@/components/ui/date-math";
 import { listCalendarDemos } from "@/features/demos/admin-dal";
 import { VA_TIME_ZONE } from "@/features/demos/contract";
 import { CalendarBoard } from "@/features/meetings/components/calendar-board";
-import { listBookingChoices, listBookings } from "@/features/meetings/dal";
+import { listBookingChoices, listBookings } from "@/features/meetings/booking-dal";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Calendar" };

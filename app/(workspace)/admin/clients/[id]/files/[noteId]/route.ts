@@ -1,4 +1,4 @@
-import { getClientNoteAttachment } from "@/features/clients/dal";
+import { getClientNoteAttachment } from "@/features/clients/notes-dal";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 

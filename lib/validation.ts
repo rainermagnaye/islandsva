@@ -78,3 +78,12 @@ export function outageResult(error: unknown, what: string): { ok: false; message
   console.error(`${what} failed`, { service: error.service, error: error.message });
   return { ok: false, message: OUTAGE_MESSAGE };
 }
+
+/** A `YYYY-MM-DD` day as its UTC midnight in milliseconds, or null when it isn't a real calendar day. */
+export function utcDay(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date.getTime();
+}

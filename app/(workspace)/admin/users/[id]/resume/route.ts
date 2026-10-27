@@ -1,4 +1,4 @@
-import { getEmployeeResume } from "@/features/users/dal";
+import { getEmployeeResume } from "@/features/users/employee-dal";
 import { parseEmployeeId } from "@/features/users/validation";
 import { needsSecondFactor, requireUser } from "@/lib/auth/session";
 import { appRoutes } from "@/content/routes";

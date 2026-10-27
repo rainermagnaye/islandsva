@@ -9,7 +9,8 @@ import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
 import type { SubmitResult } from "@/types/form";
 import { returnClientRegistration } from "../actions";
-import { CLIENT_REVIEW_NOTE_LIMIT, CLIENT_REVIEW_SECTIONS, CLIENT_REVIEW_SECTION_LABELS, type ClientDetail, type ClientPacketSummary } from "../contract";
+import { CLIENT_REVIEW_SECTIONS, type ClientDetail, type ClientPacketSummary } from "../contract";
+import { CLIENT_REVIEW_NOTE_LIMIT, CLIENT_REVIEW_SECTION_LABELS } from "../registration";
 import { ClientConsents, ClientInvoices, ClientProfileView } from "./client-profile-view";
 import { ConfirmPaymentForm } from "./confirm-payment-form";
 

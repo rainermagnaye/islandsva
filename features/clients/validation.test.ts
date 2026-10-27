@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseClientDetails, parseClientFlag, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parsePaymentReceived } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientNote, parseCreateClient, parseOnboarding } from "./validation";
+import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyOpenSections, clientBadge, clientProfileTab, clientRegistrationSteps, clientReviewSections, emptyClientBusiness, onboardingAccess, openClientSections, revisionMessage, type ClientBusiness } from "./contract";
+import { clientBadge, clientProfileTab, emptyClientBusiness, onboardingAccess, type ClientBusiness } from "./contract";
+import { applyOpenSections, clientRegistrationSteps, clientReviewSections, openClientSections, revisionMessage } from "./registration";
 
 const complete: ClientBusiness = {
   ...emptyClientBusiness(),

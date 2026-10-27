@@ -5,34 +5,16 @@ import { packages } from "@/content/packages";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
 import { timezoneForCountry } from "@/content/timezones";
 import { discoveryStart } from "@/features/meetings/contract";
-import {
-  BUDGET_RANGES,
-  CONTACT_METHODS,
-  CONTACT_TIMES,
-  CONVERT_LIMITS,
-  HIRING_TIMELINES,
-  INDUSTRIES,
-  LEAD_EVENT_LIMIT,
-  LEAD_LIMITS,
-  LEAD_PROFILE_LIMITS,
-  LEAD_SOURCES,
-  MARKETING_CONSENT,
-  PRIORITIES,
-  STAFF_COUNTS,
-  TIMELINE_KINDS,
-  TRIAGE_STATUSES,
-  YEARS_IN_SERVICE,
-  type ConvertField,
-  type LeadField,
-  type LeadPayload,
-  type LeadProfileDetails,
-  type LeadStatusField,
-} from "./contract";
+import { BUDGET_RANGES, CONTACT_METHODS, CONTACT_TIMES, HIRING_TIMELINES, INDUSTRIES, LEAD_EVENT_LIMIT, LEAD_LIMITS, LEAD_PROFILE_LIMITS, LEAD_SOURCES, MARKETING_CONSENT, PRIORITIES, STAFF_COUNTS, TIMELINE_KINDS, TRIAGE_STATUSES, YEARS_IN_SERVICE, type LeadField, type LeadPayload, type LeadProfileDetails, type LeadStatusField } from "./contract";
 
 const LEAD_FIELDS = ["name", "email", "company", "industry", "country", "message", "package"] as const satisfies readonly LeadField[];
+
 const PUBLIC_LEAD_FIELDS = [...LEAD_FIELDS, "meetingDate", "meetingTime"] as const satisfies readonly LeadField[];
-const PACKAGE_SLUGS = new Set(packages.map((p) => p.slug));
+
+export const PACKAGE_SLUGS = new Set(packages.map((p) => p.slug));
+
 const COUNTRY_NAMES: readonly string[] = COUNTRIES;
+
 const INDUSTRY_NAMES: readonly string[] = INDUSTRIES;
 
 // One entry per LeadPayload key (checked by `satisfies`); strictObject rejects any other key.
@@ -102,40 +84,6 @@ export function parseLead(input: unknown) {
   return result.ok ? { ok: true as const, ...result.value } : result;
 }
 
-// Admin: "Convert to client" -----------------------------------------------------------------------------
-
-const optionalPhone = z
-  .string()
-  .trim()
-  .max(CONVERT_LIMITS.contactPhone, tooLong("the phone number", CONVERT_LIMITS.contactPhone))
-  .regex(NO_CONTROL_CHARS, tooLong("the phone number", CONVERT_LIMITS.contactPhone))
-  .default("");
-
-const convertSchema = z
-  .strictObject({
-    leadId: z.uuid({ error: FORM_ERROR }),
-    companyName: z
-      .string({ error: "Enter the client's company name." })
-      .trim()
-      .min(1, "Enter the client's company name.")
-      .max(CONVERT_LIMITS.companyName, tooLong("the company name", CONVERT_LIMITS.companyName))
-      .regex(NO_CONTROL_CHARS, tooLong("the company name", CONVERT_LIMITS.companyName)),
-    contactName: z
-      .string({ error: "Enter the contact's name." })
-      .trim()
-      .min(1, "Enter the contact's name.")
-      .max(CONVERT_LIMITS.contactName, tooLong("the name", CONVERT_LIMITS.contactName))
-      .regex(NO_CONTROL_CHARS, tooLong("the name", CONVERT_LIMITS.contactName)),
-    contactPhone: optionalPhone,
-  })
-  .transform(({ contactPhone, ...rest }) => ({ ...rest, contactPhone: contactPhone || null }));
-
-export type ConvertInput = z.output<typeof convertSchema>;
-
-/** Validates the "Convert to client" form. A bad lead id is a tampered form (form-level error). */
-export const parseConvert = (input: unknown) =>
-  parseWith(convertSchema, input, ["companyName", "contactName", "contactPhone"] satisfies ConvertField[]);
-
 // Admin: change a lead's status -------------------------------------------------------------------------
 
 const statusSchema = z.strictObject({
@@ -201,7 +149,7 @@ export const parseAdminLead = (input: unknown) => parseWith(adminLeadSchema, inp
 
 // Admin: timeline, edit, convert with remarks ----------------------------------------------------------
 
-const remark = z
+export const remark = z
   .string({ error: "Enter a few words." })
   .trim()
   .min(1, "Enter a few words.")
@@ -215,6 +163,7 @@ const stepSchema = z.strictObject({
 });
 
 export type LeadStepInput = z.output<typeof stepSchema>;
+
 export type LeadStepField = "body";
 
 /** A call, qualification, junk remark, note or remark. The kind comes from the button, so a bad one is tampering. */
@@ -299,92 +248,6 @@ export function parseLeadEdit(input: unknown) {
     };
   }
   return { ok: true as const, value: { leadId: id.data, ...lead.value, profile: profile.value } };
-}
-
-const DAY = 86_400_000;
-
-const packageSetupSchema = z.strictObject({
-  package: z
-    .string({ error: "Choose a package." })
-    .trim()
-    .refine((slug) => PACKAGE_SLUGS.has(slug), "Choose a package."),
-  hoursPerWeek: z.enum(["20", "40", "80"], { error: "Choose the hours for this package." }),
-  termMonths: z.enum(["1", "6", "12"], { error: "Choose how long they'll commit." }),
-  startsOn: z.string({ error: "Choose a start date." }).regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a start date."),
-});
-
-const SETUP_FIELDS = ["package", "hoursPerWeek", "termMonths", "startsOn"] as const;
-
-export type ConvertNotedInput = ConvertInput & {
-  remarks: string;
-  packageSlug: string;
-  hoursPerWeek: 20 | 40 | 80;
-  termMonths: 1 | 6 | 12;
-  startsOn: string;
-};
-export type ConvertNotedField = ConvertField | "remarks" | (typeof SETUP_FIELDS)[number];
-
-/** UTC midnight for a calendar day, or null when it isn't a real date. */
-function utcDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
-  return date.getTime();
-}
-
-function todayUtc() {
-  const now = new Date();
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-}
-
-/**
- * Convert, the package they're confirming, and the remark that lands on the timeline.
- * The monthly price is not an input — the server reads it from the package catalogue.
- */
-export function parseConvertNoted(input: unknown) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false as const, formError: FORM_ERROR };
-  const record = input as Record<string, unknown>;
-  const { remarks, package: packageSlug, hoursPerWeek, termMonths, startsOn, timezone, ...rest } = record;
-  void timezone;
-  const converted = parseConvert(rest);
-  const setup = parseWith(packageSetupSchema, { package: packageSlug, hoursPerWeek, termMonths, startsOn }, SETUP_FIELDS);
-  const note = remark.safeParse(remarks);
-
-  const fieldErrors: Partial<Record<ConvertNotedField, string>> = {};
-  if (!converted.ok && "fieldErrors" in converted) Object.assign(fieldErrors, converted.fieldErrors);
-  if (!setup.ok && "fieldErrors" in setup) Object.assign(fieldErrors, setup.fieldErrors);
-  if (!note.success) fieldErrors.remarks = note.error.issues[0]?.message ?? "Enter a few words.";
-  if (!converted.ok && "formError" in converted) return converted;
-  if (!setup.ok && "formError" in setup) return setup;
-
-  if (setup.ok) {
-    const pkg = packages.find((item) => item.slug === setup.value.package);
-    if (!pkg || String(pkg.weeklyHours) !== setup.value.hoursPerWeek) {
-      fieldErrors.hoursPerWeek = "Choose the hours that come with this package.";
-    }
-    const start = utcDay(setup.value.startsOn);
-    const today = todayUtc();
-    if (start === null || start < today - DAY || start > today + 366 * DAY) {
-      fieldErrors.startsOn = "Choose a start date from today through the next year.";
-    }
-  }
-
-  if (!converted.ok || !setup.ok || !note.success || fieldErrors.hoursPerWeek || fieldErrors.startsOn) {
-    return { ok: false as const, fieldErrors };
-  }
-
-  return {
-    ok: true as const,
-    value: {
-      ...converted.value,
-      remarks: note.data,
-      packageSlug: setup.value.package,
-      hoursPerWeek: Number(setup.value.hoursPerWeek) as 20 | 40 | 80,
-      termMonths: Number(setup.value.termMonths) as 1 | 6 | 12,
-      startsOn: setup.value.startsOn,
-    },
-  };
 }
 
 const idSchema = z.strictObject({ leadId: z.uuid({ error: FORM_ERROR }) });

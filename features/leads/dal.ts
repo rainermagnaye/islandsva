@@ -4,8 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
-import { leadProfileFrom, leadProfileToJson, type LeadDetail, type LeadEvent, type LeadEventKind, type LeadPage, type LeadStatus, type LeadSummary } from "./contract";
-import type { ConvertNotedInput, LeadEditInput, LeadInput } from "./validation";
+import { leadProfileFrom, leadProfileToJson, type LeadDetail, type LeadEvent, type LeadPage, type LeadStatus, type LeadSummary } from "./contract";
+import type { LeadEditInput, LeadInput } from "./validation";
 
 type NewLead = LeadInput & { ipHash: string | null; userAgent: string | null };
 
@@ -78,7 +78,9 @@ export async function markLeadNotified(id: string) {
 // own rules — admins with two-factor sign-in only — are enforced a second time.
 
 const PAGE_SIZE = 25;
+
 const SUMMARY_COLUMNS = "id, full_name, email, company_name, package_code, status, closer_id, created_at";
+
 // Lead ids are UUIDs; anything else in a URL is a 404, not a database error.
 type SummaryRow = {
   id: string;
@@ -249,104 +251,6 @@ export async function claimLead(id: string, userId: string) {
   const { data, error } = await supabase.from("leads").update({ closer_id: userId }).eq("id", id).select("id");
   if (error) throw new UpstreamError("supabase", `Assigning lead ${id} failed: ${error.message}`, { cause: error });
   return (data ?? []).length > 0;
-}
-
-/** Why a conversion was refused, from convert_lead()'s own error codes (see the migration). */
-const CONVERT_REFUSALS = { IVA01: "not_found", IVA02: "converted", IVA03: "closed" } as const;
-
-/** Creates a pending client from a lead and marks the lead converted, in one database transaction. */
-export async function convertLeadToClient(input: { leadId: string; companyName: string; contactName: string; contactPhone: string | null }) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("convert_lead", {
-    lead_id: input.leadId,
-    company_name: input.companyName,
-    contact_name: input.contactName,
-    contact_phone: input.contactPhone,
-  });
-  if (error) {
-    const refusal = CONVERT_REFUSALS[error.code as keyof typeof CONVERT_REFUSALS];
-    if (refusal) return { ok: false as const, reason: refusal };
-    throw new UpstreamError("supabase", `Converting lead ${input.leadId} failed: ${error.message}`, { cause: error });
-  }
-  return { ok: true as const, clientId: data };
-}
-
-const STEP_REFUSALS = { IVA01: "not_found", IVA04: "unavailable" } as const;
-
-/** Writes a timeline row and, for a pipeline step, moves the status. One database transaction. */
-export async function recordLeadStep(leadId: string, kind: LeadEventKind, body: string) {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("record_lead_step", { lead_id: leadId, kind, body });
-  if (error) {
-    const refusal = STEP_REFUSALS[error.code as keyof typeof STEP_REFUSALS];
-    if (refusal) return { ok: false as const, reason: refusal };
-    throw new UpstreamError("supabase", `Recording a lead step failed: ${error.message}`, { cause: error });
-  }
-  return { ok: true as const };
-}
-
-/** Call summary or note, plus an optional file. A call moves the lead to contacted; a note leaves the status. */
-export async function recordLeadFile(kind: "call" | "note", leadId: string, body: string, file: { name: string; type: string; base64: string } | null) {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc(kind === "call" ? "record_lead_call" : "record_lead_note", {
-    lead_id: leadId,
-    body,
-    attachment_name: file?.name ?? null,
-    attachment_type: file?.type ?? null,
-    attachment_base64: file?.base64 ?? null,
-  });
-  if (error) {
-    const refusal = STEP_REFUSALS[error.code as keyof typeof STEP_REFUSALS];
-    if (refusal) return { ok: false as const, reason: refusal };
-    throw new UpstreamError("supabase", `Recording a call failed: ${error.message}`, { cause: error });
-  }
-  return { ok: true as const };
-}
-
-/** The file on one timeline row, for an admin who can already read that lead. */
-export async function getLeadAttachment(leadId: string, eventId: string) {
-  if (!isUuid(leadId) || !isUuid(eventId)) return null;
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("lead_events")
-    .select("attachment_name, attachment_type, attachment_bytes")
-    .eq("id", eventId)
-    .eq("lead_id", leadId)
-    .maybeSingle();
-  if (error) throw new UpstreamError("supabase", `Reading an attachment failed: ${error.message}`, { cause: error });
-  if (!data?.attachment_name || !data.attachment_type || !data.attachment_bytes) return null;
-  return { name: data.attachment_name, type: data.attachment_type, bytes: decodeBytea(data.attachment_bytes) };
-}
-
-function decodeBytea(value: string) {
-  const hex = value.startsWith("\\x") ? value.slice(2) : /^[0-9a-fA-F]+$/.test(value) ? value : "";
-  if (hex && hex.length % 2 === 0) return Uint8Array.from(Buffer.from(hex, "hex"));
-  return Uint8Array.from(Buffer.from(value, "base64"));
-}
-
-/** Converts the lead, stores the confirmed package on the client, and writes the remark. */
-export async function convertLeadNoted(input: ConvertNotedInput & { monthlyCents: number; timezone: string }) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("convert_lead_noted", {
-    lead_id: input.leadId,
-    company_name: input.companyName,
-    contact_name: input.contactName,
-    contact_phone: input.contactPhone,
-    remarks: input.remarks,
-    package_code: input.packageSlug,
-    hours_per_week: input.hoursPerWeek,
-    term_months: input.termMonths,
-    monthly_cents: input.monthlyCents,
-    starts_on: input.startsOn,
-    timezone: input.timezone,
-  });
-  if (error) {
-    const refusal = CONVERT_REFUSALS[error.code as keyof typeof CONVERT_REFUSALS];
-    if (refusal) return { ok: false as const, reason: refusal };
-    if (error.code === "IVA04") return { ok: false as const, reason: "unavailable" as const };
-    throw new UpstreamError("supabase", `Converting lead ${input.leadId} failed: ${error.message}`, { cause: error });
-  }
-  return { ok: true as const, clientId: data };
 }
 
 /** Saves the details an admin is allowed to correct. Spam metadata stays as submitted. */

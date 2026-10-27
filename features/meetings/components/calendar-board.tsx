@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { addDays, wallClockIn, type IsoDate } from "@/components/ui/date-math";
-import type { ScheduleEvent, ScheduleGesture } from "@/components/ui/schedule-calendar";
+import type { ScheduleEvent, ScheduleGesture } from "@/components/ui/schedule-events";
 import { useToast } from "@/components/ui/toast";
 import { DemoCalendar } from "@/features/demos/components/demo-calendar";
 import type { DemoCalendarRow } from "@/features/demos/calendar";

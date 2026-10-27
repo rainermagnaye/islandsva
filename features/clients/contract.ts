@@ -3,6 +3,7 @@ import type { Enums } from "@/types/database";
 // Shared by the admin pages and the server. No Zod: components import this file.
 
 export type ClientStatus = Enums<"client_status">;
+
 export type ClientOnboardingStatus = Enums<"client_onboarding_status">;
 
 export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
@@ -66,6 +67,7 @@ export type ClientSummary = {
 
 /** A client a Closer adds by hand: who they are and the agreed package. Limits mirror the clients CHECKs. */
 export const NEW_CLIENT_LIMITS = { companyName: 160, contactName: 120, contactEmail: 254, contactPhone: 40 } as const;
+
 export type NewClientField = "companyName" | "contactName" | "contactEmail" | "contactPhone" | "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
 
 /** A page of clients, newest first. */
@@ -175,135 +177,19 @@ export function businessFromEnquiry(source: {
   };
 }
 
-const filled = (value: string) => value.trim().length > 0;
-
-export const CLIENT_REGISTRATION_STEPS = [
-  { id: "converted", label: "Converted" },
-  { id: "registration", label: "Registration" },
-  { id: "review", label: "Review" },
-  { id: "activation", label: "Activation" },
-  { id: "completed", label: "Completed" },
-] as const;
-
 /** Sections an admin can mark while the packet is in review. */
 export const CLIENT_REVIEW_SECTIONS = ["basic", "address", "contacts", "package", "consent", "payment"] as const;
+
 export type ClientReviewSection = (typeof CLIENT_REVIEW_SECTIONS)[number];
-export const CLIENT_REVIEW_SECTION_LABELS: Record<ClientReviewSection, string> = {
-  basic: "Basic info",
-  address: "Address",
-  contacts: "Contacts",
-  package: "Package",
-  consent: "Consent",
-  payment: "Payment",
-};
-export const CLIENT_REVIEW_NOTE_LIMIT = 500;
 
 /** Recording the payment received when a registration is confirmed (the sales summary totals these). */
 export const PAYMENT_RECEIVED_LIMITS = { reference: 200, maxAmountCents: 100_000_000 } as const;
+
 export type PaymentReceivedField = "amount" | "fee" | "paidOn" | "reference";
-
-/** Accepts a text array, or the `{basic,address}` text Postgres can return for one. */
-export function clientReviewSections(value: unknown): ClientReviewSection[] {
-  const items = Array.isArray(value) ? value : typeof value === "string" ? value.replace(/^\{|\}$/g, "").split(",") : [];
-  return items
-    .map((item) => String(item).trim().replace(/^"|"$/g, ""))
-    .filter((item): item is ClientReviewSection => (CLIENT_REVIEW_SECTIONS as readonly string[]).includes(item));
-}
-
-/** What the customer sees after a registration is sent back. */
-export function revisionMessage(issues: readonly ClientReviewSection[], note: string | null) {
-  const names = issues.map((id) => CLIENT_REVIEW_SECTION_LABELS[id]);
-  const list = names.length === 0 ? "" : names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  return [list ? `Please update ${list}.` : "", note?.trim() ?? ""].filter(Boolean).join(" ");
-}
-
-/** The packet values a return is allowed to change. Package is shown, never edited. */
-export type ClientSectionDraft = {
-  companyName: string;
-  contactName: string;
-  contactPhone: string | null;
-  business: ClientBusiness;
-  consentName: string | null;
-  paymentProofName: string | null;
-  reviewIssues: readonly ClientReviewSection[];
-};
-
-/**
- * First visit shows every section. A return shows the flagged ones, plus any that are still empty.
- * Package stays with them when it was flagged, and on the first visit so the amount is visible.
- */
-export function openClientSections(draft: ClientSectionDraft): ClientReviewSection[] {
-  const missing: ClientReviewSection[] = [];
-  if (!filled(draft.companyName) || !filled(draft.business.industry) || !filled(draft.business.about)) missing.push("basic");
-  if (!filled(draft.business.city) || !filled(draft.business.country)) missing.push("address");
-  if (!filled(draft.contactName)) missing.push("contacts");
-  if (!draft.consentName?.trim()) missing.push("consent");
-  if (!draft.paymentProofName?.trim()) missing.push("payment");
-  if (draft.reviewIssues.length === 0) return [...CLIENT_REVIEW_SECTIONS];
-  return CLIENT_REVIEW_SECTIONS.filter((section) => draft.reviewIssues.includes(section) || missing.includes(section));
-}
-
-/** Keeps stored values for every section the customer was not asked to change. */
-export function applyOpenSections<T extends { companyName: string; contactName: string; contactPhone: string | null; consentName: string; business: ClientBusiness }>(
-  submitted: T,
-  stored: ClientSectionDraft,
-  open: readonly ClientReviewSection[],
-): T {
-  const closed = (section: ClientReviewSection) => !open.includes(section);
-  return {
-    ...submitted,
-    companyName: closed("basic") ? stored.companyName : submitted.companyName,
-    contactName: closed("contacts") ? stored.contactName : submitted.contactName,
-    contactPhone: closed("contacts") ? stored.contactPhone : submitted.contactPhone,
-    consentName: closed("consent") ? stored.consentName?.trim() || submitted.consentName : submitted.consentName,
-    business: {
-      ...submitted.business,
-      industry: closed("basic") ? stored.business.industry : submitted.business.industry,
-      website: closed("basic") ? stored.business.website : submitted.business.website,
-      staffCount: closed("basic") ? stored.business.staffCount : submitted.business.staffCount,
-      about: closed("basic") ? stored.business.about : submitted.business.about,
-      jobTitle: closed("contacts") ? stored.business.jobTitle : submitted.business.jobTitle,
-      street: closed("address") ? stored.business.street : submitted.business.street,
-      city: closed("address") ? stored.business.city : submitted.business.city,
-      state: closed("address") ? stored.business.state : submitted.business.state,
-      zip: closed("address") ? stored.business.zip : submitted.business.zip,
-      country: closed("address") ? stored.business.country : submitted.business.country,
-    },
-  };
-}
-
-export type ClientRegistrationStep = {
-  id: (typeof CLIENT_REGISTRATION_STEPS)[number]["id"];
-  label: string;
-  done: boolean;
-  current: boolean;
-};
-
-/**
- * Converted is done once the lead is a client. Registration is the one form: company details, consent and payment.
- * It checks when that form is with the team, and opens again when they send it back.
- * Review checks when an admin accepts it. Activation checks when the password invite is sent, and that completes it.
- */
-export function clientRegistrationSteps(progress: {
-  onboardingStatus: ClientOnboardingStatus;
-  accountStatus: ClientStatus;
-}): ClientRegistrationStep[] {
-  const submitted = progress.accountStatus === "active" || progress.onboardingStatus === "pending_review" || progress.onboardingStatus === "approved" || progress.onboardingStatus === "invite_sent";
-  const reviewed = progress.accountStatus === "active" || progress.onboardingStatus === "approved" || progress.onboardingStatus === "invite_sent";
-  const activated = progress.accountStatus === "active" || progress.onboardingStatus === "invite_sent";
-  const flags = [true, submitted, reviewed, activated, activated];
-  const open = flags.findIndex((step) => !step);
-  const current = open === -1 ? flags.length - 1 : open;
-  return CLIENT_REGISTRATION_STEPS.map((step, index) => ({
-    id: step.id,
-    label: step.label,
-    done: flags[index],
-    current: index === current,
-  }));
-}
 
 /** Sections of a client's profile. Overview is the default; a tampered `?tab=` falls back to it. */
 export const CLIENT_PROFILE_TABS = { overview: "Overview", notes: "Notes", consents: "Consents", invoices: "Invoices" } as const;
+
 export type ClientProfileTab = keyof typeof CLIENT_PROFILE_TABS;
 
 export function clientProfileTab(value: string | string[] | undefined): ClientProfileTab {
@@ -314,6 +200,7 @@ export function clientProfileTab(value: string | string[] | undefined): ClientPr
 
 /** A note on the client profile. The file is optional. */
 export const CLIENT_NOTE_LIMIT = 2000;
+
 export type ClientNoteField = "body";
 
 export type ClientNote = {

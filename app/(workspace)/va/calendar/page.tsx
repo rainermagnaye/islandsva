@@ -11,7 +11,7 @@ import { DEMO_LIMITS, manilaDate } from "@/features/demos/contract";
 import { listVaSlots } from "@/features/demos/dal";
 import { PersonCalendar } from "@/features/meetings/components/person-calendar";
 import { BOOKING_TIME_ZONE } from "@/features/meetings/contract";
-import { listBookings } from "@/features/meetings/dal";
+import { listBookings } from "@/features/meetings/booking-dal";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
 

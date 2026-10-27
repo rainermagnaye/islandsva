@@ -1,5 +1,5 @@
 import { appRoutes } from "@/content/routes";
-import { getEmployeeAvatar } from "@/features/users/dal";
+import { getEmployeeAvatar } from "@/features/users/employee-dal";
 import { parseEmployeeId } from "@/features/users/validation";
 import { needsSecondFactor, requireUser } from "@/lib/auth/session";
 import { redirect } from "next/navigation";

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { appRoutes } from "@/content/routes";
 import { ClientProfileView, ClientStatusBadge, ClientStepper } from "@/features/clients/components/client-profile-view";
 import { OnboardingLinkCard } from "@/features/clients/components/onboarding-link";
-import { clientRegistrationSteps } from "@/features/clients/contract";
+import { clientRegistrationSteps } from "@/features/clients/registration";
 import { getClient } from "@/features/clients/dal";
 import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
 import { getRegistrationToken } from "@/features/clients/onboarding-dal";

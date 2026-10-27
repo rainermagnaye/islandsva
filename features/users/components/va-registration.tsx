@@ -1,5 +1,5 @@
 import { emptyEmployeeDetails, openReviewSections, registrationStatus, registrationSteps, employeeSections, type UserSummary } from "../contract";
-import type { EmployeeProfileRecord } from "../dal";
+import type { EmployeeProfileRecord } from "../employee-dal";
 import type { EmployeeProfileMeta } from "../profile-fields";
 import { EmployeeProfileForm } from "./employee-profile-form";
 import { EmployeeProfileView } from "./employee-profile-view";

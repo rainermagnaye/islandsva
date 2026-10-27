@@ -12,7 +12,8 @@ import { acceptClientAttachment } from "./attachment";
 import { acceptPaymentProof } from "./payment-proof";
 import { registrationOrigin } from "./link";
 import { addClientNote, confirmClientReviewPaid, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, submitOnboarding, updateClientDetails } from "./service";
-import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseClientReview, parseCreateClient, parseNewClient, parseOnboarding, parsePaymentReceived } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseOnboarding } from "./validation";
+import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
 
 /** A Closer adds a pending client with the agreed package, then lands on its profile. */
 export async function addClientProfile(formData: FormData): Promise<SubmitResult<NewClientField>> {

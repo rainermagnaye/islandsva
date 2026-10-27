@@ -1,10 +1,12 @@
 import "server-only";
 import { connection } from "next/server";
+import { decodeBytea } from "@/lib/bytea";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import { timezoneForCountry } from "@/content/timezones";
-import { clientBusinessFrom, clientBusinessToJson, clientReviewSections, onboardingAccess, type PublicOnboarding } from "./contract";
+import { clientBusinessFrom, clientBusinessToJson, onboardingAccess, type PublicOnboarding } from "./contract";
+import { clientReviewSections } from "./registration";
 import { onboardingTokenHash } from "./token";
 import type { OnboardingInput } from "./validation";
 
@@ -16,12 +18,6 @@ const PACKET_REFUSALS = { IVA06: "not_found", IVA07: "exists", IVA08: "submitted
 
 function packetRefusal(code: string) {
   return PACKET_REFUSALS[code as keyof typeof PACKET_REFUSALS] ?? null;
-}
-
-function decodeBytea(value: string) {
-  const hex = value.startsWith("\\x") ? value.slice(2) : /^[0-9a-fA-F]+$/.test(value) ? value : "";
-  if (hex && hex.length % 2 === 0) return Uint8Array.from(Buffer.from(hex, "hex"));
-  return Uint8Array.from(Buffer.from(value, "base64"));
 }
 
 /**

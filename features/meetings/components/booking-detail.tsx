@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AttachmentField } from "@/components/ui/attachment-field";
 import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Alert } from "@/components/ui/alert";
@@ -17,26 +17,10 @@ import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
 import { meetingFileHref } from "@/content/routes";
 import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
-import { cancelBookingAction, completeBookingAction, confirmDiscoveryAction, deleteBookingNoteAction, rescheduleDiscoveryAction, saveBookingNote, saveBookingNoteEdit } from "../actions";
-import { BOOKING_LIMITS, BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingGuest, type BookingNoteField } from "../contract";
-
-const at = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
-
-/** True once the meeting's start has passed. The clock is read in a timer, not during render. */
-function useStarted(startsAt: string) {
-  const [started, setStarted] = useState(false);
-  useEffect(() => {
-    const wait = Date.parse(startsAt) - Date.now();
-    if (wait >= 2_147_000_000) return;
-    const timer = window.setTimeout(() => setStarted(wait <= 0), 0);
-    const later = wait > 0 ? window.setTimeout(() => setStarted(true), wait) : undefined;
-    return () => {
-      window.clearTimeout(timer);
-      if (later !== undefined) window.clearTimeout(later);
-    };
-  }, [startsAt]);
-  return started;
-}
+import { cancelBookingAction, completeBookingAction, confirmDiscoveryAction, deleteBookingNoteAction, rescheduleDiscoveryAction, saveBookingNote } from "../actions";
+import { BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField } from "../contract";
+import { NoteForm } from "./booking-note-form";
+import { at, useStarted, clocks, guestNames, Field } from "./booking-detail-parts";
 
 /** A booking's details and notes. Admins can edit, cancel and add a note. */
 export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
@@ -303,49 +287,5 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
         </Modal>
       )}
     </>
-  );
-}
-
-function clocks(booking: Booking, iso: string) {
-  const pht = `${at.format(new Date(iso))} PHT`;
-  if (booking.kind !== "discovery" || !booking.timeZone || booking.timeZone === "Asia/Manila") return pht;
-  const local = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: booking.timeZone }).format(new Date(iso));
-  return `${local} ${booking.timeZoneCity ?? "local"}\n${pht}`;
-}
-
-function guestNames(booking: Booking, kind: BookingGuest["kind"]) {
-  const names = booking.guests.filter((guest) => guest.kind === kind).map((guest) => guest.name);
-  if (names.length > 0) return names.join(", ");
-  return kind === "client" ? booking.clientName : booking.staffName;
-}
-
-function Field({ label, value }: { label: string; value: string | null }) {
-  const shown = value?.trim() ? value : "Not provided";
-  return (
-    <div className="min-w-0">
-      <dt className="type-caption text-ink-muted">{label}</dt>
-      <dd className={`m-0 whitespace-pre-line type-body-sm ${shown === "Not provided" ? "text-ink-muted" : "text-ink"}`}>{shown}</dd>
-    </div>
-  );
-}
-
-function NoteForm({ meetingId, eventId, defaultValue = "", onDone }: { meetingId?: string; eventId?: string; defaultValue?: string; onDone: () => void }) {
-  return (
-    <Form<BookingNoteField> aria-label={eventId ? "Edit note" : "Add a note"} onSubmit={async (formData) => {
-      const result = eventId ? await saveBookingNoteEdit(formData) : await saveBookingNote(formData);
-      if (result.ok) onDone();
-      return result;
-    }}>
-      {({ pending, fieldErrors }) => (
-        <div className="grid gap-3">
-          {meetingId && <input type="hidden" name="meetingId" value={meetingId} />}
-          {eventId && <input type="hidden" name="eventId" value={eventId} />}
-          <TextField label="Note" name="note" multiline compact required maxLength={BOOKING_LIMITS.note} defaultValue={defaultValue} data-autofocus error={fieldErrors.note} />
-          <div className="flex justify-end">
-            <Button type="submit" size="sm" loading={pending}>{pending ? "Saving" : "Save"}</Button>
-          </div>
-        </div>
-      )}
-    </Form>
   );
 }

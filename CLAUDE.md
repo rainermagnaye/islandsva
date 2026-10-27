@@ -57,7 +57,7 @@ app/                  routes only — thin pages and endpoints; robots, sitemap,
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
 features/<feature>/   one business area (today: auth, leads, clients, users, demos, sales, search, tasks, matching, meetings)
   contract.ts         [shared] types, labels, limits — no Zod, safe for client imports
-  validation.ts       [server] Zod schemas + parseX()
+  validation.ts       [server] Zod schemas + parseX() (split as <topic>-validation.ts when large)
   service.ts          [server] use cases routes and actions call (simple CRUD skips it)
   dal.ts              [server] queries for this feature's tables (split as <topic>-dal.ts when large)
   actions.ts          [server] Server Actions ('use server'); exports only actions
@@ -69,9 +69,9 @@ lib/                  shared infrastructure only
   api/                [server] createHandler, createGetHandler, ApiError, ok/fail, Turnstile, IP hash
   auth/               roles.ts [shared] (roles, homes, safeNextPath) · session.ts [server] (getSessionUser, requireUser, requireRole)
   supabase/           [server] server.ts (session, RLS) · admin.ts (secret key) · proxy.ts (session refresh) · config.ts
-  validation.ts       [server] parseWith, emailField, toSubmitResult
+  validation.ts       [server] parseWith, emailField, toSubmitResult, utcDay
   email.ts            [server] sendPlainEmail — all outbound email (Resend REST, plain text)
-  env · upstream-error · uuid · cx
+  bytea · env · upstream-error · uuid · cx
 types/                shared types only (api, form, icon, turnstile, database)
 content/              typed static content; content/routes.ts is the only source of internal URLs
 supabase/             migrations/ · tests/ · templates/ (auth emails) · config.toml (local stack only)

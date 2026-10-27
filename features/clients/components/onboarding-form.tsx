@@ -16,7 +16,8 @@ import { packages, terms } from "@/content/packages";
 import { timezoneForCountry } from "@/content/timezones";
 import { INDUSTRIES, STAFF_COUNTS } from "@/features/leads/contract";
 import { saveOnboarding } from "../actions";
-import { CLIENT_BUSINESS_LIMITS, openClientSections, type ClientReviewSection, type OnboardingField, type PublicOnboarding } from "../contract";
+import { CLIENT_BUSINESS_LIMITS, type ClientReviewSection, type OnboardingField, type PublicOnboarding } from "../contract";
+import { openClientSections } from "../registration";
 import { PAYMENT_PROOF_ACCEPT } from "../payment-proof";
 
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });

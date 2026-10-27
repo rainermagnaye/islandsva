@@ -10,7 +10,8 @@ import type { SubmitResult } from "@/types/form";
 import type { ConvertField, LeadEditField, LeadField } from "./contract";
 import { acceptLeadAttachment } from "./attachment";
 import { assignLead, convertLead as convert, convertLeadWithRemarks, createLead, editLead, logLeadFile, logLeadStep, pauseLead, removeLead } from "./service";
-import { parseAdminLead, parseConvert, parseConvertNoted, parseLeadEdit, parseLeadFlag, parseLeadStep, parseLeadTarget, type ConvertNotedField, type LeadStepField } from "./validation";
+import { parseAdminLead, parseLeadEdit, parseLeadFlag, parseLeadStep, parseLeadTarget, type LeadStepField } from "./validation";
+import { parseConvert, parseConvertNoted, type ConvertNotedField } from "./convert-validation";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
 
