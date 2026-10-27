@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
+import { ToastProvider } from "@/components/ui/toast";
 import { appRoutes, closerClientHref } from "@/content/routes";
 import { ClientsTable } from "@/features/clients/components/clients-table";
 import { listClients } from "@/features/clients/dal";
@@ -45,7 +46,9 @@ async function CloserHome({ searchParams }: Pick<PageProps<"/closer">, "searchPa
           New client
         </Button>
       </div>
-      <DiscoveryInbox requests={requests} />
+      <ToastProvider>
+        <DiscoveryInbox requests={requests} />
+      </ToastProvider>
       <div className="grid gap-4">
         <ClientsTable
           keepHeader

@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { Logo } from "@/components/layout/logo";
 import { appRoutes } from "@/content/routes";
-import { ToastProvider } from "@/components/ui/toast";
 import { AccountNav } from "@/features/auth/components/account-nav";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -13,6 +12,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * the session, behind their own Suspense boundary. On admin pages the logo inset matches the sidebar
  * (see `.portal-header` in globals.css). Access is checked by each page, not here.
  * Search is a slot so its script stays off the VA pages, which are at the size limit.
+ * Toasts stay on the pages that show them, for the same reason.
  */
 export default function DashboardLayout({ children, search }: { children: ReactNode; search: ReactNode }) {
   return (
@@ -29,7 +29,7 @@ export default function DashboardLayout({ children, search }: { children: ReactN
         </div>
       </header>
       <main id="main" className="min-h-[calc(100dvh-4rem)] bg-surface-page">
-        <ToastProvider>{children}</ToastProvider>
+        {children}
       </main>
     </>
   );

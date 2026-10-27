@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AttachmentPreview } from "@/components/ui/attachment-preview";
+import { ToastProvider } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -47,7 +48,7 @@ export function LeadProfile({ lead, events, meetings, viewerId, tab, editing }: 
 
       <ProfileTabs id={shown.id} tab={tab} />
 
-      {editing ? <LeadProfileForm lead={shown} /> : tab === "timeline" ? <LeadTimeline lead={shown} events={events} meetings={meetings} /> : <LeadOverview lead={shown} events={events} />}
+      {editing ? <LeadProfileForm lead={shown} /> : tab === "timeline" ? <ToastProvider><LeadTimeline lead={shown} events={events} meetings={meetings} /></ToastProvider> : <LeadOverview lead={shown} events={events} />}
     </div>
   );
 }

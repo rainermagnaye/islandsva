@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Container } from "@/components/ui/container";
+import { ToastProvider } from "@/components/ui/toast";
 import { minutesOf, wallClockIn } from "@/components/ui/date-math";
 import { listCalendarDemos } from "@/features/demos/admin-dal";
 import { VA_TIME_ZONE } from "@/features/demos/contract";
@@ -31,6 +32,7 @@ async function AdminDemos() {
 
   return (
     <Container className="grid gap-7 py-10 md:py-12">
+      <ToastProvider>
       <CalendarBoard
         rows={calendar}
         bookings={bookings}
@@ -41,6 +43,7 @@ async function AdminDemos() {
         today={clock.slice(0, 10)}
         nowMinutes={minutesOf(clock)}
       />
+      </ToastProvider>
     </Container>
   );
 }

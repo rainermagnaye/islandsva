@@ -6,7 +6,6 @@ import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { addDays, todayIn, type IsoDate } from "@/components/ui/date-math";
-import { DatePicker } from "@/components/ui/date-picker";
 import { Form, FormSuccess } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
@@ -100,12 +99,11 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
             error={fieldErrors.package}
           />
           <div className="grid gap-5 sm:grid-cols-2">
-            <DatePicker
+            <TextField
               label="Meeting date"
               name="meetingDate"
+              type="date"
               required
-              timeZone={zone?.value}
-              weekStartsOn={1}
               min={dates?.min}
               max={dates?.max}
               error={fieldErrors.meetingDate}
