@@ -1,4 +1,4 @@
-import { getBookingAttachment } from "@/features/meetings/dal";
+import { getBookingAttachment } from "@/features/meetings/booking-dal";
 import { requireUser } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 

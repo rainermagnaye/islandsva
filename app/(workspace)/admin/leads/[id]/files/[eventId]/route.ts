@@ -1,4 +1,4 @@
-import { getLeadAttachment } from "@/features/leads/dal";
+import { getLeadAttachment } from "@/features/leads/timeline-dal";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 

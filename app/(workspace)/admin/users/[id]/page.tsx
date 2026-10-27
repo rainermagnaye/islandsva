@@ -5,7 +5,8 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { appRoutes } from "@/content/routes";
 import { EmployeeProfile } from "@/features/users/components/employee-profile";
-import { getEmployeeProfile, getUser, employeeHasHistory } from "@/features/users/dal";
+import { getUser, employeeHasHistory } from "@/features/users/dal";
+import { getEmployeeProfile } from "@/features/users/employee-dal";
 import { parseEmployeeId } from "@/features/users/validation";
 import { requireRole } from "@/lib/auth/session";
 

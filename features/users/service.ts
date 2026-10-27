@@ -3,7 +3,8 @@ import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import type { Role } from "@/lib/auth/roles";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { deleteAuthUser, getEmployeeProfile, getUser, grantRole, inviteAuthUser, listUsers, searchProfiles, setAccountInactive, setEmployeeReview, employeeHasAvatar, employeeHasHistory } from "./dal";
+import { deleteAuthUser, getUser, grantRole, inviteAuthUser, listUsers, searchProfiles, setAccountInactive, employeeHasHistory } from "./dal";
+import { getEmployeeProfile, setEmployeeReview, employeeHasAvatar } from "./employee-dal";
 import type { InviteInput } from "./validation";
 
 /**

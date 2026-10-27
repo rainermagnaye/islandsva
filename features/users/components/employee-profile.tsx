@@ -1,5 +1,5 @@
 import { emptyEmployeeDetails, isVaAccount, registrationStatus, registrationSteps, employeeAccessBadge, employeeSections, type EmployeeDetails, type UserSummary } from "../contract";
-import type { EmployeeProfileRecord } from "../dal";
+import type { EmployeeProfileRecord } from "../employee-dal";
 import type { EmployeeProfileMeta } from "../profile-fields";
 import { EmployeeProfileScreen } from "./employee-profile-screen";
 

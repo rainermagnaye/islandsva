@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { discoveryStart } from "@/features/meetings/contract";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
-import { parseAdminLead, parseConvert, parseConvertNoted, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
+import { parseAdminLead, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
+import { parseConvert, parseConvertNoted } from "./convert-validation";
 
 function upcoming() {
   const ahead = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);

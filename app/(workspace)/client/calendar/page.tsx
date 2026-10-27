@@ -4,7 +4,7 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { minutesOf, wallClockIn } from "@/components/ui/date-math";
 import { PersonCalendar } from "@/features/meetings/components/person-calendar";
 import { BOOKING_TIME_ZONE } from "@/features/meetings/contract";
-import { listBookings } from "@/features/meetings/dal";
+import { listBookings } from "@/features/meetings/booking-dal";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Calendar" };

@@ -8,7 +8,8 @@ import { formatPackagePrice } from "@/content/currencies";
 import { packages, terms } from "@/content/packages";
 import { adminClientPaymentHref } from "@/content/routes";
 import { timezoneForCountry } from "@/content/timezones";
-import { CLIENT_STATUS_LABELS, type ClientDetail, type ClientRegistrationStep, type ClientStatus } from "../contract";
+import { CLIENT_STATUS_LABELS, type ClientDetail, type ClientStatus } from "../contract";
+import type { ClientRegistrationStep } from "../registration";
 
 const TONES: Record<ClientStatus, BadgeTone> = { pending: "warning", active: "success", inactive: "neutral" };
 

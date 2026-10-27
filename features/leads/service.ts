@@ -3,9 +3,12 @@ import { packages } from "@/content/packages";
 import { timezoneForCountry } from "@/content/timezones";
 import { businessFromEnquiry } from "@/features/clients/contract";
 import { openClientRegistration, openOnboardingLink } from "@/features/clients/service";
-import { claimLead, convertLeadNoted, convertLeadToClient, deleteLead, getLead, insertDiscoveryRequest, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, searchLeads, setLeadDisabled, updateLeadDetails } from "./dal";
+import { claimLead, deleteLead, getLead, insertDiscoveryRequest, insertLead, markLeadNotified, searchLeads, setLeadDisabled, updateLeadDetails } from "./dal";
+import { convertLeadNoted, convertLeadToClient } from "./convert-dal";
+import { recordLeadFile, recordLeadStep } from "./timeline-dal";
 import { sendLeadNotification } from "./email";
-import type { ConvertInput, ConvertNotedInput, LeadEditInput, LeadInput, LeadStepInput } from "./validation";
+import type { LeadEditInput, LeadInput, LeadStepInput } from "./validation";
+import type { ConvertInput, ConvertNotedInput } from "./convert-validation";
 
 /** Request metadata stored with a lead for abuse checks. Derived from the HTTP request by the route. */
 export type LeadSource = { ipHash: string | null; userAgent: string | null };

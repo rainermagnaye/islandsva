@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { wallClockIn } from "@/components/ui/date-math";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ScheduleCalendar, type ScheduleEvent } from "@/components/ui/schedule-calendar";
+import { ScheduleCalendar } from "@/components/ui/schedule-calendar";
+import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import { BOOKING_TIME_ZONE, type Booking } from "../contract";
 import { BookingDetail } from "./booking-detail";
 

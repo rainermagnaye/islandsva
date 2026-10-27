@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialsOf } from "./avatar";
 import { moveFocus } from "./calendar";
-import { shiftBands } from "./schedule-calendar";
+import { shiftBands } from "./schedule-events";
 import { nextTab } from "./tabs";
 import { sortTasks } from "./task-list";
 import { pushToast } from "./toast";

@@ -7,7 +7,7 @@ import { appRoutes } from "@/content/routes";
 import { leadProfileTab } from "@/features/leads/contract";
 import { LeadProfile } from "@/features/leads/components/lead-profile";
 import { getLead, listLeadEvents } from "@/features/leads/dal";
-import { listLeadBookings } from "@/features/meetings/dal";
+import { listLeadBookings } from "@/features/meetings/booking-dal";
 import { requireRole } from "@/lib/auth/session";
 
 // Static title: the lead's name is personal data and stays out of the tab title and browser history.

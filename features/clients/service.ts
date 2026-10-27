@@ -1,12 +1,15 @@
 import "server-only";
 import { packages } from "@/content/packages";
 import { inviteClient, rollbackInvite } from "@/features/users/service";
-import { applyOpenSections, openClientSections, type ClientBusiness } from "./contract";
+import type { ClientBusiness } from "./contract";
+import { applyOpenSections, openClientSections } from "./registration";
 import { acceptClientReviewPaid, getPublicOnboarding, getPublicPaymentProof, issueClientOnboardingLink, recordClientInvite, saveClientReview, submitClientPacket } from "./onboarding-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
-import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, recordClientNote, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
-import type { ClientDetailsInput, ClientNoteInput, ClientReviewInput, CreateClientInput, NewClientInput, OnboardingInput, PaymentReceivedInput } from "./validation";
+import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
+import { recordClientNote } from "./notes-dal";
+import type { ClientDetailsInput, ClientNoteInput, CreateClientInput, OnboardingInput } from "./validation";
+import type { ClientReviewInput, NewClientInput, PaymentReceivedInput } from "./review-validation";
 
 /** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
 export async function createClientProfile(input: NewClientInput, createdBy: string) {
