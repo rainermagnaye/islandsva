@@ -129,6 +129,12 @@ export function layoutDay<T extends { start: string; end: string }>(events: read
   return placed;
 }
 
+/** A wall-clock date and time in a zone, as a UTC ISO timestamp. */
+export function instantInZone(date: string, time: string, timeZone: string) {
+  const utc = convertWallClock(`${date}T${time}`, timeZone, "UTC");
+  return new Date(`${utc.date}T${utc.time}:00Z`).toISOString();
+}
+
 /** A moment (UTC ISO, "2026-11-03T01:30:00.000Z") as the wall clock in a zone ("2026-11-03T09:30" in Manila). */
 export function wallClockIn(iso: string, timeZone: string): IsoLocalDateTime {
   const { date, time } = convertWallClock(new Date(iso).toISOString().slice(0, 16), "UTC", timeZone);

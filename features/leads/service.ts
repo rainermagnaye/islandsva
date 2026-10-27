@@ -3,10 +3,9 @@ import { packages } from "@/content/packages";
 import { timezoneForCountry } from "@/content/timezones";
 import { businessFromEnquiry } from "@/features/clients/contract";
 import { openClientRegistration, openOnboardingLink } from "@/features/clients/service";
-import { LEAD_STATUSES, nextStatuses } from "./contract";
-import { convertLeadNoted, convertLeadToClient, deleteLead, getLead, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, searchLeads, setLeadDisabled, updateLeadDetails, updateLeadStatus } from "./dal";
+import { claimLead, convertLeadNoted, convertLeadToClient, deleteLead, getLead, insertDiscoveryRequest, insertLead, markLeadNotified, recordLeadFile, recordLeadStep, searchLeads, setLeadDisabled, updateLeadDetails } from "./dal";
 import { sendLeadNotification } from "./email";
-import type { ConvertInput, ConvertNotedInput, LeadEditInput, LeadInput, LeadStatusInput, LeadStepInput } from "./validation";
+import type { ConvertInput, ConvertNotedInput, LeadEditInput, LeadInput, LeadStepInput } from "./validation";
 
 /** Request metadata stored with a lead for abuse checks. Derived from the HTTP request by the route. */
 export type LeadSource = { ipHash: string | null; userAgent: string | null };
@@ -19,13 +18,18 @@ export async function createLead(lead: LeadInput, source: LeadSource) {
   return insertLead({ ...lead, ...source });
 }
 
+/** Stores the enquiry and a requested discovery call at the visitor's chosen time. */
+export async function requestDiscoveryCall(lead: LeadInput, startsAt: string, source: LeadSource) {
+  return insertDiscoveryRequest({ ...lead, ...source }, startsAt);
+}
+
 /**
  * Emails the team about a stored lead and records that it was sent. Never throws: the lead is already
  * saved, so a mail outage is logged (notified_at stays null for follow-up) rather than surfaced to the visitor.
  */
-export async function notifyNewLead(id: string, lead: LeadInput) {
+export async function notifyNewLead(id: string, lead: LeadInput, startsAt?: string) {
   try {
-    if (await sendLeadNotification(lead)) await markLeadNotified(id);
+    if (await sendLeadNotification(lead, startsAt)) await markLeadNotified(id);
   } catch (error) {
     console.error("Lead notification failed", { id, error });
   }
@@ -44,9 +48,8 @@ export async function convertLead(input: ConvertInput) {
  * Moves a lead along the triage flow (see nextStatuses). The allowed starting statuses are checked by the
  * database in the same UPDATE, so a lead converted or closed meanwhile is left alone (returns false).
  */
-export async function setLeadStatus({ leadId, status }: LeadStatusInput) {
-  const from = LEAD_STATUSES.filter((current) => nextStatuses(current).includes(status));
-  return updateLeadStatus(leadId, status, from);
+export async function assignLead(leadId: string, userId: string) {
+  return claimLead(leadId, userId);
 }
 
 /** Timeline entry, and the status move when the kind is a pipeline step. */

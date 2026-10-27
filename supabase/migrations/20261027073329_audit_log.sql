@@ -89,7 +89,9 @@ create function private.audit_allow(tbl text) returns text[]
 language sql immutable set search_path = '' as $$
   select case tbl
     when 'leads' then array['status', 'closer_id', 'converted_client_id', 'disabled_at', 'package_code']
-    when 'meetings' then array['kind', 'status', 'lead_id', 'organizer_id', 'decided_by', 'decided_at', 'starts_at', 'ends_at']
+    -- A manual meeting's title and name snapshots (client_name, staff_name, creator_name) are names only.
+    when 'meetings' then array['kind', 'status', 'lead_id', 'organizer_id', 'decided_by', 'decided_at', 'starts_at', 'ends_at',
+      'client_id', 'staff_id', 'created_by']
     when 'clients' then array['status', 'onboarding_status', 'created_by', 'user_id', 'activated_at', 'disabled_at', 'package_code',
       'hours_per_week', 'term_months', 'monthly_cents', 'currency', 'starts_on', 'consented_at', 'onboarding_submitted_at',
       'registration_email_sent_at']
@@ -175,6 +177,7 @@ begin
       owner := coalesce(
         (select l.closer_id from public.leads l where l.id = (r ->> 'lead_id')::uuid),
         (r ->> 'organizer_id')::uuid, (r ->> 'decided_by')::uuid);
+      client := (r ->> 'client_id')::uuid; -- a manual meeting's client; null for discovery calls
     when 'clients' then
       owner := (r ->> 'created_by')::uuid;
       client := (r ->> 'id')::uuid;

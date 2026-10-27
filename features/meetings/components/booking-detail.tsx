@@ -1,0 +1,351 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { AttachmentField } from "@/components/ui/attachment-field";
+import { AttachmentPreview } from "@/components/ui/attachment-preview";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { addDays, todayIn, type IsoDate } from "@/components/ui/date-math";
+import { DatePicker } from "@/components/ui/date-picker";
+import { DropdownMenu, type MenuItem } from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Form } from "@/components/ui/form";
+import { Icon } from "@/components/ui/icon";
+import { Modal } from "@/components/ui/modal";
+import { TextField } from "@/components/ui/text-field";
+import { meetingFileHref } from "@/content/routes";
+import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
+import { cancelBookingAction, completeBookingAction, confirmDiscoveryAction, deleteBookingNoteAction, rescheduleDiscoveryAction, saveBookingNote, saveBookingNoteEdit } from "../actions";
+import { BOOKING_LIMITS, BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingGuest, type BookingNoteField } from "../contract";
+
+const at = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
+
+/** True once the meeting's start has passed. The clock is read in a timer, not during render. */
+function useStarted(startsAt: string) {
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    const wait = Date.parse(startsAt) - Date.now();
+    if (wait >= 2_147_000_000) return;
+    const timer = window.setTimeout(() => setStarted(wait <= 0), 0);
+    const later = wait > 0 ? window.setTimeout(() => setStarted(true), wait) : undefined;
+    return () => {
+      window.clearTimeout(timer);
+      if (later !== undefined) window.clearTimeout(later);
+    };
+  }, [startsAt]);
+  return started;
+}
+
+/** A booking's details and notes. Admins can edit, cancel and add a note. */
+export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
+  booking: Booking;
+  canManage: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDone: (message: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [dates, setDates] = useState<{ min: IsoDate; max: IsoDate } | null>(null);
+  const started = useStarted(booking.startsAt);
+  const discovery = booking.kind === "discovery";
+  const openCall = booking.status === "requested" || booking.status === "scheduled";
+  const notes = booking.events.filter((event) => event.kind === "note");
+  const attachments = notes.filter((note) => note.attachmentName && note.attachmentType);
+  const menu: MenuItem[] = !canManage ? [] : discovery ? [
+    ...(booking.status === "requested" ? [{ label: "Assign to me and confirm", icon: "check" as const, onSelect: claim }] : []),
+    ...(openCall ? [{ label: "Reschedule", icon: "calendar" as const, onSelect: openReschedule }] : []),
+  ] : [
+    { label: "Edit", icon: "edit", onSelect: onEdit, disabled: booking.status !== "scheduled" },
+    { label: "Cancel meeting", danger: true, onSelect: () => setConfirming(true), disabled: booking.status !== "scheduled" },
+  ];
+
+  function openReschedule() {
+    const min = todayIn(BOOKING_TIME_ZONE);
+    setDates({ min, max: addDays(min, 14) });
+    setRescheduling(true);
+  }
+
+  async function claim() {
+    setClaimError(null);
+    const data = new FormData();
+    data.set("meetingId", booking.id);
+    const result = await confirmDiscoveryAction(data);
+    if (result.ok) onDone("Meeting confirmed.");
+    else setClaimError(result.message);
+  }
+
+  return (
+    <>
+      <Modal
+        open
+        onClose={onClose}
+        title={booking.title}
+        size="wide"
+        actions={menu.length > 0 ? (
+          <DropdownMenu label="More" icon="menu" iconOnly align="end" items={menu} />
+        ) : undefined}
+        footer={canManage && booking.status === "scheduled" ? (
+          <Form aria-label="Complete booking" className="w-full justify-items-end gap-2" onSubmit={async (formData) => {
+            const result = await completeBookingAction(formData);
+            if (result.ok) onDone("Booking completed.");
+            return result;
+          }}>
+            {({ pending }) => (
+              <>
+                <input type="hidden" name="meetingId" value={booking.id} />
+                {!started && <p className="m-0 type-caption text-ink-muted">You can complete this once the meeting has started.</p>}
+                <Button type="submit" disabled={!started} loading={pending}>{pending ? "Completing" : "Complete booking"}</Button>
+              </>
+            )}
+          </Form>
+        ) : undefined}
+      >
+        <dl className="m-0 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <Field label="Starts" value={clocks(booking, booking.startsAt)} />
+          <Field label="Ends" value={clocks(booking, booking.endsAt)} />
+          <div className="min-w-0">
+            <dt className="type-caption text-ink-muted">Status</dt>
+            <dd className="m-0 mt-1">
+              <Badge tone={booking.status === "done" ? "info" : booking.status === "cancelled" ? "neutral" : booking.status === "requested" ? "warning" : "success"} size="sm" dot>
+                {BOOKING_STATUS_LABELS[booking.status]}
+              </Badge>
+            </dd>
+          </div>
+          <Field label="Client" value={guestNames(booking, "client")} />
+          <Field label="Staff" value={guestNames(booking, "staff")} />
+          <Field label="Created by" value={booking.creatorName} />
+        </dl>
+        {claimError && <Alert tone="danger" title="Couldn't confirm" className="mt-4">{claimError}</Alert>}
+        <div className="mt-6 grid gap-4">
+          <Card as="section" padding="none">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+              <h3 className="m-0 type-label">Notes</h3>
+              {canManage && (
+                <button
+                  type="button"
+                  aria-label={adding ? "Close note" : "Add a note"}
+                  aria-pressed={adding}
+                  onClick={() => setAdding((open) => !open)}
+                  className="inline-grid size-11 cursor-pointer place-items-center rounded-md text-ink hover:bg-action-ghost-hover aria-pressed:bg-action-ghost-hover"
+                >
+                  <Icon name={adding ? "x" : "plus"} />
+                </button>
+              )}
+            </div>
+            <div className="grid gap-3 p-4">
+              {notes.length === 0 ? (
+                <EmptyState compact headingLevel={3} title="No notes yet" description="Notes you add for this meeting show up here." />
+              ) : (
+                <ul className="m-0 grid list-none gap-3 p-0">
+                  {notes.map((note) => (
+                    <li key={note.id} className="flex items-start gap-2">
+                      {editingId === note.id ? (
+                        <div className="min-w-0 flex-1">
+                          <NoteForm eventId={note.id} defaultValue={note.body ?? ""} onDone={() => { setEditingId(null); onDone("Note saved."); }} />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid min-w-0 flex-1 gap-1">
+                            <p className="m-0 whitespace-pre-line type-body-sm">{note.body}</p>
+                            <p className="m-0 type-caption text-ink-muted">{note.actorName} · {at.format(new Date(note.createdAt))} PHT</p>
+                          </div>
+                          {canManage && (
+                            <DropdownMenu
+                              label="Note actions"
+                              icon="more"
+                              iconOnly
+                              align="end"
+                              items={[
+                                { label: "Edit", icon: "edit", onSelect: () => { setAdding(false); setEditingId(note.id); } },
+                                { label: "Delete", icon: "trash", danger: true, onSelect: () => setDeletingId(note.id) },
+                              ]}
+                            />
+                          )}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canManage && adding && <NoteForm meetingId={booking.id} onDone={() => { setAdding(false); onDone("Note added."); }} />}
+            </div>
+          </Card>
+          <Card as="section" padding="none">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+              <h3 className="m-0 type-label">Attachments</h3>
+              {canManage && (
+                <button
+                  type="button"
+                  aria-label={attaching ? "Close file" : "Add a file"}
+                  aria-pressed={attaching}
+                  onClick={() => setAttaching((open) => !open)}
+                  className="inline-grid size-11 cursor-pointer place-items-center rounded-md text-ink hover:bg-action-ghost-hover aria-pressed:bg-action-ghost-hover"
+                >
+                  <Icon name={attaching ? "x" : "plus"} />
+                </button>
+              )}
+            </div>
+            <div className="grid gap-3 p-4">
+              {attachments.length === 0 ? (
+                <EmptyState compact headingLevel={3} title="No files yet" description="Files you add show up here." />
+              ) : (
+                <ul className="m-0 grid list-none gap-3 p-0">
+                  {attachments.map((note) => (
+                    <li key={note.id}>
+                      <AttachmentPreview href={meetingFileHref(note.id)} name={note.attachmentName ?? ""} type={note.attachmentType ?? ""} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canManage && attaching && (
+                <Form aria-label="Add a file" onSubmit={async (formData) => {
+                  const file = formData.get("attachment");
+                  const title = formData.get("attachmentName");
+                  if (!(file instanceof File) || file.size === 0) return { ok: false, message: "Choose a file." };
+                  const accepted = acceptBookingAttachment(file, typeof title === "string" ? title : "");
+                  if (!accepted.ok) return { ok: false, message: accepted.message };
+                  formData.set("meetingId", booking.id);
+                  formData.set("note", accepted.name);
+                  const result = await saveBookingNote(formData);
+                  if (result.ok) {
+                    setAttaching(false);
+                    onDone("File added.");
+                  }
+                  return result;
+                }}>
+                  {({ pending }) => (
+                    <div className="grid gap-3">
+                      <AttachmentField fileName="attachment" nameField="attachmentName" label="File" accept={BOOKING_ATTACHMENT_ACCEPT} hint="A recording, PDF or image, up to 2 MB." />
+                      <div className="flex justify-end">
+                        <Button type="submit" size="sm" loading={pending}>{pending ? "Saving" : "Save"}</Button>
+                      </div>
+                    </div>
+                  )}
+                </Form>
+              )}
+            </div>
+          </Card>
+        </div>
+      </Modal>
+      {deletingId && (
+        <Modal open onClose={() => setDeletingId(null)} title="Delete note" description="Are you sure you want to delete this note?" role="alertdialog">
+          <Form aria-label="Delete note" onSubmit={async (formData) => {
+            const result = await deleteBookingNoteAction(formData);
+            if (result.ok) {
+              setDeletingId(null);
+              onDone("Note deleted.");
+            }
+            return result;
+          }}>
+            {({ pending }) => (
+              <>
+                <input type="hidden" name="eventId" value={deletingId} />
+                <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="ghost" onClick={() => setDeletingId(null)} disabled={pending}>Keep it</Button>
+                  <Button type="submit" variant="danger" loading={pending}>{pending ? "Deleting" : "Delete note"}</Button>
+                </div>
+              </>
+            )}
+          </Form>
+        </Modal>
+      )}
+      {rescheduling && dates && (
+        <Modal open onClose={() => setRescheduling(false)} title="Reschedule" description="Choose a new time in Philippine time.">
+          <Form<BookingField> aria-label="Reschedule discovery call" onSubmit={async (formData) => {
+            const result = await rescheduleDiscoveryAction(formData);
+            if (result.ok) {
+              setRescheduling(false);
+              onDone("Meeting rescheduled.");
+            }
+            return result;
+          }}>
+            {({ pending, fieldErrors }) => (
+              <>
+                <input type="hidden" name="meetingId" value={booking.id} />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DatePicker label="Meeting date" name="startDate" required timeZone={BOOKING_TIME_ZONE} weekStartsOn={1} min={dates.min} max={dates.max} error={fieldErrors.startDate} />
+                  <TextField label="Meeting time" name="startTime" type="time" required hint="Philippine time, on the hour or half hour." error={fieldErrors.startTime} />
+                </div>
+                <div className="mt-4 flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="ghost" onClick={() => setRescheduling(false)} disabled={pending}>Keep it</Button>
+                  <Button type="submit" size="sm" loading={pending}>{pending ? "Saving" : "Reschedule"}</Button>
+                </div>
+              </>
+            )}
+          </Form>
+        </Modal>
+      )}
+      {confirming && (
+        <Modal open onClose={() => setConfirming(false)} title="Cancel meeting" description="Are you sure you want to cancel this meeting?" role="alertdialog">
+          <Form aria-label="Cancel meeting" onSubmit={async (formData) => {
+            const result = await cancelBookingAction(formData);
+            if (result.ok) onDone("Meeting cancelled.");
+            return result;
+          }}>
+            {({ pending }) => (
+              <>
+                <input type="hidden" name="meetingId" value={booking.id} />
+                <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="ghost" onClick={() => setConfirming(false)} disabled={pending}>Keep it</Button>
+                  <Button type="submit" variant="danger" loading={pending}>{pending ? "Cancelling" : "Cancel meeting"}</Button>
+                </div>
+              </>
+            )}
+          </Form>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function clocks(booking: Booking, iso: string) {
+  const pht = `${at.format(new Date(iso))} PHT`;
+  if (booking.kind !== "discovery" || !booking.timeZone || booking.timeZone === "Asia/Manila") return pht;
+  const local = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: booking.timeZone }).format(new Date(iso));
+  return `${local} ${booking.timeZoneCity ?? "local"}\n${pht}`;
+}
+
+function guestNames(booking: Booking, kind: BookingGuest["kind"]) {
+  const names = booking.guests.filter((guest) => guest.kind === kind).map((guest) => guest.name);
+  if (names.length > 0) return names.join(", ");
+  return kind === "client" ? booking.clientName : booking.staffName;
+}
+
+function Field({ label, value }: { label: string; value: string | null }) {
+  const shown = value?.trim() ? value : "Not provided";
+  return (
+    <div className="min-w-0">
+      <dt className="type-caption text-ink-muted">{label}</dt>
+      <dd className={`m-0 whitespace-pre-line type-body-sm ${shown === "Not provided" ? "text-ink-muted" : "text-ink"}`}>{shown}</dd>
+    </div>
+  );
+}
+
+function NoteForm({ meetingId, eventId, defaultValue = "", onDone }: { meetingId?: string; eventId?: string; defaultValue?: string; onDone: () => void }) {
+  return (
+    <Form<BookingNoteField> aria-label={eventId ? "Edit note" : "Add a note"} onSubmit={async (formData) => {
+      const result = eventId ? await saveBookingNoteEdit(formData) : await saveBookingNote(formData);
+      if (result.ok) onDone();
+      return result;
+    }}>
+      {({ pending, fieldErrors }) => (
+        <div className="grid gap-3">
+          {meetingId && <input type="hidden" name="meetingId" value={meetingId} />}
+          {eventId && <input type="hidden" name="eventId" value={eventId} />}
+          <TextField label="Note" name="note" multiline compact required maxLength={BOOKING_LIMITS.note} defaultValue={defaultValue} data-autofocus error={fieldErrors.note} />
+          <div className="flex justify-end">
+            <Button type="submit" size="sm" loading={pending}>{pending ? "Saving" : "Save"}</Button>
+          </div>
+        </div>
+      )}
+    </Form>
+  );
+}

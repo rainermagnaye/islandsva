@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { discoveryStart } from "@/features/meetings/contract";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
 import { parseAdminLead, parseConvert, parseConvertNoted, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
+
+function upcoming() {
+  const ahead = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(ahead);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  const minute = Number(pick("minute")) < 30 ? "00" : "30";
+  return { meetingDate: `${pick("year")}-${pick("month")}-${pick("day")}`, meetingTime: `${pick("hour").padStart(2, "0")}:${minute}` };
+}
+
+const when = upcoming();
+const booked = discoveryStart(when.meetingDate, when.meetingTime);
 
 const valid = {
   name: "  Ana Cruz ",
@@ -12,6 +24,7 @@ const valid = {
   message: "Inbox help, please.",
   website: "",
   turnstileToken: "token",
+  ...when,
 };
 
 describe("parseLead", () => {
@@ -28,9 +41,16 @@ describe("parseLead", () => {
         packageSlug: "executive",
         message: "Inbox help, please.",
       },
+      startsAt: booked.ok ? booked.startsAt : "",
       isBot: false,
       turnstileToken: "token",
     });
+  });
+
+  it("reads the meeting time in the country's time zone", () => {
+    const philippines = parseLead(valid);
+    const unitedStates = parseLead({ ...valid, country: "United States" });
+    expect(philippines.ok && unitedStates.ok && philippines.startsAt !== unitedStates.startsAt).toBe(true);
   });
 
   it("requires company, industry and country", () => {

@@ -11,7 +11,7 @@ import { AttachmentField } from "@/components/ui/attachment-field";
 import { TextField } from "@/components/ui/text-field";
 import { adminLeadHref } from "@/content/routes";
 import { cx } from "@/lib/cx";
-import { deleteLead, saveLeadStep, setLeadPaused } from "../actions";
+import { assignLeadToMe, deleteLead, saveLeadStep, setLeadPaused } from "../actions";
 import { LEAD_ATTACHMENT_ACCEPT, acceptLeadAttachment } from "../attachment";
 import { LEAD_EVENT_LIMIT, PIPELINE_STEP, type LeadDetail } from "../contract";
 import { ConvertDialog } from "./convert-dialog";
@@ -19,12 +19,13 @@ import { ConvertDialog } from "./convert-dialog";
 type Dialog = "step" | "junk" | "convert" | "pause" | "delete" | null;
 
 /** Pipeline button and the edit / disable / delete menu. Each write opens a dialog first. */
-export function LeadActions({ lead, canDelete, editing }: { lead: LeadDetail; canDelete: boolean; editing: boolean }) {
+export function LeadActions({ lead, viewerId, canDelete, editing }: { lead: LeadDetail; viewerId: string; canDelete: boolean; editing: boolean }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const menu = useRef<HTMLDetailsElement>(null);
   const router = useRouter();
   const step = lead.status === "new" || lead.status === "contacted" ? PIPELINE_STEP[lead.status] : null;
   const working = !lead.disabledAt && lead.status !== "converted" && lead.status !== "closed";
+  const mine = lead.closerId === viewerId;
   const close = () => setDialog(null);
   const openDialog = (next: Exclude<Dialog, null>) => {
     const details = menu.current;
@@ -35,6 +36,18 @@ export function LeadActions({ lead, canDelete, editing }: { lead: LeadDetail; ca
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
+        {working && !mine && (
+          <Form className="flex" aria-label="Assign this lead to me" onSubmit={assignLeadToMe}>
+            {({ pending }) => (
+              <>
+                <input type="hidden" name="leadId" value={lead.id} />
+                <Button type="submit" variant="secondary" loading={pending}>
+                  {pending ? "Assigning" : "Assign to me"}
+                </Button>
+              </>
+            )}
+          </Form>
+        )}
         {working && step && (
           <Button type="button" onClick={() => setDialog("step")}>
             {step.label}

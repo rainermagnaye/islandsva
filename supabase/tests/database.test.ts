@@ -2279,12 +2279,12 @@ describe("discovery calls", () => {
       await expect(asUser(asAdmin, "delete from public.leads where id = $1", [lead])).rejects.toMatchObject({ code: "IVA05" });
     });
 
-    it("organizers, deciders and actors must be Lead Gens; a timeline remark may now come from a Lead Gen, not a VA", async () => {
+    it("organizers and deciders must be an admin or a Lead Gen; a timeline remark may come from a Lead Gen, not a VA", async () => {
       const [{ id, lead_id: lead }] = await asServer<{ id: string; lead_id: string }>(
         "select id, lead_id from public.meetings where status = 'requested' and starts_at > now() limit 1",
       );
-      await expect(asServer("update public.meetings set status = 'scheduled', organizer_id = $1, decided_by = $1, decided_at = now() where id = $2", [VA, id])).rejects.toThrow(/closer role/);
-      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, VA])).rejects.toThrow(/closer role/);
+      await expect(asServer("update public.meetings set status = 'scheduled', organizer_id = $1, decided_by = $1, decided_at = now() where id = $2", [VA, id])).rejects.toThrow(/closer or admin role/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, VA])).rejects.toThrow(/closer or admin role/);
       await expect(asServer("insert into public.meeting_events (meeting_id, kind) values ($1, 'note')", [id])).rejects.toThrow(/meeting_events_actor/);
       await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'rejected', $2)", [id, LG_A])).rejects.toThrow(/meeting_events_body/);
       await expect(asServer("insert into public.lead_events (lead_id, author_id, kind, body) values ($1, $2, 'note', 'hi')", [lead, VA])).rejects.toThrow(/admin or closer role/);
@@ -2297,7 +2297,6 @@ describe("discovery calls", () => {
       const insert = (values: string, params: unknown[]) =>
         asServer(`insert into public.meetings (kind, lead_id, starts_at, ends_at, status, organizer_id, decided_by, decided_at) values ${values}`, params);
       await expect(insert("('discovery', $1, $2, $3, 'requested', null, null, null)", [lead, start, later(start, 45 * 60 * 1000)])).rejects.toThrow(/meetings_discovery_shape/);
-      await expect(insert("('discovery', $1, $2, $3, 'requested', null, null, null)", [lead, later(start, 10 * 60 * 1000), later(start, 40 * 60 * 1000)])).rejects.toThrow(/meetings_discovery_shape/);
       await expect(
         asServer("insert into public.meetings (kind, lead_id, starts_at, ends_at, tenant_id) values ('discovery', null, $1, $2, $3)", [start, later(start, HALF_HOUR), tenantA]),
       ).rejects.toThrow(/meetings_discovery_shape/);
@@ -2321,6 +2320,80 @@ describe("discovery calls", () => {
       expect(await inbox(asAdminB)).toEqual([]);
       expect((await asUser(token(SUPER, ["super_admin"], "aal2"), "select id from public.meetings")).length).toBeGreaterThan(0);
       expect(await asUser(token(SUPER, ["super_admin"], "aal1"), "select id from public.meetings")).toEqual([]);
+    });
+  });
+
+  describe("form booking", () => {
+    const halfPast = (offsetMs: number) => {
+      const start = new Date(aligned(offsetMs));
+      start.setUTCMinutes(30, 0, 0);
+      return start.toISOString();
+    };
+
+    it("stores a requested call from a chosen time and lets an admin claim it", async () => {
+      const start = halfPast(6 * DAY);
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Bea Santos', 'bea-form@disc.co', 'Santos Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+        [start],
+      );
+      const meetingId = await meetingOf(row.id);
+      const [meeting] = await asServer<{ status: string; kind: string }>("select status::text as status, kind::text as kind from public.meetings where id = $1", [meetingId]);
+      expect(meeting).toEqual({ status: "requested", kind: "discovery" });
+      const [source] = await asServer<{ source: string }>("select profile->>'source' as source from public.leads where id = $1", [row.id]);
+      expect(source.source).toBe("Website");
+      await asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.confirm_discovery_booking($1)", [meetingId]);
+      const [confirmed] = await asServer<{ status: string; organizer_id: string; closer_id: string }>(
+        "select m.status::text as status, m.organizer_id, l.closer_id from public.meetings m join public.leads l on l.id = m.lead_id where m.id = $1",
+        [meetingId],
+      );
+      expect(confirmed).toEqual({ status: "scheduled", organizer_id: ADMIN_ONLY, closer_id: ADMIN_ONLY });
+      await expect(asUser(asVa, "select public.confirm_discovery_booking($1)", [meetingId])).rejects.toMatchObject({ code: "IVA14" });
+    });
+
+    it("lets a lead gen move a requested call", async () => {
+      const start = halfPast(8 * DAY);
+      const moved = halfPast(9 * DAY);
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Cara Lim', 'cara-form@disc.co', 'Lim Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+        [start],
+      );
+      const meetingId = await meetingOf(row.id);
+      await asUser(asLgA, "select public.reschedule_discovery_booking($1, $2)", [meetingId, moved]);
+      const [stored] = await asServer<{ starts_at: string; status: string }>("select starts_at, status::text as status from public.meetings where id = $1", [meetingId]);
+      expect(stored.status).toBe("requested");
+      expect(new Date(stored.starts_at).toISOString()).toBe(new Date(moved).toISOString());
+    });
+
+    it("lets an admin note a discovery call, and still refuses everyone else", async () => {
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Dina Cruz', 'dina-form@disc.co', 'Cruz Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+        [halfPast(10 * DAY)],
+      );
+      const meetingId = await meetingOf(row.id);
+      const [note] = await asUser<{ id: string }>(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.add_manual_meeting_note($1, 'Called them', null, null, null) as id", [meetingId]);
+      await asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.update_manual_meeting_note($1, 'Called them back')", [note.id]);
+      expect(await asServer("select body from public.meeting_events where id = $1", [note.id])).toEqual([{ body: "Called them back" }]);
+      await expect(asUser(asVa, "select public.delete_manual_meeting_note($1)", [note.id])).rejects.toThrow(/two-factor/);
+      const [{ id: requested }] = await asServer<{ id: string }>("select id from public.meeting_events where meeting_id = $1 and kind = 'requested'", [meetingId]);
+      await expect(asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.delete_manual_meeting_note($1)", [requested])).rejects.toMatchObject({ code: "IVA32" });
+      await asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.delete_manual_meeting_note($1)", [note.id]);
+    });
+
+    it("completes a discovery call only after it has started", async () => {
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Eva Santos', 'eva-form@disc.co', 'Santos Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+        [halfPast(11 * DAY)],
+      );
+      const meetingId = await meetingOf(row.id);
+      await asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.confirm_discovery_booking($1)", [meetingId]);
+      await expect(asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.complete_meeting($1)", [meetingId])).rejects.toMatchObject({ code: "IVA34" });
+      await db.query("update public.meetings set starts_at = now() - interval '5 minutes', ends_at = now() + interval '25 minutes' where id = $1", [meetingId]);
+      await asUser(token(ADMIN_ONLY, ["admin"], "aal2"), "select public.complete_meeting($1)", [meetingId]);
+      const [stored] = await asServer<{ status: string; lead_status: string }>(
+        "select m.status::text as status, l.status::text as lead_status from public.meetings m join public.leads l on l.id = m.lead_id where m.id = $1",
+        [meetingId],
+      );
+      expect(stored).toEqual({ status: "done", lead_status: "contacted" });
     });
   });
 });
@@ -2762,6 +2835,95 @@ describe("VA match", () => {
   });
 });
 
+describe("manual meetings", () => {
+  const start = "2026-11-03T01:00:00.000Z";
+  const end = "2026-11-03T02:00:00.000Z";
+  const create = (claims: Claims, client: string | null, staff: string | null, title = "Weekly check-in", note: string | null = null) =>
+    asUser<{ id: string }>(claims, "select public.create_manual_meeting($1, $2, $3, $4, $5, $6) as id", [title, start, end, client ? [client] : null, staff ? [staff] : null, note]);
+
+  it("stores a scheduled booking for an admin, and the named people can read it", async () => {
+    const [row] = await create(asAdmin, clientA, VA, "Weekly check-in", "Bring the brief");
+    const [stored] = await asServer<{ kind: string; status: string; client_name: string; staff_name: string; creator_name: string; tenant_id: string }>(
+      "select kind::text as kind, status::text as status, client_name, staff_name, creator_name, tenant_id from public.meetings where id = $1",
+      [row.id],
+    );
+    expect(stored).toMatchObject({ kind: "manual", status: "scheduled", client_name: "Acme", staff_name: "Vera Cruz", creator_name: "Ada Admin" });
+    expect(stored.tenant_id).toBeTruthy();
+    expect(await asUser(asVa, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
+    expect(await asUser(asClient, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
+    expect(await asUser(asVa2, "select id from public.meetings where id = $1", [row.id])).toEqual([]);
+    expect(await asUser(asCloser, "select id from public.meetings where id = $1", [row.id])).toEqual([]);
+    const history = await asServer<{ kind: string; actor_name: string }>(
+      "select kind::text as kind, actor_name from public.meeting_events where meeting_id = $1 order by created_at",
+      [row.id],
+    );
+    expect(history.map((event) => event.kind)).toEqual(["scheduled", "note"]);
+    expect(history[0].actor_name).toBe("Ada Admin");
+  });
+
+  it("refuses everyone except an admin with two-factor, and refuses a bad time or an unknown person", async () => {
+    await expect(create(token(ADMIN, ["admin"], "aal1"), null, null)).rejects.toThrow(/two-factor/);
+    await expect(create(asVa, null, null)).rejects.toThrow(/two-factor/);
+    await expect(as("anon", {}, "select public.create_manual_meeting('X', $1, $2, null, null, null)", [start, end])).rejects.toThrow(/permission denied/);
+    await expect(create(asAdmin, null, null, "Weekly check-in")).resolves.toHaveLength(1);
+    await expect(asUser(asAdmin, "select public.create_manual_meeting('X', $1, $1, null, null, null)", [start])).rejects.toMatchObject({ code: "IVA30" });
+    await expect(asUser(asAdmin, "select public.create_manual_meeting('X', $1, $2, $3, null, null)", [start, end, ["00000000-0000-0000-0000-000000000099"]])).rejects.toMatchObject({ code: "IVA31" });
+  });
+
+  it("cancels instead of deleting, and keeps the history", async () => {
+    const [row] = await create(asAdmin, null, CLOSER, "Closer sync");
+    await asUser(asAdmin, "select public.cancel_manual_meeting($1)", [row.id]);
+    expect(await asServer("select status::text as status from public.meetings where id = $1", [row.id])).toEqual([{ status: "cancelled" }]);
+    await expect(asUser(asAdmin, "select public.cancel_manual_meeting($1)", [row.id])).rejects.toMatchObject({ code: "IVA30" });
+    await expect(asUser(asAdmin, "select public.update_manual_meeting($1, 'Renamed', $2, $3, null, null)", [row.id, start, end])).rejects.toMatchObject({ code: "IVA30" });
+    await expect(asUser(asAdmin, "delete from public.meetings where id = $1", [row.id])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asAdmin, "delete from public.meeting_events where meeting_id = $1", [row.id])).rejects.toThrow(/permission denied|append-only/);
+    expect(await asUser(asCloser, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
+  });
+
+  it("lets an admin edit a scheduled booking and add a note with a file", async () => {
+    const [row] = await create(asAdmin, null, null, "Draft");
+    await asUser(asAdmin, "select public.update_manual_meeting($1, 'Renamed', $2, $3, $4, $5)", [row.id, start, end, [clientA], [VA, CLOSER]]);
+    const [stored] = await asServer<{ title: string; client_name: string }>("select title, client_name from public.meetings where id = $1", [row.id]);
+    expect(stored).toEqual({ title: "Renamed", client_name: "Acme" });
+    const [guests] = await asServer<{ staff_ids: string[] }>("select staff_ids from public.meetings where id = $1", [row.id]);
+    expect(guests.staff_ids).toHaveLength(2);
+    expect(guests.staff_ids).toEqual(expect.arrayContaining([VA, CLOSER]));
+    const [note] = await asUser<{ id: string }>(asAdmin, "select public.add_manual_meeting_note($1, 'See attached', 'brief.pdf', 'application/pdf', $2) as id", [row.id, Buffer.from("hello").toString("base64")]);
+    const [file] = await asServer<{ attachment_name: string; bytes: number }>(
+      "select attachment_name, octet_length(attachment_bytes)::int as bytes from public.meeting_events where id = $1",
+      [note.id],
+    );
+    expect(file).toEqual({ attachment_name: "brief.pdf", bytes: 5 });
+    await expect(asUser(asVa, "select public.add_manual_meeting_note($1, 'No', null, null, null)", [row.id])).rejects.toThrow(/two-factor/);
+    expect(await asServer("select kind::text as kind from public.meeting_events where meeting_id = $1 and kind = 'updated'", [row.id])).toEqual([{ kind: "updated" }]);
+    await asUser(asAdmin, "select public.update_manual_meeting_note($1, 'Updated brief')", [note.id]);
+    expect(await asServer("select body from public.meeting_events where id = $1", [note.id])).toEqual([{ body: "Updated brief" }]);
+    await expect(asUser(asVa, "select public.delete_manual_meeting_note($1)", [note.id])).rejects.toThrow(/two-factor/);
+    await expect(asUser(asAdmin, "update public.meeting_events set body = 'x' where id = $1", [note.id])).rejects.toThrow(/permission denied/);
+    const [{ id: created }] = await asServer<{ id: string }>("select id from public.meeting_events where meeting_id = $1 and kind = 'scheduled'", [row.id]);
+    await expect(asUser(asAdmin, "select public.delete_manual_meeting_note($1)", [created])).rejects.toMatchObject({ code: "IVA32" });
+    await asUser(asAdmin, "select public.delete_manual_meeting_note($1)", [note.id]);
+    expect(await asServer("select id from public.meeting_events where id = $1", [note.id])).toEqual([]);
+  });
+
+  it("completes a booking once it has started, and refuses one that hasn't", async () => {
+    const pastStart = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const pastEnd = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const [row] = await asUser<{ id: string }>(asAdmin, "select public.create_manual_meeting($1, $2, $3, null, null, null) as id", ["Past check-in", pastStart, pastEnd]);
+    await expect(asUser(asVa, "select public.complete_meeting($1)", [row.id])).rejects.toThrow(/two-factor/);
+    await asUser(asAdmin, "select public.complete_meeting($1)", [row.id]);
+    expect(await asServer("select status::text as status from public.meetings where id = $1", [row.id])).toEqual([{ status: "done" }]);
+    expect(await asServer("select kind::text as kind from public.meeting_events where meeting_id = $1 and kind = 'done'", [row.id])).toEqual([{ kind: "done" }]);
+    await expect(asUser(asAdmin, "select public.complete_meeting($1)", [row.id])).rejects.toMatchObject({ code: "IVA34" });
+
+    const futureStart = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const futureEnd = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const [later] = await asUser<{ id: string }>(asAdmin, "select public.create_manual_meeting($1, $2, $3, null, null, null) as id", ["Later check-in", futureStart, futureEnd]);
+    await expect(asUser(asAdmin, "select public.complete_meeting($1)", [later.id])).rejects.toMatchObject({ code: "IVA34" });
+  });
+});
+
 describe("audit log", () => {
   // Users from earlier blocks: CLOSER_B and ADMIN_B in the second tenant, SUPER (Super Admin, default tenant), and
   // the discovery block's Lead Gen LG_A. Discovery times are still set (discovery block).
@@ -2818,6 +2980,18 @@ describe("audit log", () => {
       expect(entry.changes).toMatchObject({ status: "new", package_code: "executive", full_name: null, email: null, message: null, ip_hash: null, profile: null });
       for (const key of ["id", "created_at", "updated_at", "tenant_id", "notified_at", "closer_id", "disabled_at"]) expect(entry.changes).not.toHaveProperty(key);
       expect(JSON.stringify(entry.changes)).not.toMatch(/record@audit|Ana Cruz|Call me|eeee/);
+    });
+
+    it("an admin's manual meeting is theirs and tied to its client; the title and name snapshots are names only", async () => {
+      const [{ id }] = await asUser<{ id: string }>(
+        asAdmin,
+        "select public.create_manual_meeting($1, $2, $3, $4, $5, null) as id",
+        ["Merger strategy review", "2026-11-04T01:00:00.000Z", "2026-11-04T02:00:00.000Z", [clientA], [VA]],
+      );
+      const [entry] = await entries("meetings", id);
+      expect(entry).toMatchObject({ action: "insert", actor_kind: "user", actor_id: ADMIN, client_id: clientA });
+      expect(entry.changes).toMatchObject({ kind: "manual", client_id: clientA, staff_id: VA, title: null });
+      expect(JSON.stringify(entry.changes)).not.toMatch(/Merger strategy|Acme|Ada Admin/);
     });
 
     it("an admin's update is theirs: changed fields only, [old, new] for allowed columns, names for the rest", async () => {

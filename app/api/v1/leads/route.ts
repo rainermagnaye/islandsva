@@ -1,8 +1,9 @@
 import { after } from "next/server";
 import type { LeadCreated } from "@/features/leads/contract";
-import { createLead, notifyNewLead } from "@/features/leads/service";
+import { notifyNewLead, requestDiscoveryCall } from "@/features/leads/service";
 import { parseLead } from "@/features/leads/validation";
 import { ApiError } from "@/lib/api/errors";
+import { UpstreamError } from "@/lib/upstream-error";
 import { createHandler } from "@/lib/api/handler";
 import { hashIp } from "@/lib/api/ip-hash";
 import { ok } from "@/lib/api/response";
@@ -25,13 +26,23 @@ export const POST = createHandler(options, async ({ req, body, ip }) => {
 
   await verifyTurnstile(parsed.turnstileToken, ip, req.nextUrl.hostname);
 
-  const id = await createLead(parsed.value, {
-    ipHash: await hashIp(ip),
-    userAgent: req.headers.get("user-agent")?.slice(0, 512) ?? null,
-  });
+  let id: string;
+  try {
+    const stored = await requestDiscoveryCall(parsed.value, parsed.startsAt, {
+      ipHash: await hashIp(ip),
+      userAgent: req.headers.get("user-agent")?.slice(0, 512) ?? null,
+    });
+    if (!stored.ok) throw new ApiError(422, "validation_failed", "Please check the highlighted fields.", { meetingTime: stored.message });
+    id = stored.id;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Discovery request failed", { service: error.service, error: error.message });
+    throw new ApiError(503, "unavailable", options.unavailableMessage);
+  }
 
   // Email runs after the response, so the visitor never waits on (or sees) a mail outage.
-  after(() => notifyNewLead(id, parsed.value));
+  after(() => notifyNewLead(id, parsed.value, parsed.startsAt));
 
   return ok<LeadCreated>({ ok: true }, 201);
 });
