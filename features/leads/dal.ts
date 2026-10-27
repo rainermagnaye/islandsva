@@ -12,6 +12,34 @@ type NewLead = LeadInput & { ipHash: string | null; userAgent: string | null };
 // Secret-key client: the visitor is anonymous and leads are server-only (no RLS policies). The route has
 // already validated the input and passed the anti-spam checks.
 
+const DISCOVERY_REFUSAL: Record<string, string> = {
+  IVA22: "Choose a time on the hour or half hour, from now through the next 14 days.",
+  IVA24: "You already have a discovery call waiting. We'll be in touch.",
+  "23505": "That time was just taken. Choose another.",
+};
+
+/** The contact form: one lead and its requested discovery call. Secret key, after the route's checks. */
+export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  const { data, error } = await createAdminClient().rpc("submit_discovery_request", {
+    full_name: lead.name,
+    email: lead.email,
+    company_name: lead.company,
+    industry: lead.industry,
+    country: lead.country,
+    message: lead.message,
+    package_code: lead.packageSlug,
+    ip_hash: lead.ipHash,
+    user_agent: lead.userAgent,
+    starts_at: startsAt,
+  });
+  if (error) {
+    const message = DISCOVERY_REFUSAL[error.code ?? ""];
+    if (message) return { ok: false, message };
+    throw new UpstreamError("supabase", `Discovery request failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true, id: data };
+}
+
 export async function insertLead(lead: NewLead): Promise<string> {
   const { data, error } = await createAdminClient()
     .from("leads")
@@ -147,6 +175,7 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     ...toSummary(data, data.closer_id ? (names.get(data.closer_id) ?? null) : null),
     industry: data.industry,
     country: data.country,
+    closerId: data.closer_id,
     message: data.message,
     updatedAt: data.updated_at,
     disabledAt: data.disabled_at,
@@ -205,18 +234,12 @@ export async function countLeads() {
   return { total, new: fresh, contacted, qualified, converted, closed };
 }
 
-/**
- * Moves a lead to `to`, but only while its status is still one of `from` — checked in the same UPDATE, so
- * two admins acting at once (or a stale page) can't, say, reopen a lead someone just converted.
- * Returns false when nothing matched (the lead is gone or has moved on).
- */
-export async function updateLeadStatus(id: string, to: LeadStatus, from: readonly LeadStatus[]) {
+/** The signed-in admin becomes this lead's closer. */
+export async function claimLead(id: string, userId: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("leads").update({ status: to }).eq("id", id).in("status", from).select("id");
-  // IVA04: the database's own status guard refused the move (see the admin_leads_access migration).
-  if (error?.code === "IVA04") return false;
-  if (error) throw new UpstreamError("supabase", `Updating lead ${id} failed: ${error.message}`, { cause: error });
-  return data.length > 0;
+  const { data, error } = await supabase.from("leads").update({ closer_id: userId }).eq("id", id).select("id");
+  if (error) throw new UpstreamError("supabase", `Assigning lead ${id} failed: ${error.message}`, { cause: error });
+  return (data ?? []).length > 0;
 }
 
 /** Why a conversion was refused, from convert_lead()'s own error codes (see the migration). */

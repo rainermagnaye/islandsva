@@ -32,13 +32,15 @@ export type LeadPayload = {
   country: string;
   package: string;
   message: string;
+  meetingDate: string;
+  meetingTime: string;
   /** Honeypot — people leave it empty. */
   website: string;
   turnstileToken: string;
 };
 
 /** Form inputs that can show a field error (matches the input `name`s). */
-export type LeadField = "name" | "email" | "company" | "industry" | "country" | "message" | "package";
+export type LeadField = "name" | "email" | "company" | "industry" | "country" | "message" | "package" | "meetingDate" | "meetingTime";
 
 /** Fields the profile editor can send back. */
 export type LeadEditField = LeadField | keyof LeadProfileDetails;
@@ -72,14 +74,6 @@ export type LeadView = keyof typeof LEAD_VIEWS;
 /** Statuses an admin sets by hand. "Converted" is set only by converting the lead into a client. */
 export const TRIAGE_STATUSES = ["new", "contacted", "qualified", "closed"] as const satisfies readonly LeadStatus[];
 export type TriageStatus = (typeof TRIAGE_STATUSES)[number];
-
-/** Button text for moving a lead to each triage status. */
-export const TRIAGE_ACTIONS: Record<TriageStatus, string> = {
-  new: "Reopen",
-  contacted: "Mark contacted",
-  qualified: "Mark qualified",
-  closed: "Close lead",
-};
 
 /**
  * Where a lead can go next by hand. Open leads move between contacted, qualified and closed; a closed lead
@@ -245,6 +239,7 @@ export function leadProfileToJson(profile: LeadProfileDetails): Record<string, s
 
 /** One lead on its own admin page: the summary plus the visitor's message. */
 export type LeadDetail = LeadSummary & {
+  closerId: string | null;
   message: string;
   industry: string | null;
   country: string | null;

@@ -9,6 +9,7 @@ export default function ClientLayout({ children }: LayoutProps<"/client">) {
         label="Client"
         items={[
           { href: appRoutes.client, label: "Dashboard", icon: "home", exact: true },
+          { href: appRoutes.clientCalendar, label: "Calendar", icon: "calendar" },
           { href: appRoutes.clientMatch, label: "VA Match", icon: "users" },
           { href: appRoutes.clientTasks, label: "Tasks", icon: "check" },
         ]}

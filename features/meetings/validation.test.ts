@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDiscoveryTimes } from "./validation";
+import { parseBooking, parseDiscoveryTimes } from "./validation";
 
 describe("parseDiscoveryTimes", () => {
   it("accepts none to six half-hour times and returns them in order", () => {
@@ -30,5 +30,40 @@ describe("parseDiscoveryTimes", () => {
     expect(parseDiscoveryTimes({})).toMatchObject({ ok: false });
     expect(parseDiscoveryTimes({ times: ["09:00"], tenant: "x" })).toEqual({ ok: false, formError: expect.any(String) });
     expect(parseDiscoveryTimes(null)).toEqual({ ok: false, formError: expect.any(String) });
+  });
+});
+
+const booking = {
+  title: "Weekly check-in",
+  startDate: "2026-11-03",
+  startTime: "09:00",
+  endDate: "2026-11-03",
+  endTime: "10:00",
+  clientIds: [],
+  staffIds: [],
+  note: "",
+};
+
+describe("parseBooking", () => {
+  it("accepts a title and a Manila span of at most 8 hours", () => {
+    const parsed = parseBooking(booking);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.value.clientIds).toEqual([]);
+  });
+
+  it("refuses an end that is not after the start", () => {
+    const parsed = parseBooking({ ...booking, endTime: "09:00" });
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok && "fieldErrors" in parsed) expect(parsed.fieldErrors.endTime).toMatch(/8 hours/);
+  });
+
+  it("refuses a span longer than 8 hours", () => {
+    const parsed = parseBooking({ ...booking, endTime: "18:00" });
+    expect(parsed.ok).toBe(false);
+  });
+
+  it("refuses a blank title", () => {
+    const parsed = parseBooking({ ...booking, title: "  " });
+    expect(parsed.ok).toBe(false);
   });
 });

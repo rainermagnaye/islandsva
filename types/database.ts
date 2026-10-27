@@ -141,6 +141,17 @@ type MeetingRow = {
   ends_at: string;
   google_event_id: string | null;
   meet_url: string | null;
+  title: string | null;
+  client_id: string | null;
+  staff_id: string | null;
+  created_by: string | null;
+  client_name: string | null;
+  staff_name: string | null;
+  client_ids: string[];
+  staff_ids: string[];
+  client_names: string[];
+  staff_names: string[];
+  creator_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -152,7 +163,11 @@ type MeetingEventRow = {
   meeting_id: string;
   kind: Enum<"meeting_event_kind">;
   actor_id: string | null;
+  actor_name: string | null;
   body: string | null;
+  attachment_name: string | null;
+  attachment_type: string | null;
+  attachment_bytes: string | null;
   created_at: string;
 };
 
@@ -574,6 +589,49 @@ export type Database = {
       cancel_demo: { Args: { booking_id: string; actor: string }; Returns: Json };
       // Discovery calls. set_discovery_times: an admin with two-factor (signed in). discovery_inbox: signed in,
       // rows only for an active Lead Gen. The rest: the secret key only.
+      create_manual_meeting: {
+        Args: {
+          title: string;
+          starts_at: string;
+          ends_at: string;
+          client_ids: string[] | null;
+          staff_ids: string[] | null;
+          note: string | null;
+          attachment_name?: string | null;
+          attachment_type?: string | null;
+          attachment_base64?: string | null;
+        };
+        Returns: string;
+      };
+      update_manual_meeting: {
+        Args: { meeting_id: string; title: string; starts_at: string; ends_at: string; client_ids: string[] | null; staff_ids: string[] | null };
+        Returns: undefined;
+      };
+      cancel_manual_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      complete_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      add_manual_meeting_note: {
+        Args: { meeting_id: string; note: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
+      update_manual_meeting_note: { Args: { event_id: string; note: string }; Returns: undefined };
+      delete_manual_meeting_note: { Args: { event_id: string }; Returns: undefined };
+      submit_discovery_request: {
+        Args: {
+          full_name: string;
+          email: string;
+          company_name: string | null;
+          industry: string | null;
+          country: string | null;
+          message: string;
+          package_code: string | null;
+          ip_hash: string | null;
+          user_agent: string | null;
+          starts_at: string;
+        };
+        Returns: string;
+      };
+      confirm_discovery_booking: { Args: { meeting_id: string }; Returns: undefined };
+      reschedule_discovery_booking: { Args: { meeting_id: string; starts_at: string }; Returns: undefined };
       set_discovery_times: { Args: { times: string[] }; Returns: undefined };
       open_discovery_slots: { Args: Record<PropertyKey, never>; Returns: string[] };
       request_discovery_call: {
@@ -629,9 +687,9 @@ export type Database = {
       payment_provider: "manual";
       payment_status: "paid" | "void";
       demo_status: "pending" | "confirmed" | "rejected" | "cancelled" | "completed" | "expired";
-      meeting_kind: "discovery";
+      meeting_kind: "discovery" | "manual";
       meeting_status: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "cancelled" | "expired";
-      meeting_event_kind: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "note" | "expired";
+      meeting_event_kind: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "note" | "expired" | "updated" | "cancelled";
       task_status: "todo" | "in_progress" | "done";
     };
     CompositeTypes: { [_ in never]: never };

@@ -12,6 +12,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * the session, behind their own Suspense boundary. On admin pages the logo inset matches the sidebar
  * (see `.portal-header` in globals.css). Access is checked by each page, not here.
  * Search is a slot so its script stays off the VA pages, which are at the size limit.
+ * Toasts stay on the pages that show them, for the same reason.
  */
 export default function DashboardLayout({ children, search }: { children: ReactNode; search: ReactNode }) {
   return (

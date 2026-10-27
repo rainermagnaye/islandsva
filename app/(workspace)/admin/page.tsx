@@ -79,7 +79,7 @@ async function AdminHome() {
         <StatCard label="Total clients" value={clientCount} icon="briefcase" href={appRoutes.adminClients} />
         <StatCard label="Active clients" value={recurring.clients} icon="briefcase" href={appRoutes.adminClients} />
         <RevenueCard cents={recurring.cents} />
-        <StatCard label="Demo requests" value={openRequests} icon="calendar" href={listHref(appRoutes.adminDemos, { status: "requested" })} caption="Waiting for a VA" />
+        <StatCard label="Demo requests" value={openRequests} icon="calendar" href={appRoutes.adminDemos} caption="Waiting for a VA" />
       </section>
 
       <PackageMix rows={packageMix(packageRows, packageNames)} />
