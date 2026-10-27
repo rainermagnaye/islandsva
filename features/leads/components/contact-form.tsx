@@ -5,12 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
-import { addDays, todayIn, type IsoDate } from "@/components/ui/date-math";
+import type { IsoDate } from "@/components/ui/date-math";
 import { Form, FormSuccess } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { COUNTRIES } from "@/content/countries";
-import { timezoneForCountry } from "@/content/timezones";
 import { packages } from "@/content/packages";
 import { routes } from "@/content/routes";
 import { submitLead } from "../api-client";
@@ -46,17 +45,22 @@ export function ContactFormWithParams() {
 export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }) {
   const turnstileId = useRef<string | null>(null);
   const [country, setCountry] = useState("");
-  const zone = timezoneForCountry(country);
+  const [city, setCity] = useState<string | null>(null);
   const [dates, setDates] = useState<{ min: IsoDate; max: IsoDate } | null>(null);
-  function chooseCountry(value: string) {
+  // Loaded on choice, not with the page, so the zone table stays off the first-load script.
+  async function chooseCountry(value: string) {
     setCountry(value);
-    const zoneId = timezoneForCountry(value)?.value;
-    if (!zoneId) {
+    const { timezoneForCountry } = await import("@/content/timezones");
+    const zone = timezoneForCountry(value);
+    if (!zone) {
+      setCity(null);
       setDates(null);
       return;
     }
+    const { addDays, todayIn } = await import("@/components/ui/date-math");
     // The date window is set here, not during render, so the public page can stay static.
-    const min = todayIn(zoneId);
+    const min = todayIn(zone.value);
+    setCity(zone.label.split(" — ")[1] ?? null);
     setDates({ min, max: addDays(min, 14) });
   }
   const handleTurnstileRender = useCallback((id: string | null) => {
@@ -113,7 +117,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
               name="meetingTime"
               type="time"
               required
-              hint={zone ? `${zone.label.split(" — ")[1]} time, on the hour or half hour. The call is 30 minutes.` : "Choose a country. The time follows that country."}
+              hint={city ? `${city} time, on the hour or half hour. The call is 30 minutes.` : "Choose a country. The time follows that country."}
               error={fieldErrors.meetingTime}
             />
           </div>
