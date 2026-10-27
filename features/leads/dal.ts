@@ -12,11 +12,20 @@ type NewLead = LeadInput & { ipHash: string | null; userAgent: string | null };
 // Secret-key client: the visitor is anonymous and leads are server-only (no RLS policies). The route has
 // already validated the input and passed the anti-spam checks.
 
+const TIME_REFUSED = "Choose a time on the hour or half hour, from now through the next 14 days.";
 const DISCOVERY_REFUSAL: Record<string, string> = {
-  IVA22: "Choose a time on the hour or half hour, from now through the next 14 days.",
+  IVA22: TIME_REFUSED,
+  // A check constraint on the meeting's start (e.g. its half-hour rule) is the same mistake as IVA22 to the
+  // visitor; without this it would surface as an outage (503).
+  "23514": TIME_REFUSED,
   IVA24: "You already have a discovery call waiting. We'll be in touch.",
   "23505": "That time was just taken. Choose another.",
 };
+
+/** The visitor's message for a refused discovery request, or null when the failure is an outage. */
+export function discoveryRefusal(code: string | undefined): string | null {
+  return code && Object.hasOwn(DISCOVERY_REFUSAL, code) ? DISCOVERY_REFUSAL[code] : null;
+}
 
 /** The contact form: one lead and its requested discovery call. Secret key, after the route's checks. */
 export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
@@ -33,7 +42,7 @@ export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): P
     starts_at: startsAt,
   });
   if (error) {
-    const message = DISCOVERY_REFUSAL[error.code ?? ""];
+    const message = discoveryRefusal(error.code);
     if (message) return { ok: false, message };
     throw new UpstreamError("supabase", `Discovery request failed: ${error.message}`, { cause: error });
   }

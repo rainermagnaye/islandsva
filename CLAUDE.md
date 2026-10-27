@@ -147,7 +147,7 @@ Server Components by default; `'use client'` on the smallest leaf. Split a file 
 |---|---|
 | Lighthouse, public pages | ≥ 95 |
 | LCP · CLS · INP | < 2.0 s · < 0.05 · < 200 ms |
-| First-load JS | ≤ 160 KB gzipped per page; sign-in and `/admin` are near it — new client code there needs a saving elsewhere |
+| First-load JS | ≤ 160 KB gzipped per page, nested and `[id]` pages included; most portal pages are near it — new client code there needs a saving elsewhere. Pages already over are capped at their size in `scripts/check-bundle.mjs` until they're back under |
 
 - Prefer platform features (CSS, `<details>`, `<dialog>`, popover) over libraries; justify any dependency over 30 KB; third-party scripts only where needed.
 - **Tests:** every `parseX` and pure rule, the route helpers, role rules and `safeNextPath`; database tests per `supabase/CLAUDE.md`. A security test must fail when its rule is removed. Untested auth or permission branches block review.
