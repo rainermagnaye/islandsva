@@ -8,6 +8,8 @@ import { Pagination } from "@/components/ui/pagination";
 import { appRoutes, closerClientHref } from "@/content/routes";
 import { ClientsTable } from "@/features/clients/components/clients-table";
 import { listClients } from "@/features/clients/dal";
+import { DiscoveryInbox } from "@/features/meetings/components/discovery-inbox";
+import { listDiscoveryInbox } from "@/features/meetings/dal";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Closer workspace" };
@@ -27,7 +29,10 @@ async function CloserHome({ searchParams }: Pick<PageProps<"/closer">, "searchPa
   const query = await searchParams;
   const requested = Number(Array.isArray(query.page) ? query.page[0] : query.page);
   // RLS limits the list to the clients this Closer created.
-  const { clients, total, page, pageCount } = await listClients({ page: Number.isInteger(requested) && requested > 0 ? requested : 1 });
+  const [{ clients, total, page, pageCount }, requests] = await Promise.all([
+    listClients({ page: Number.isInteger(requested) && requested > 0 ? requested : 1 }),
+    listDiscoveryInbox(),
+  ]);
 
   return (
     <Container className="grid gap-7 py-10 md:py-12">
@@ -40,6 +45,7 @@ async function CloserHome({ searchParams }: Pick<PageProps<"/closer">, "searchPa
           New client
         </Button>
       </div>
+      <DiscoveryInbox requests={requests} />
       <div className="grid gap-4">
         <ClientsTable
           keepHeader

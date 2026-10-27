@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { Logo } from "@/components/layout/logo";
 import { appRoutes } from "@/content/routes";
+import { ToastProvider } from "@/components/ui/toast";
 import { AccountNav } from "@/features/auth/components/account-nav";
 
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -28,7 +29,7 @@ export default function DashboardLayout({ children, search }: { children: ReactN
         </div>
       </header>
       <main id="main" className="min-h-[calc(100dvh-4rem)] bg-surface-page">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </main>
     </>
   );

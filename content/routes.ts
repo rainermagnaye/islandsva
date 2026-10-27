@@ -30,6 +30,7 @@ export const appRoutes = {
   clientDemo: "/client/demo",
   clientTasks: "/client/tasks",
   clientMatch: "/client/match",
+  clientCalendar: "/client/calendar",
   va: "/va",
   vaClients: "/va/clients",
   vaTasks: "/va/tasks",
@@ -74,6 +75,9 @@ export const vaTaskHref = (id: string) => `${appRoutes.vaTasks}/${id}`;
 
 /** A Closer's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */
 export const closerClientHref = (id: string) => `${appRoutes.closer}/clients/${id}`;
+
+/** A file on a booking note. The id is a random UUID. */
+export const meetingFileHref = (eventId: string) => `/meeting-files/${eventId}`;
 
 /** The payment file on a client. The id is a random UUID. */
 export const adminClientPaymentHref = (id: string) => `${adminClientHref(id)}/payment`;

@@ -13,6 +13,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <WorkspaceNav label="Admin"
         items={[
           { href: appRoutes.admin, label: "Overview", icon: "home", exact: true },
+          { href: appRoutes.adminDemos, label: "Calendar", icon: "calendar" },
           {
             href: appRoutes.adminLeads,
             label: "Leads",
@@ -24,7 +25,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
             ),
           },
           { href: appRoutes.adminClients, label: "Clients", icon: "briefcase" },
-          { href: appRoutes.adminDemos, label: "Demos", icon: "calendar" },
           { href: appRoutes.adminSales, label: "Sales", icon: "chart" },
           { href: appRoutes.adminUsers, label: "Team", icon: "users" },
         ]}

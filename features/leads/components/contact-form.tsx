@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
+import { addDays, todayIn, type IsoDate } from "@/components/ui/date-math";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Form, FormSuccess } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { COUNTRIES } from "@/content/countries";
+import { timezoneForCountry } from "@/content/timezones";
 import { packages } from "@/content/packages";
 import { routes } from "@/content/routes";
 import { submitLead } from "../api-client";
@@ -27,6 +30,8 @@ function submit(formData: FormData) {
     country: value("country"),
     package: value("package"),
     message: value("message"),
+    meetingDate: value("meetingDate"),
+    meetingTime: value("meetingTime"),
     website: value("website"),
     turnstileToken: value("cf-turnstile-response"),
   };
@@ -41,6 +46,20 @@ export function ContactFormWithParams() {
 
 export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }) {
   const turnstileId = useRef<string | null>(null);
+  const [country, setCountry] = useState("");
+  const zone = timezoneForCountry(country);
+  const [dates, setDates] = useState<{ min: IsoDate; max: IsoDate } | null>(null);
+  function chooseCountry(value: string) {
+    setCountry(value);
+    const zoneId = timezoneForCountry(value)?.value;
+    if (!zoneId) {
+      setDates(null);
+      return;
+    }
+    // The date window is set here, not during render, so the public page can stay static.
+    const min = todayIn(zoneId);
+    setDates({ min, max: addDays(min, 14) });
+  }
   const handleTurnstileRender = useCallback((id: string | null) => {
     turnstileId.current = id;
   }, []);
@@ -56,7 +75,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
       onError={resetTurnstile}
       success={
         <FormSuccess title="Got it — thank you">
-          We&apos;ve received your message and will reply within one business day to set up your discovery call.
+          We&apos;ve received your discovery call request. It shows as requested until someone on the team confirms the time.
         </FormSuccess>
       }
       className={`${cardSurface} p-6 md:p-8`}
@@ -70,7 +89,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
           <TextField label="Company" name="company" autoComplete="organization" required maxLength={LEAD_LIMITS.company} error={fieldErrors.company} />
           <div className="grid gap-5 sm:grid-cols-2">
             <Select label="Industry" name="industry" required placeholder="Choose an industry" options={[...INDUSTRIES]} error={fieldErrors.industry} />
-            <Select label="Country" name="country" required autoComplete="country-name" placeholder="Choose a country" options={[...COUNTRIES]} error={fieldErrors.country} />
+            <Select label="Country" name="country" required autoComplete="country-name" placeholder="Choose a country" options={[...COUNTRIES]} value={country} onChange={(event) => chooseCountry(event.target.value)} error={fieldErrors.country} />
           </div>
           <Select
             label="Package you're interested in"
@@ -80,6 +99,26 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
             options={[{ value: "", label: "Not sure yet" }, ...packages.map((p) => ({ value: p.slug, label: `${p.name} — ${p.hoursPerWeek}` }))]}
             error={fieldErrors.package}
           />
+          <div className="grid gap-5 sm:grid-cols-2">
+            <DatePicker
+              label="Meeting date"
+              name="meetingDate"
+              required
+              timeZone={zone?.value}
+              weekStartsOn={1}
+              min={dates?.min}
+              max={dates?.max}
+              error={fieldErrors.meetingDate}
+            />
+            <TextField
+              label="Meeting time"
+              name="meetingTime"
+              type="time"
+              required
+              hint={zone ? `${zone.label.split(" — ")[1]} time, on the hour or half hour. The call is 30 minutes.` : "Choose a country. The time follows that country."}
+              error={fieldErrors.meetingTime}
+            />
+          </div>
           <TextField
             label="How can we help?"
             name="message"

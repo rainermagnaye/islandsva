@@ -7,10 +7,10 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { ConvertField, LeadEditField, LeadField, LeadStatusField } from "./contract";
+import type { ConvertField, LeadEditField, LeadField } from "./contract";
 import { acceptLeadAttachment } from "./attachment";
-import { convertLead as convert, convertLeadWithRemarks, createLead, editLead, logLeadFile, logLeadStep, pauseLead, removeLead, setLeadStatus } from "./service";
-import { parseAdminLead, parseConvert, parseConvertNoted, parseLeadEdit, parseLeadFlag, parseLeadStatus, parseLeadStep, parseLeadTarget, type ConvertNotedField, type LeadStepField } from "./validation";
+import { assignLead, convertLead as convert, convertLeadWithRemarks, createLead, editLead, logLeadFile, logLeadStep, pauseLead, removeLead } from "./service";
+import { parseAdminLead, parseConvert, parseConvertNoted, parseLeadEdit, parseLeadFlag, parseLeadStep, parseLeadTarget, type ConvertNotedField, type LeadStepField } from "./validation";
 
 // Public POST endpoints: each re-checks the caller's role (admin with two-factor sign-in) itself.
 
@@ -50,26 +50,6 @@ export async function addLead(formData: FormData): Promise<SubmitResult<LeadFiel
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Creating a lead failed", { service: error.service, error });
     return { ok: false, message: "We couldn't add this lead just now. Please try again in a moment." };
-  }
-
-  refresh();
-  return { ok: true };
-}
-
-export async function changeLeadStatus(formData: FormData): Promise<SubmitResult<LeadStatusField>> {
-  await requireRole(["admin"]);
-  const parsed = parseLeadStatus(formEntries(formData));
-  if (!parsed.ok) return toSubmitResult(parsed);
-
-  try {
-    if (!(await setLeadStatus(parsed.value))) {
-      refresh(); // show what the lead is now
-      return { ok: false, message: "This lead changed since the page loaded. Check its status and try again." };
-    }
-  } catch (error) {
-    if (!(error instanceof UpstreamError)) throw error;
-    console.error("Lead status change failed", { service: error.service, error });
-    return { ok: false, message: "We couldn't update this lead just now. Please try again in a moment." };
   }
 
   refresh();
@@ -178,6 +158,24 @@ export async function setLeadPaused(formData: FormData): Promise<SubmitResult> {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Lead pause failed", { service: error.service, error });
     return { ok: false, message: "We couldn't update this lead just now. Please try again in a moment." };
+  }
+
+  refresh();
+  return { ok: true };
+}
+
+/** The signed-in admin becomes the lead's assigned closer. */
+export async function assignLeadToMe(formData: FormData): Promise<SubmitResult> {
+  const user = await requireRole(["admin"]);
+  const parsed = parseLeadTarget(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  try {
+    if (!(await assignLead(parsed.value.leadId, user.id))) return { ok: false, message: "That lead no longer exists. Refresh the page." };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Lead assign failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't assign this lead just now. Please try again in a moment." };
   }
 
   refresh();

@@ -7,6 +7,7 @@ import { appRoutes } from "@/content/routes";
 import { leadProfileTab } from "@/features/leads/contract";
 import { LeadProfile } from "@/features/leads/components/lead-profile";
 import { getLead, listLeadEvents } from "@/features/leads/dal";
+import { listLeadBookings } from "@/features/meetings/dal";
 import { requireRole } from "@/lib/auth/session";
 
 // Static title: the lead's name is personal data and stays out of the tab title and browser history.
@@ -21,10 +22,10 @@ export default function AdminLeadPage({ params, searchParams }: PageProps<"/admi
 }
 
 async function AdminLead({ params, searchParams }: Pick<PageProps<"/admin/leads/[id]">, "params" | "searchParams">) {
-  await requireRole(["admin"]);
+  const user = await requireRole(["admin"]);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const editing = query.edit === "1";
-  const [lead, events] = await Promise.all([getLead(id), listLeadEvents(id)]);
+  const [lead, events, meetings] = await Promise.all([getLead(id), listLeadEvents(id), listLeadBookings(id)]);
   if (!lead) notFound();
 
   return (
@@ -40,7 +41,7 @@ async function AdminLead({ params, searchParams }: Pick<PageProps<"/admin/leads/
         />
       }
     >
-      <LeadProfile lead={lead} events={events} tab={leadProfileTab(query.tab)} editing={editing} />
+      <LeadProfile lead={lead} events={events} meetings={meetings} viewerId={user.id} tab={leadProfileTab(query.tab)} editing={editing} />
     </Workspace>
   );
 }

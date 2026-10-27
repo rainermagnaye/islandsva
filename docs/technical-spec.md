@@ -10,7 +10,7 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | employee_profiles | VA and Lead Gen details, résumé, avatar, references | Built |
 | leads · lead_events | Enquiries and timeline; `closer_id` = the owning Lead Gen, set when they confirm the discovery call | Built; Lead Gens work their own leads (M8) |
 | discovery_times | Admin-set daily times of day (PHT), at most 6 | Built (M8; rules in `supabase/CLAUDE.md`) |
-| meetings | Every call: kind, organizer, decided by, start, end, status, Google event id, Meet link | Built for discovery calls (M8); attendees and Google (M9); intro and client↔VA kinds (M10, M12) |
+| meetings | Every call: kind, organizer, decided by, start, end, status, Google event id, Meet link. `manual` is an admin booking (title, optional client and staff) with no Google event yet | Built for discovery calls (M8) and admin bookings; attendees and Google (M9); intro and client↔VA kinds (M10, M12) |
 | meeting_events | Meeting history: requested, scheduled, rejected, done, no-show, note, expired | Built (M8); rescheduled (old → new) and cancelled (by whom, app or Google) with M9 |
 | google_connections | An employee's encrypted refresh token, calendar id, push channel | New (M9) |
 | va_working_hours | A VA's weekly hours (PHT), one half-hour window per weekday. Read when intro calls exist | Built (M10); unused until meetings and Google |

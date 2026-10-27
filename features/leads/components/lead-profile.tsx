@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { adminLeadHref, appRoutes } from "@/content/routes";
-import { LEAD_EVENT_LABELS, type LeadDetail, type LeadEvent, type LeadProfileTab } from "../contract";
-import { LeadActions, TimelineButtons } from "./lead-actions";
+import { adminLeadHref } from "@/content/routes";
+import type { Booking } from "@/features/meetings/contract";
+import type { LeadDetail, LeadEvent, LeadProfileTab } from "../contract";
+import { LeadActions } from "./lead-actions";
 import { LeadProfileForm } from "./lead-profile-form";
+import { LeadTimeline } from "./lead-timeline";
 import { LeadStatusBadge, packageName } from "./lead-status";
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
@@ -17,28 +19,35 @@ const stamp = (iso: string) => `${when.format(new Date(iso))} UTC`;
 
 const EMPTY = "—";
 
+/** A website enquiry stores no source until the form sets it. A discovery call is that signal. */
+function withWebsiteSource(lead: LeadDetail, meetings: readonly Booking[]): LeadDetail {
+  if (lead.profile.source || !meetings.some((meeting) => meeting.kind === "discovery")) return lead;
+  return { ...lead, profile: { ...lead.profile, source: "Website" } };
+}
+
 /** The lead's own page. A dash is a detail this lead does not have yet. */
-export function LeadProfile({ lead, events, tab, editing }: { lead: LeadDetail; events: readonly LeadEvent[]; tab: LeadProfileTab; editing: boolean }) {
-  const canDelete = lead.status === "new" && events.length === 0;
+export function LeadProfile({ lead, events, meetings, viewerId, tab, editing }: { lead: LeadDetail; events: readonly LeadEvent[]; meetings: readonly Booking[]; viewerId: string; tab: LeadProfileTab; editing: boolean }) {
+  const shown = withWebsiteSource(lead, meetings);
+  const canDelete = shown.status === "new" && events.length === 0;
 
   return (
     <div className="grid gap-4">
       <Card as="header" padding="sm" className="flex flex-wrap items-center gap-3">
-        <LeadMark name={lead.fullName} />
+        <LeadMark name={shown.fullName} />
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <h1 className="m-0 min-w-0 truncate type-h3">
-            {lead.fullName}
-            {lead.companyName && <span className="font-normal"> - {lead.companyName}</span>}
+            {shown.fullName}
+            {shown.companyName && <span className="font-normal"> - {shown.companyName}</span>}
           </h1>
-          <LeadStatusBadge status={lead.status} />
-          {lead.disabledAt && <Badge tone="neutral" size="sm" dot>Disabled</Badge>}
+          <LeadStatusBadge status={shown.status} />
+          {shown.disabledAt && <Badge tone="neutral" size="sm" dot>Disabled</Badge>}
         </div>
-        <LeadActions lead={lead} canDelete={canDelete} editing={editing} />
+        <LeadActions lead={shown} viewerId={viewerId} canDelete={canDelete} editing={editing} />
       </Card>
 
-      <ProfileTabs id={lead.id} tab={tab} />
+      <ProfileTabs id={shown.id} tab={tab} />
 
-      {editing ? <LeadProfileForm lead={lead} /> : tab === "timeline" ? <LeadTimeline lead={lead} events={events} /> : <LeadOverview lead={lead} events={events} />}
+      {editing ? <LeadProfileForm lead={shown} /> : tab === "timeline" ? <LeadTimeline lead={shown} events={events} meetings={meetings} /> : <LeadOverview lead={shown} events={events} />}
     </div>
   );
 }
@@ -145,69 +154,6 @@ function LeadFiles({ lead, events }: { lead: LeadDetail; events: readonly LeadEv
         )}
       </div>
     </Card>
-  );
-}
-
-function LeadTimeline({ lead, events }: { lead: LeadDetail; events: readonly LeadEvent[] }) {
-  const rows = [
-    ...events.map((event) => ({
-      key: event.id,
-      title: LEAD_EVENT_LABELS[event.kind],
-      at: event.createdAt,
-      body: event.body,
-      author: event.authorName,
-      attachment: event.attachmentName && event.attachmentType ? { name: event.attachmentName, type: event.attachmentType, href: `${adminLeadHref(lead.id)}/files/${event.id}` } : null,
-    })),
-    { key: "enquiry", title: "Lead received", at: lead.createdAt, body: lead.message, author: "Discovery form", attachment: null },
-  ];
-
-  return (
-    <div className="grid gap-4">
-      <Card as="section" padding="none">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <h2 className="m-0 type-label">History</h2>
-          <TimelineButtons leadId={lead.id} />
-        </div>
-        <ol className="m-0 grid list-none gap-0 p-4">
-          {rows.map((event, index) => (
-            <li key={event.key} className="grid grid-cols-[1.25rem_1fr] gap-3">
-              <div className="flex flex-col items-center">
-                <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-action-secondary" />
-                {index < rows.length - 1 && <span className="mt-1 w-px flex-1 bg-border" />}
-              </div>
-              <div className={index < rows.length - 1 ? "grid gap-1 pb-5" : "grid gap-1"}>
-                <p className="m-0 type-label text-ink">{event.title}</p>
-                <p className="m-0 whitespace-pre-line type-body-sm text-ink">{event.body}</p>
-                {event.attachment && <AttachmentPreview href={event.attachment.href} name={event.attachment.name} type={event.attachment.type} />}
-                <p className="m-0 type-body-sm text-ink-muted">
-                  <time dateTime={event.at}>{stamp(event.at)}</time>
-                  {" · "}
-                  {event.author}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </Card>
-
-      <FieldCard title="Activity">
-        <Field label="Discovery call logs" value={EMPTY} wide />
-        <Field label="Follow-up notes" value={EMPTY} wide />
-        <Field label="Status changes" value={EMPTY} wide />
-        <Field label="Closer changes" value={EMPTY} wide />
-        <Field
-          label="Conversion"
-          wide
-          value={
-            lead.status === "converted" ? (
-              <Link href={appRoutes.adminClients}>This lead is now a client. View clients.</Link>
-            ) : (
-              EMPTY
-            )
-          }
-        />
-      </FieldCard>
-    </div>
   );
 }
 
