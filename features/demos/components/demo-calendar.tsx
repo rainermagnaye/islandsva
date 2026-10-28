@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card } from "@/components/ui/card";
 import { addDays, addMonths, formatDate, monthGrid, sameMonth, startOfWeek, type IsoDate } from "@/components/ui/date-math";
@@ -33,16 +34,23 @@ const VIEWS = [
 
 type CalendarView = (typeof VIEWS)[number]["id"];
 
-const navButton = "grid size-11 place-items-center rounded-md hover:bg-action-ghost-hover";
+const navButton = "grid size-9 place-items-center rounded-md text-ink hover:bg-action-ghost-hover";
 
 /** Demo calls on a day, week, or month. The date opens a calendar to jump; a call opens the client unless the page handles the click. */
-export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], toolbar, legend = LEGEND, onEventClick, onSlotClick, eventGesture, onEventMove }: {
+export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], toolbar, actions, viewsInHeader = false, aside, legend = LEGEND, onEventClick, onSlotClick, eventGesture, onEventMove }: {
   rows: readonly DemoCalendarRow[];
   now: string;
   today: IsoDate;
   nowMinutes: number;
   extraEvents?: readonly ScheduleEvent[];
+  /** Inside the calendar card, after the view switch (e.g. the filter). */
   toolbar?: ReactNode;
+  /** In the page header, beside the title (e.g. New meeting). */
+  actions?: ReactNode;
+  /** The Daily/Weekly/Monthly switch beside `actions` in the page header (admin) instead of in the card. */
+  viewsInHeader?: boolean;
+  /** A side panel beside the calendar (the client's "Coming up"), as tall as the calendar card. */
+  aside?: ReactNode;
   legend?: readonly CalendarLegendItem[];
   /** Return true when the page handled the event. Otherwise a demo call opens the client. */
   onEventClick?: (event: ScheduleEvent) => boolean;
@@ -93,65 +101,89 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
         ? formatDate(focus, { month: "long", year: "numeric" })
         : `${formatDate(weekStart, { month: "short", day: "numeric" })} – ${formatDate(addDays(weekStart, 6), { month: "short", day: "numeric", year: "numeric" })}`;
 
+  const viewSwitch = (
+    <div role="group" aria-label="Calendar view" className="flex gap-1 rounded-md bg-surface-sunken p-1">
+      {VIEWS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed={view === item.id}
+          onClick={() => setView(item.id)}
+          className={cx("min-h-9 rounded-sm px-3.5 type-label", view === item.id ? "bg-action-secondary text-on-action-secondary" : "text-ink hover:bg-action-ghost-hover")}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const dateFilter = (
-    <div ref={picker} className="relative flex items-center">
-      <button type="button" aria-label="Previous" onClick={() => step(-1)} className={navButton}>
-        <Icon name="chevron-left" size={20} />
-      </button>
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={picking}
-        aria-label={`Choose a date, ${range}`}
-        onClick={() => setPicking((open) => !open)}
-        className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 type-body-sm text-ink hover:bg-action-ghost-hover"
-      >
-        <span aria-live="polite">{range}</span>
-        <Icon name="calendar" size={18} className="text-ink-muted" />
-      </button>
-      <button type="button" aria-label="Next" onClick={() => step(1)} className={navButton}>
-        <Icon name="chevron-right" size={20} />
-      </button>
-      {picking && (
-        <div className="absolute top-full left-0 z-30 mt-1">
-          <Calendar
-            value={focus}
-            onChange={(date) => {
-              setFocus(date);
-              setPicking(false);
-            }}
-            today={today}
-            weekStartsOn={1}
-            timeZone={VA_TIME_ZONE}
-            className="elevation-md"
-          />
-        </div>
-      )}
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+      <div ref={picker} className="relative flex items-center gap-1">
+        <button type="button" aria-label="Previous" onClick={() => step(-1)} className={navButton}>
+          <Icon name="chevron-left" size={18} />
+        </button>
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={picking}
+          aria-label={`Choose a date, ${range}`}
+          onClick={() => setPicking((open) => !open)}
+          className="inline-flex min-h-10 items-center gap-3 rounded-md px-3 type-body-sm text-ink hover:bg-action-ghost-hover"
+        >
+          <span aria-live="polite">{range}</span>
+          <Icon name="calendar" size={18} className="text-ink" />
+        </button>
+        <button type="button" aria-label="Next" onClick={() => step(1)} className={navButton}>
+          <Icon name="chevron-right" size={18} />
+        </button>
+        {picking && (
+          <div className="absolute top-full left-0 z-30 mt-1">
+            <Calendar
+              value={focus}
+              onChange={(date) => {
+                setFocus(date);
+                setPicking(false);
+              }}
+              today={today}
+              weekStartsOn={1}
+              timeZone={VA_TIME_ZONE}
+              footer={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFocus(today);
+                    setPicking(false);
+                  }}
+                >
+                  Today
+                </Button>
+              }
+              className="elevation-md"
+            />
+          </div>
+        )}
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        {!viewsInHeader && viewSwitch}
+        {toolbar}
+      </div>
     </div>
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <h1 className="m-0 type-h1">Calendar</h1>
         <div className="flex flex-wrap items-center gap-3">
-          {toolbar}
-          <div role="group" aria-label="Calendar view" className="flex rounded-md border border-border bg-surface-card p-0.5">
-          {VIEWS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={view === item.id}
-              onClick={() => setView(item.id)}
-              className={cx("min-h-9 rounded-sm px-3 type-label", view === item.id ? "bg-action-secondary text-on-action-secondary" : "text-ink-muted hover:bg-action-ghost-hover hover:text-ink")}
-            >
-              {item.label}
-            </button>
-          ))}
-          </div>
+          {viewsInHeader && viewSwitch}
+          {actions}
         </div>
       </div>
 
+      <div className="flex flex-wrap items-stretch gap-5">
+      <div className="min-w-0 flex-[999_1_40rem]">
       {view === "month" ? (
         <MonthBoard focus={focus} today={today} events={events} legend={legend} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />
       ) : (
@@ -171,6 +203,9 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
           onEventMove={onEventMove}
         />
       )}
+      </div>
+      {aside && <div className="flex min-w-0 flex-[1_1_18rem] lg:max-w-[22rem]">{aside}</div>}
+      </div>
     </div>
   );
 }

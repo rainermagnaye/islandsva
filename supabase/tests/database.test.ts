@@ -2285,7 +2285,7 @@ describe("discovery calls", () => {
         "select id, lead_id from public.meetings where status = 'requested' and starts_at > now() limit 1",
       );
       await expect(asServer("update public.meetings set status = 'scheduled', organizer_id = $1, decided_by = $1, decided_at = now() where id = $2", [VA, id])).rejects.toThrow(/closer or admin role/);
-      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, VA])).rejects.toThrow(/closer or admin role/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, VA])).rejects.toThrow(/closer or admin or client role/);
       await expect(asServer("insert into public.meeting_events (meeting_id, kind) values ($1, 'note')", [id])).rejects.toThrow(/meeting_events_actor/);
       await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'rejected', $2)", [id, LG_A])).rejects.toThrow(/meeting_events_body/);
       await expect(asServer("insert into public.lead_events (lead_id, author_id, kind, body) values ($1, $2, 'note', 'hi')", [lead, VA])).rejects.toThrow(/admin or closer role/);
@@ -3194,6 +3194,153 @@ describe("manual meetings", () => {
     const futureEnd = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
     const [later] = await asUser<{ id: string }>(asAdmin, "select public.create_manual_meeting($1, $2, $3, null, null, null) as id", ["Later check-in", futureStart, futureEnd]);
     await expect(asUser(asAdmin, "select public.complete_meeting($1)", [later.id])).rejects.toMatchObject({ code: "IVA34" });
+  });
+});
+
+describe("client meetings", () => {
+  const ahead = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+  const start = ahead(48);
+  const end = ahead(49);
+  /** Inside rolledBack: CLIENT's company (Acme) active and enabled, its login active, VA actively assigned. */
+  const ready = async () => {
+    await db.query("update public.clients set status = 'active', activated_at = now(), disabled_at = null where id = $1", [clientA]);
+    await db.query(`update public.profiles set status = 'active' where id in ('${CLIENT}', '${VA}')`);
+    const [assigned] = (await db.query<{ n: number }>("select count(*)::int as n from public.client_va_assignments where client_id = $1 and va_id = $2 and status = 'active'", [clientA, VA])).rows;
+    expect(assigned.n).toBe(1);
+  };
+  /** Inside rolledBack: like asUser, but a refusal rolls back to a savepoint, so the transaction carries on. */
+  const call = async <T = Record<string, unknown>>(claims: Claims, sql: string, params: unknown[] = [], role = "authenticated") => {
+    await db.exec("savepoint call");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+      await db.exec(`set local role ${role}`);
+      const rows = (await db.query<T>(sql, params)).rows;
+      await db.exec("reset role");
+      await db.exec("release savepoint call");
+      return rows;
+    } catch (error) {
+      await db.exec("rollback to savepoint call");
+      await db.exec("reset role");
+      throw error;
+    }
+  };
+  const create = (claims: Claims, staff: string[] | null, from = start, to = end, note: string | null = null) =>
+    call<{ id: string }>(claims, "select public.create_client_meeting('Weekly sync', $1, $2, $3, $4) as id", [from, to, staff, note]);
+  const update = (claims: Claims, id: string, staff: string[] | null, from = start, to = end) =>
+    call(claims, "select public.update_client_meeting($1, 'Renamed', $2, $3, $4)", [id, from, to, staff]);
+
+  it("books a meeting with the client's own assistant, which the client, the VA and admins read", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const [row] = await create(asClient, [VA], start, end, "Agenda inside");
+      const [stored] = await asServer<Record<string, unknown>>(
+        "select status::text as status, created_by, creator_name, client_ids, client_names, staff_ids from public.meetings where id = $1",
+        [row.id],
+      );
+      expect(stored).toEqual({ status: "scheduled", created_by: CLIENT, creator_name: "Cleo Client", client_ids: [clientA], client_names: ["Acme"], staff_ids: [VA] });
+      const history = await asServer<{ kind: string; actor_id: string; actor_name: string }>(
+        "select kind::text as kind, actor_id, actor_name from public.meeting_events where meeting_id = $1 order by created_at, kind",
+        [row.id],
+      );
+      expect(history).toEqual([
+        { kind: "note", actor_id: CLIENT, actor_name: "Cleo Client" },
+        { kind: "scheduled", actor_id: CLIENT, actor_name: "Cleo Client" },
+      ]);
+      for (const claims of [asClient, asVa, asAdmin]) expect(await call(claims, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
+      expect(await call(asVa2, "select id from public.meetings where id = $1", [row.id])).toEqual([]);
+    });
+  });
+
+  it("refuses anyone but an active client, and assistants who aren't theirs", async () => {
+    await rolledBack(async () => {
+      await ready();
+      await expect(create(asVa, [VA])).rejects.toMatchObject({ code: "42501" });
+      await expect(create(asAdmin, [VA])).rejects.toMatchObject({ code: "42501" });
+      await expect(create(token(CLIENT, []), [VA])).rejects.toMatchObject({ code: "42501" });
+      await expect(call({}, "select public.create_client_meeting('X', $1, $2, $3)", [start, end, [VA]], "anon")).rejects.toThrow(/permission denied/);
+      // A direct session carrying the client's claims is not a signed-in request.
+      await db.exec("savepoint s");
+      await expect(direct(asClient, "select public.create_client_meeting('X', $1, $2, $3)", [start, end, [VA]])).rejects.toMatchObject({ code: "42501" });
+      await db.exec("rollback to savepoint s");
+      // Only VAs on an active assignment to this client, and at least one.
+      await expect(create(asClient, [VA2])).rejects.toMatchObject({ code: "IVA37" });
+      await expect(create(asClient, [VA, VA2])).rejects.toMatchObject({ code: "IVA37" });
+      await expect(create(asClient, [ADMIN])).rejects.toMatchObject({ code: "IVA37" });
+      await expect(create(asClient, [])).rejects.toMatchObject({ code: "IVA37" });
+      await expect(create(asClient, null)).rejects.toMatchObject({ code: "IVA37" });
+      // Ahead of now, at most 8 hours long.
+      await expect(create(asClient, [VA], ahead(-1), ahead(1))).rejects.toMatchObject({ code: "IVA38" });
+      await expect(create(asClient, [VA], start, ahead(58))).rejects.toMatchObject({ code: "IVA30" });
+      // An ended assignment, a disabled or pending company: refused.
+      await db.exec("savepoint s");
+      await db.query("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and va_id = $2", [clientA, VA]);
+      await expect(create(asClient, [VA])).rejects.toMatchObject({ code: "IVA37" });
+      await db.exec("rollback to savepoint s");
+      await db.query("update public.clients set disabled_at = now() where id = $1", [clientA]);
+      await expect(create(asClient, [VA])).rejects.toMatchObject({ code: "42501" });
+      await db.query("update public.clients set disabled_at = null, status = 'inactive' where id = $1", [clientA]);
+      await expect(create(asClient, [VA])).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  it("lets the client move, edit, cancel and complete only the meetings they created", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const [mine] = await create(asClient, [VA]);
+      await update(asClient, mine.id, [VA], ahead(72), ahead(73));
+      const [moved] = await asServer<{ title: string; starts_at: Date }>("select title, starts_at from public.meetings where id = $1", [mine.id]);
+      expect(moved.title).toBe("Renamed");
+      expect(await asServer("select kind::text as kind from public.meeting_events where meeting_id = $1 and kind = 'updated'", [mine.id])).toEqual([{ kind: "updated" }]);
+      await expect(update(asClient, mine.id, [VA2])).rejects.toMatchObject({ code: "IVA37" });
+      await expect(update(asClient, mine.id, [VA], ahead(-2), ahead(-1))).rejects.toMatchObject({ code: "IVA38" });
+      await expect(update(asVa, mine.id, [VA])).rejects.toMatchObject({ code: "42501" });
+
+      // A meeting an admin set up with this client is read-only for them.
+      const [theirs] = await call<{ id: string }>(asAdmin, "select public.create_manual_meeting('Agency call', $1, $2, $3, $4, null) as id", [start, end, [clientA], [VA]]);
+      expect(await call(asClient, "select id from public.meetings where id = $1", [theirs.id])).toEqual([{ id: theirs.id }]);
+      await expect(update(asClient, theirs.id, [VA])).rejects.toMatchObject({ code: "IVA01" });
+      await expect(call(asClient, "select public.cancel_client_meeting($1)", [theirs.id])).rejects.toMatchObject({ code: "IVA01" });
+      await expect(call(asClient, "select public.complete_client_meeting($1)", [theirs.id])).rejects.toMatchObject({ code: "IVA01" });
+      await expect(call(asClient, "select public.add_client_meeting_note($1, 'Hi')", [theirs.id])).rejects.toMatchObject({ code: "IVA01" });
+      await expect(call(asClient, "select public.cancel_manual_meeting($1)", [theirs.id])).rejects.toThrow(/two-factor/);
+
+      // Complete only once it has started; cancel once; a cancelled meeting can't change.
+      await expect(call(asClient, "select public.complete_client_meeting($1)", [mine.id])).rejects.toMatchObject({ code: "IVA34" });
+      const [past] = await create(asClient, [VA]);
+      await db.query("update public.meetings set starts_at = now() - interval '2 hours', ends_at = now() - interval '1 hour' where id = $1", [past.id]);
+      await call(asClient, "select public.complete_client_meeting($1)", [past.id]);
+      expect(await asServer("select status::text as status from public.meetings where id = $1", [past.id])).toEqual([{ status: "done" }]);
+      await call(asClient, "select public.cancel_client_meeting($1)", [mine.id]);
+      expect(await asServer("select status::text as status from public.meetings where id = $1", [mine.id])).toEqual([{ status: "cancelled" }]);
+      await expect(call(asClient, "select public.cancel_client_meeting($1)", [mine.id])).rejects.toMatchObject({ code: "IVA30" });
+      await expect(update(asClient, mine.id, [VA])).rejects.toMatchObject({ code: "IVA30" });
+      // Still no direct writes.
+      await expect(call(asClient, "update public.meetings set title = 'x' where id = $1", [mine.id])).rejects.toThrow(/permission denied/);
+      await expect(call(asClient, "insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [mine.id, CLIENT])).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("adds notes with a file to the client's own meeting; only an admin edits or deletes one", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const [mine] = await create(asClient, [VA]);
+      const [note] = await call<{ id: string }>(asClient, "select public.add_client_meeting_note($1, 'See attached', 'brief.pdf', 'application/pdf', $2) as id", [mine.id, Buffer.from("hello").toString("base64")]);
+      expect(await asServer("select actor_id, attachment_name from public.meeting_events where id = $1", [note.id])).toEqual([{ actor_id: CLIENT, attachment_name: "brief.pdf" }]);
+      await expect(call(asClient, "select public.add_client_meeting_note($1, '  ')", [mine.id])).rejects.toThrow(/note is required/);
+      await expect(call(asClient, "select public.add_client_meeting_note($1, 'x', 'a.exe', 'application/x-msdownload', $2)", [mine.id, Buffer.from("hi").toString("base64")])).rejects.toThrow(/attachment/);
+      await expect(call(asClient, "select public.update_manual_meeting_note($1, 'Changed')", [note.id])).rejects.toThrow(/two-factor/);
+      await expect(call(asClient, "select public.delete_manual_meeting_note($1)", [note.id])).rejects.toThrow(/two-factor/);
+    });
+  });
+
+  it("still allows only admins and clients as a meeting's creator, and adds clients as history actors", async () => {
+    await rolledBack(async () => {
+      await ready();
+      await expect(db.query(
+        "insert into public.meetings (kind, status, title, starts_at, ends_at, created_by, creator_name, tenant_id) select 'manual', 'scheduled', 'X', $1, $2, $3, 'Vera', tenant_id from public.profiles where id = $3",
+        [start, end, VA],
+      )).rejects.toThrow(/is not an active user with the admin or client role/);
+    });
   });
 });
 

@@ -13,8 +13,11 @@ type DropdownMenuProps = {
   /** Button text, or its accessible name with iconOnly. */
   label: string;
   items: readonly MenuItem[];
-  icon?: IconName;
+  /** null = no icon (text triggers such as a view picker). */
+  icon?: IconName | null;
   iconOnly?: boolean;
+  /** plain = no border, for quiet toolbars. */
+  variant?: "outline" | "plain";
   /** end for triggers at a right edge. */
   align?: "start" | "end";
   className?: string;
@@ -25,7 +28,7 @@ type DropdownMenuProps = {
  * and focus the first item, ↑/↓ Home/End move, Escape or a click outside close and return focus. Actions only:
  * a value is a Select, navigation is links. Destructive items go last, behind a confirmation Modal.
  */
-export function DropdownMenu({ label, items, icon = "more", iconOnly = false, align = "start", className }: DropdownMenuProps) {
+export function DropdownMenu({ label, items, icon = "more", iconOnly = false, variant = "outline", align = "start", className }: DropdownMenuProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
@@ -87,10 +90,11 @@ export function DropdownMenu({ label, items, icon = "more", iconOnly = false, al
         }}
         className={cx(
           "inline-flex min-h-11 items-center gap-2 rounded-md type-button text-ink hover:bg-action-ghost-hover",
-          iconOnly ? "size-11 justify-center border-control border-border-strong" : "border-control border-border-strong px-3",
+          variant === "outline" && "border-control border-border-strong",
+          iconOnly ? "size-11 justify-center" : "px-3",
         )}
       >
-        <Icon name={icon} size={20} />
+        {icon && <Icon name={icon} size={20} />}
         {!iconOnly && label}
         {!iconOnly && <Icon name="chevron-down" size={16} />}
       </button>

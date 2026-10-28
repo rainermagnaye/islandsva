@@ -1,43 +1,51 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-/** Closes the other menu, and both menus when the pointer or Escape leaves them. */
+/**
+ * Keeps one header panel open at a time (messages, notifications, profile), on every portal: opening one closes
+ * the others, and a click outside or Escape closes them all.
+ */
 export function AccountMenuFrame({ children }: { children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const parent = root.current;
+    if (!parent) return;
+    const menus = () => parent.querySelectorAll("details");
+    const closeAll = (except?: Element) => {
+      for (const menu of menus()) if (menu !== except) menu.open = false;
+    };
+    // `toggle` doesn't bubble, so a handler on this wrapper never heard it. Its capture phase still passes
+    // through here on the way to the <details>, so listen there.
+    function onToggle(event: Event) {
+      const current = event.target;
+      if (current instanceof HTMLDetailsElement && current.open) closeAll(current);
+    }
     function closeOnOutside(event: PointerEvent) {
-      const parent = root.current;
-      if (!parent || (event.target instanceof Node && parent.contains(event.target))) return;
-      for (const menu of parent.querySelectorAll("details")) menu.open = false;
+      if (event.target instanceof Node && parent?.contains(event.target)) return;
+      closeAll();
     }
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      const parent = root.current;
-      if (!parent) return;
-      for (const menu of parent.querySelectorAll("details")) menu.open = false;
+      const open = [...menus()].find((menu) => menu.open);
+      if (!open) return;
+      closeAll();
+      // Back to the button that opened it, so keyboard users don't lose their place.
+      open.querySelector("summary")?.focus();
     }
+    parent.addEventListener("toggle", onToggle, true);
     document.addEventListener("pointerdown", closeOnOutside);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
+      parent.removeEventListener("toggle", onToggle, true);
       document.removeEventListener("pointerdown", closeOnOutside);
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, []);
 
-  function onToggle(event: SyntheticEvent<HTMLDivElement>) {
-    const current = event.target;
-    if (!(current instanceof HTMLDetailsElement) || !current.open) return;
-    const parent = root.current;
-    if (!parent) return;
-    for (const menu of parent.querySelectorAll("details")) {
-      if (menu !== current) menu.open = false;
-    }
-  }
-
   return (
-    <div ref={root} onToggle={onToggle} className="flex items-center gap-2">
+    <div ref={root} className="flex items-center gap-2">
       {children}
     </div>
   );

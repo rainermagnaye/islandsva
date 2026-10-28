@@ -18,14 +18,24 @@ import { TextField } from "@/components/ui/text-field";
 import { meetingFileHref } from "@/content/routes";
 import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
 import { cancelBookingAction, completeBookingAction, confirmDiscoveryAction, deleteBookingNoteAction, rescheduleDiscoveryAction, saveBookingNote } from "../actions";
+import { cancelClientBookingAction, completeClientBookingAction, saveClientBookingNote } from "../client-actions";
 import { BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField } from "../contract";
 import { NoteForm } from "./booking-note-form";
 import { at, useStarted, clocks, guestNames, Field } from "./booking-detail-parts";
 
-/** A booking's details and notes. Admins can edit, cancel and add a note. */
-export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
+const ACTIONS = {
+  admin: { cancel: cancelBookingAction, complete: completeBookingAction, note: saveBookingNote },
+  client: { cancel: cancelClientBookingAction, complete: completeClientBookingAction, note: saveClientBookingNote },
+};
+
+/**
+ * A booking's details and notes. Admins can edit, cancel and add a note. A client manages the meetings they booked
+ * the same way, except that only an admin edits or deletes a note.
+ */
+export function BookingDetail({ booking, canManage, audience = "admin", onClose, onEdit, onDone }: {
   booking: Booking;
   canManage: boolean;
+  audience?: "admin" | "client";
   onClose: () => void;
   onEdit: () => void;
   onDone: (message: string) => void;
@@ -39,6 +49,8 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
   const [claimError, setClaimError] = useState<string | null>(null);
   const [dates, setDates] = useState<{ min: IsoDate; max: IsoDate } | null>(null);
   const started = useStarted(booking.startsAt);
+  const act = ACTIONS[audience];
+  const editsNotes = canManage && audience === "admin";
   const discovery = booking.kind === "discovery";
   const openCall = booking.status === "requested" || booking.status === "scheduled";
   const notes = booking.events.filter((event) => event.kind === "note");
@@ -78,7 +90,7 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
         ) : undefined}
         footer={canManage && booking.status === "scheduled" ? (
           <Form aria-label="Complete booking" className="w-full justify-items-end gap-2" onSubmit={async (formData) => {
-            const result = await completeBookingAction(formData);
+            const result = await act.complete(formData);
             if (result.ok) onDone("Booking completed.");
             return result;
           }}>
@@ -141,7 +153,7 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
                             <p className="m-0 whitespace-pre-line type-body-sm">{note.body}</p>
                             <p className="m-0 type-caption text-ink-muted">{note.actorName} · {at.format(new Date(note.createdAt))} PHT</p>
                           </div>
-                          {canManage && (
+                          {editsNotes && (
                             <DropdownMenu
                               label="Note actions"
                               icon="more"
@@ -159,7 +171,7 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
                   ))}
                 </ul>
               )}
-              {canManage && adding && <NoteForm meetingId={booking.id} onDone={() => { setAdding(false); onDone("Note added."); }} />}
+              {canManage && adding && <NoteForm meetingId={booking.id} audience={audience} onDone={() => { setAdding(false); onDone("Note added."); }} />}
             </div>
           </Card>
           <Card as="section" padding="none">
@@ -198,7 +210,7 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
                   if (!accepted.ok) return { ok: false, message: accepted.message };
                   formData.set("meetingId", booking.id);
                   formData.set("note", accepted.name);
-                  const result = await saveBookingNote(formData);
+                  const result = await act.note(formData);
                   if (result.ok) {
                     setAttaching(false);
                     onDone("File added.");
@@ -270,7 +282,7 @@ export function BookingDetail({ booking, canManage, onClose, onEdit, onDone }: {
       {confirming && (
         <Modal open onClose={() => setConfirming(false)} title="Cancel meeting" description="Are you sure you want to cancel this meeting?" role="alertdialog">
           <Form aria-label="Cancel meeting" onSubmit={async (formData) => {
-            const result = await cancelBookingAction(formData);
+            const result = await act.cancel(formData);
             if (result.ok) onDone("Meeting cancelled.");
             return result;
           }}>

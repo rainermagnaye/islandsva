@@ -30,7 +30,7 @@ function when(booking: Booking) {
   };
 }
 
-/** The meetings on the calendar, newest start first. A row opens that meeting. */
+/** The meetings on the admin calendar, newest start first. A row opens that meeting. */
 export function MeetingsTable({ bookings, onOpen }: { bookings: readonly Booking[]; onOpen: (id: string) => void }) {
   const [filter, setFilter] = useState<Filter>("all");
   const rows = filter === "all" ? bookings : bookings.filter((booking) => booking.status === filter);

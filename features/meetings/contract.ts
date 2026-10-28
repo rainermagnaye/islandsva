@@ -105,6 +105,8 @@ export type Booking = {
   staffName: string | null;
   guests: BookingGuest[];
   creatorName: string;
+  /** Who created a manual meeting (an admin or the client who booked it); null for a discovery call. */
+  createdBy: string | null;
   /** The visitor's zone for a discovery call, so the view can show their clock beside Philippine time. */
   timeZone: string | null;
   timeZoneCity: string | null;

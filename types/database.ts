@@ -696,6 +696,26 @@ export type Database = {
       };
       update_manual_meeting_note: { Args: { event_id: string; note: string }; Returns: undefined };
       delete_manual_meeting_note: { Args: { event_id: string }; Returns: undefined };
+      create_client_meeting: {
+        Args: {
+          title: string;
+          starts_at: string;
+          ends_at: string;
+          staff_ids: string[];
+          note?: string | null;
+          attachment_name?: string | null;
+          attachment_type?: string | null;
+          attachment_base64?: string | null;
+        };
+        Returns: string;
+      };
+      update_client_meeting: { Args: { meeting_id: string; title: string; starts_at: string; ends_at: string; staff_ids: string[] }; Returns: undefined };
+      cancel_client_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      complete_client_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      add_client_meeting_note: {
+        Args: { meeting_id: string; note: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
       submit_discovery_request: {
         Args: {
           full_name: string;

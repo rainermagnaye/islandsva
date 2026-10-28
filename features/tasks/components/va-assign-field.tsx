@@ -4,15 +4,25 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { SearchField } from "@/components/ui/search-field";
 
-/** Search assistants and add each one this task is for. The chosen names stay as a list. */
-export function VaAssignField({ vas, error }: { vas: readonly { id: string; firstName: string }[]; error?: string }) {
+/** Search assistants and add each one this task (or meeting) is for. The chosen names stay as a list. */
+export function VaAssignField({ vas, error, name = "vaId", label = "Assign VA", initial, empty = "An assistant needs to be working with you before a task can be assigned." }: {
+  vas: readonly { id: string; firstName: string }[];
+  error?: string;
+  /** The form field each chosen id is sent as. */
+  name?: string;
+  label?: string;
+  /** Already chosen (editing). Without it, a lone assistant starts selected. */
+  initial?: readonly string[];
+  /** Shown instead of the field when no assistant works with the client yet. */
+  empty?: string;
+}) {
   const errorId = useId();
   const listId = useId();
   const root = useRef<HTMLFieldSetElement>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   // With one assistant there is nothing to choose: they start selected, and can still be removed.
-  const [selected, setSelected] = useState<readonly string[]>(vas.length === 1 ? [vas[0].id] : []);
+  const [selected, setSelected] = useState<readonly string[]>(initial ?? (vas.length === 1 ? [vas[0].id] : []));
   const needle = query.trim().toLowerCase();
   const matches = needle ? vas.filter((va) => va.firstName.toLowerCase().includes(needle)) : [];
   const available = matches.filter((va) => !selected.includes(va.id));
@@ -34,14 +44,14 @@ export function VaAssignField({ vas, error }: { vas: readonly { id: string; firs
   }
 
   if (vas.length === 0) {
-    return <p className="m-0 type-body-sm text-ink-muted">An assistant needs to be working with you before a task can be assigned.</p>;
+    return <p className="m-0 type-body-sm text-ink-muted">{empty}</p>;
   }
 
   return (
     <fieldset ref={root} className="grid gap-2 border-0 p-0" aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined}>
       {/* A legend sits outside the fieldset's grid, so the gap skips it: mb-2 matches a field label's gap-2. */}
       <legend className="mb-2 p-0 type-label text-ink">
-        Assign VA
+        {label}
         <span aria-hidden="true" className="ml-0.5 text-status-danger">
           *
         </span>
@@ -86,7 +96,7 @@ export function VaAssignField({ vas, error }: { vas: readonly { id: string; firs
         <ul className="m-0 grid list-none gap-1 p-0" aria-label="Selected assistants">
           {chosen.map((va) => (
             <li key={va.id} className="flex min-h-11 items-center gap-2 rounded-md px-1">
-              <input type="hidden" name="vaId" value={va.id} />
+              <input type="hidden" name={name} value={va.id} />
               <span className="min-w-0 flex-1 truncate type-body">{va.firstName}</span>
               <button
                 type="button"

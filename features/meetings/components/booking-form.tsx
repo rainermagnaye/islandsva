@@ -6,16 +6,21 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Form } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
+import { VaAssignField } from "@/features/tasks/components/va-assign-field";
 import { addBooking, editBooking } from "../actions";
+import type { BookingDraft } from "../booking-draft";
+import { addClientBooking, editClientBooking } from "../client-actions";
 import { InviteField } from "./invite-field";
 import { acceptBookingAttachment, BOOKING_ATTACHMENT_ACCEPT } from "../attachment";
 import { BOOKING_LIMITS, BOOKING_TIME_ZONE, type Booking, type BookingChoice, type BookingField } from "../contract";
 
-export type BookingDraft = { startDate: string; startTime: string; endDate: string; endTime: string };
-
-/** The create and edit modal. The creator is the signed-in admin and is not editable. */
+/**
+ * The create and edit modal. The creator is the signed-in person and is not editable. An admin invites anyone in
+ * the agency; a client invites their own assistants (`staff`), and their company is added for them.
+ */
 export function BookingForm({
   mode,
+  audience = "admin",
   booking,
   draft,
   clients,
@@ -25,6 +30,7 @@ export function BookingForm({
   onDone,
 }: {
   mode: "create" | "edit";
+  audience?: "admin" | "client";
   booking?: Booking;
   draft: BookingDraft;
   clients: readonly BookingChoice[];
@@ -33,6 +39,8 @@ export function BookingForm({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const client = audience === "client";
+  const save = client ? (mode === "create" ? addClientBooking : editClientBooking) : mode === "create" ? addBooking : editBooking;
   return (
     <Modal open onClose={onClose} title={mode === "create" ? "New meeting" : "Edit meeting"} size="md">
       <Form<BookingField>
@@ -46,7 +54,7 @@ export function BookingForm({
               if (!accepted.ok) return { ok: false, message: accepted.message };
             }
           }
-          const result = mode === "create" ? await addBooking(formData) : await editBooking(formData);
+          const result = await save(formData);
           if (result.ok) onDone();
           return result;
         }}
@@ -61,7 +69,18 @@ export function BookingForm({
               <DatePicker label="End date" name="endDate" required defaultValue={draft.endDate} timeZone={BOOKING_TIME_ZONE} weekStartsOn={1} error={fieldErrors.endDate} />
               <TextField label="End time" name="endTime" type="time" required defaultValue={draft.endTime} error={fieldErrors.endTime} />
             </div>
-            <InviteField clients={clients} staff={staff} guests={booking?.guests ?? []} error={fieldErrors.clientIds ?? fieldErrors.staffIds} />
+            {client ? (
+              <VaAssignField
+                vas={staff.map((item) => ({ id: item.id, firstName: item.label }))}
+                name="staffIds"
+                label="Invite assistants"
+                initial={booking?.guests.filter((guest) => guest.kind === "staff").map((guest) => guest.id)}
+                empty="An assistant needs to be working with you before you can book a meeting."
+                error={fieldErrors.staffIds}
+              />
+            ) : (
+              <InviteField clients={clients} staff={staff} guests={booking?.guests ?? []} error={fieldErrors.clientIds ?? fieldErrors.staffIds} />
+            )}
             <p className="m-0 type-body-sm text-ink-muted">Created by {booking?.creatorName ?? creatorName}</p>
             {mode === "create" && (
               <>

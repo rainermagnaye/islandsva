@@ -1,8 +1,8 @@
 import "server-only";
 import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertBooking, insertBookingNote, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
+import { cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
+import type { BookingFile as FileInput } from "./form-data";
 import type { BookingInput, BookingNoteInput } from "./validation";
-
-type FileInput = { name: string; type: string; base64: string } | null;
 
 export function createBooking(input: BookingInput, file: FileInput) {
   return insertBooking(input, file);
@@ -38,4 +38,24 @@ export function confirmDiscoveryCall(meetingId: string) {
 
 export function moveDiscoveryCall(meetingId: string, startsAt: string) {
   return rescheduleDiscovery(meetingId, startsAt);
+}
+
+export function createClientBooking(input: BookingInput, file: FileInput) {
+  return insertClientBooking(input, file);
+}
+
+export function updateClientBooking(input: BookingInput, meetingId: string) {
+  return saveClientBooking(input, meetingId);
+}
+
+export function cancelClientBooking(meetingId: string) {
+  return cancelClientBookingRow(meetingId);
+}
+
+export function completeClientBooking(meetingId: string) {
+  return completeClientBookingRow(meetingId);
+}
+
+export function addClientBookingNote(input: BookingNoteInput, file: FileInput) {
+  return insertClientBookingNote(input, file);
 }
