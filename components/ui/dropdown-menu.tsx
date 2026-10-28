@@ -87,7 +87,7 @@ export function DropdownMenu({ label, items, icon = "more", iconOnly = false, al
         }}
         className={cx(
           "inline-flex min-h-11 items-center gap-2 rounded-md type-button text-ink hover:bg-action-ghost-hover",
-          iconOnly ? "w-11 justify-center" : "border-control border-border-strong px-3",
+          iconOnly ? "size-11 justify-center border-control border-border-strong" : "border-control border-border-strong px-3",
         )}
       >
         <Icon name={icon} size={20} />

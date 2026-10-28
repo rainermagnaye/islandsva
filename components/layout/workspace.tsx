@@ -1,17 +1,21 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
+import { cx } from "@/lib/cx";
 
-/** A portal page: optional breadcrumbs, its h1, an optional supporting line, then the content. */
+/** A portal page: optional breadcrumbs, its h1, an optional supporting line and actions, then the content. */
 export function Workspace({
   title,
   lead,
+  actions,
   breadcrumbs,
   children,
   compact = false,
 }: {
   title?: string;
   lead?: ReactNode;
+  /** Buttons for the whole page, beside the title (they wrap under it on narrow screens). */
+  actions?: ReactNode;
   /** A Breadcrumbs trail, for pages two or more levels deep. */
   breadcrumbs?: ReactNode;
   children?: ReactNode;
@@ -19,14 +23,19 @@ export function Workspace({
   compact?: boolean;
 }) {
   return (
-    <Container className={compact ? "grid gap-4 py-4 md:py-6" : "grid gap-8 py-10 md:py-12"}>
+    <Container className={cx("workspace-page grid", compact ? "gap-4 py-4 md:py-6" : "gap-8 py-10 md:py-12")}>
       {compact ? (
         breadcrumbs
       ) : (
         <div className="grid gap-2">
           {breadcrumbs}
-          <h1 className="m-0 type-h1">{title}</h1>
-          {lead && <p className="m-0 max-w-[60ch] text-ink-muted">{lead}</p>}
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="grid min-w-0 gap-2">
+              <h1 className="m-0 type-h1">{title}</h1>
+              {lead && <p className="m-0 max-w-[60ch] text-ink-muted">{lead}</p>}
+            </div>
+            {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
+          </div>
         </div>
       )}
       {children}
@@ -37,7 +46,7 @@ export function Workspace({
 /** Placeholder while a page's session-dependent content streams in. */
 export function WorkspaceSkeleton() {
   return (
-    <Container className="grid gap-6 py-10 md:py-12" aria-busy="true" aria-label="Loading">
+    <Container className="workspace-page grid gap-6 py-10 md:py-12" aria-busy="true" aria-label="Loading">
       <div className="h-10 w-64 max-w-full rounded-md bg-border motion-safe:animate-pulse" />
       <div className="h-40 rounded-lg bg-border/60 motion-safe:animate-pulse" />
     </Container>

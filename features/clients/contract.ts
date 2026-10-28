@@ -203,6 +203,10 @@ export const CLIENT_NOTE_LIMIT = 2000;
 
 export type ClientNoteField = "body";
 
+/** A message between a client and one assigned VA. */
+export const VA_MESSAGE_LIMIT = 2000;
+export type VaMessageField = "body";
+
 export type ClientNote = {
   id: string;
   body: string;

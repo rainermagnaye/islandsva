@@ -22,17 +22,34 @@ type BookDemoFormProps = {
   timeZone: string;
   /** Today in the client's zone, computed on the server: client components don't read the clock while rendering. */
   today: string;
+  /** Stay on this page after booking (VA Match) and call `onBooked`, instead of going to the dashboard. */
+  stay?: boolean;
+  onBooked?: () => void;
 };
 
-export function BookDemoForm({ slots, timeZone, today }: BookDemoFormProps) {
+export function BookDemoForm({ slots, timeZone, today, stay = false, onBooked }: BookDemoFormProps) {
   const days = [...new Set(slots.map((slot) => slot.start.slice(0, 10)))].sort();
   const [day, setDay] = useState(days[0]);
   const daySlots = slots.filter((slot) => slot.start.startsWith(day));
 
   return (
-    <Form<BookField> aria-label="Book a demo call" onSubmit={bookDemoAction} className="gap-5">
+    <Form<BookField>
+      aria-label="Book a demo call"
+      // The demo page's booking ends in a redirect, so only the stay-on-page form wraps the action.
+      onSubmit={
+        stay
+          ? async (formData) => {
+              const result = await bookDemoAction(formData);
+              if (result.ok) onBooked?.();
+              return result;
+            }
+          : bookDemoAction
+      }
+      className="gap-5"
+    >
       {({ pending, fieldErrors }) => (
         <>
+          {stay && <input type="hidden" name="stay" value="1" />}
           <div className="grid items-start gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
             <Calendar
               value={day}

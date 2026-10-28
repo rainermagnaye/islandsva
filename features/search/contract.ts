@@ -13,8 +13,7 @@ export type SearchHit = {
   href: string;
 };
 
-export type SearchResults = {
-  leads: SearchHit[];
-  clients: SearchHit[];
-  employees: SearchHit[];
-};
+/** One labelled group in the dropdown ("Leads", "Tasks"). Which groups appear depends on the caller's role. */
+export type SearchGroup = { key: string; label: string; hits: SearchHit[] };
+
+export type SearchResults = { groups: SearchGroup[] };

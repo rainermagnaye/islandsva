@@ -1,4 +1,6 @@
-/** The VA home stays under the first-load budget. Search is admin-only. */
-export default function VaHeaderSearch() {
-  return null;
+import { HeaderSearchSlot } from "../../_components/header-search-slot";
+
+/** The header search on the VA home page. */
+export default function Search() {
+  return <HeaderSearchSlot />;
 }

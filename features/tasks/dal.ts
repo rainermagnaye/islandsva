@@ -1,15 +1,16 @@
 import "server-only";
+import { decodeBytea } from "@/lib/bytea";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
-import type { OwnCompany, Task, TaskComment, TaskStatus } from "./contract";
+import type { OwnCompany, Task, TaskComment, TaskEvent, TaskSeverity, TaskStatus } from "./contract";
 import { sortTasks, type TaskMetric } from "./metrics";
 
 // Reads and writes run as the signed-in user, so RLS checks again. No secret key: snapshots are filled by
 // triggers, and IVA22–IVA25 are mapped here (not in a shared code table).
 
 const TASK_COLUMNS =
-  "id, client_id, va_id, title, deadline, deadline_timezone, company_name, va_first_name, status, done_at, created_by, created_at, updated_at";
+  "id, client_id, va_id, title, description, severity, deadline, deadline_time, deadline_timezone, company_name, va_first_name, status, done_at, started_at, created_by, created_at, updated_at";
 
 const LIST_CAP = 500;
 
@@ -18,12 +19,16 @@ type TaskRow = {
   client_id: string;
   va_id: string;
   title: string;
+  description: string | null;
+  severity: TaskSeverity;
   deadline: string;
+  deadline_time: string | null;
   deadline_timezone: string;
   company_name: string;
   va_first_name: string;
   status: TaskStatus;
   done_at: string | null;
+  started_at: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -31,8 +36,8 @@ type TaskRow = {
 
 export type TaskWrite =
   | { ok: true; id: string }
-  | { ok: false; field: "deadline" | "vaId" }
-  | { ok: false; form: "company" | "assignment" | "not_allowed" }
+  | { ok: false; field: "deadline" | "deadlineTime" | "vaId" }
+  | { ok: false; form: "company" | "assignment" | "not_allowed" | "attachments" }
   | { ok: false; missing: true };
 
 function toTask(row: TaskRow): Task {
@@ -41,12 +46,16 @@ function toTask(row: TaskRow): Task {
     clientId: row.client_id,
     vaId: row.va_id,
     title: row.title,
+    description: row.description,
+    severity: row.severity,
     deadline: row.deadline,
+    deadlineTime: row.deadline_time ? row.deadline_time.slice(0, 5) : null,
     deadlineTimezone: row.deadline_timezone,
     companyName: row.company_name,
     vaFirstName: row.va_first_name,
     status: row.status,
     doneAt: row.done_at,
+    startedAt: row.started_at,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -63,6 +72,7 @@ function refusal(code: string | undefined): Exclude<TaskWrite, { ok: true }> | n
     case "IVA24":
       return { ok: false, form: "assignment" };
     case "IVA25":
+    case "IVA36":
     case "42501":
       return { ok: false, form: "not_allowed" };
     default:
@@ -128,7 +138,7 @@ export async function listTaskMetrics(): Promise<TaskMetric[]> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("tasks")
-      .select("id, va_id, status, deadline, deadline_timezone, done_at")
+      .select("id, va_id, status, deadline, deadline_time, deadline_timezone, done_at")
       .order("id")
       .range(from, from + OVERVIEW_PAGE - 1);
     if (error) throw new UpstreamError("supabase", `Reading task figures failed (${error.code})`);
@@ -138,6 +148,7 @@ export async function listTaskMetrics(): Promise<TaskMetric[]> {
         vaId: row.va_id,
         status: row.status,
         deadline: row.deadline,
+        deadlineTime: row.deadline_time ? row.deadline_time.slice(0, 5) : null,
         deadlineTimezone: row.deadline_timezone,
         doneAt: row.done_at,
       })),
@@ -175,7 +186,27 @@ export async function listTaskComments(taskId: string): Promise<TaskComment[]> {
   }));
 }
 
-export async function insertTask(input: { clientId: string; vaId: string; title: string; deadline: string; createdBy: string }): Promise<TaskWrite> {
+/** The task's moves, oldest first. RLS shows them to whoever can read the task. */
+export async function listTaskEvents(taskId: string): Promise<TaskEvent[]> {
+  if (!isUuid(taskId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("task_events")
+    .select("id, kind, note, actor_id, actor_first_name, created_at")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: true });
+  if (error) throw new UpstreamError("supabase", `Reading activity for ${taskId} failed (${error.code})`);
+  return data.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    note: row.note,
+    actorId: row.actor_id,
+    actorFirstName: row.actor_first_name,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function insertTask(input: { clientId: string; vaId: string; title: string; description: string | null; severity: TaskSeverity; deadline: string; deadlineTime: string; createdBy: string }): Promise<TaskWrite> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tasks")
@@ -183,7 +214,10 @@ export async function insertTask(input: { clientId: string; vaId: string; title:
       client_id: input.clientId,
       va_id: input.vaId,
       title: input.title,
+      description: input.description,
+      severity: input.severity,
       deadline: input.deadline,
+      deadline_time: input.deadlineTime,
       created_by: input.createdBy,
     })
     .select("id")
@@ -197,9 +231,9 @@ export async function insertTask(input: { clientId: string; vaId: string; title:
   return { ok: true, id: data.id };
 }
 
-export async function updateTask(taskId: string, input: { title: string; deadline: string }): Promise<TaskWrite> {
+export async function updateTask(taskId: string, input: { title: string; description: string | null; deadline: string; deadlineTime: string }): Promise<TaskWrite> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("tasks").update({ title: input.title, deadline: input.deadline }).eq("id", taskId).select("id");
+  const { data, error } = await supabase.from("tasks").update({ title: input.title, description: input.description, deadline: input.deadline, deadline_time: input.deadlineTime }).eq("id", taskId).select("id");
   if (error) {
     const refused = refusal(error.code);
     if (refused) return refused;
@@ -209,13 +243,90 @@ export async function updateTask(taskId: string, input: { title: string; deadlin
   return { ok: true, id: taskId };
 }
 
-export async function setTaskStatus(taskId: string, status: TaskStatus): Promise<TaskWrite> {
+/**
+ * One status move. `note` travels in transition_note: guard_task checks who may make the move, writes the
+ * task_events row with the note and clears the column, all in this one update.
+ */
+export async function setTaskStatus(taskId: string, status: TaskStatus, note: string | null = null): Promise<TaskWrite> {
+  if (!isUuid(taskId)) return { ok: false, missing: true };
   const supabase = await createClient();
-  const { data, error } = await supabase.from("tasks").update({ status }).eq("id", taskId).select("id");
+  const { data, error } = await supabase.from("tasks").update({ status, transition_note: note }).eq("id", taskId).select("id");
   if (error) {
     const refused = refusal(error.code);
     if (refused) return refused;
     throw new UpstreamError("supabase", `Updating task ${taskId} failed (${error.code})`);
+  }
+  if (data.length === 0) return { ok: false, missing: true };
+  return { ok: true, id: taskId };
+}
+
+/** The file bytes are the caller's own upload, written as that user so RLS checks the task again. */
+export async function insertTaskAttachment(input: { taskId: string; name: string; contentType: string; bytes: Uint8Array }): Promise<TaskWrite> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("task_attachments")
+    .insert({
+      task_id: input.taskId,
+      name: input.name,
+      content_type: input.contentType,
+      bytes: `\\x${Buffer.from(input.bytes).toString("hex")}`,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    const refused = refusal(error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Attaching a file to task ${input.taskId} failed (${error.code})`);
+  }
+  if (!data) return { ok: false, form: "not_allowed" };
+  return { ok: true, id: data.id };
+}
+
+export async function listTaskAttachments(taskId: string): Promise<{ id: string; name: string; type: string }[]> {
+  if (!isUuid(taskId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("task_attachments").select("id, name, content_type").eq("task_id", taskId).order("created_at");
+  if (error) throw new UpstreamError("supabase", `Listing attachments for task ${taskId} failed (${error.code})`);
+  return data.map((row) => ({ id: row.id, name: row.name, type: row.content_type }));
+}
+
+/** One file on a task the caller can already read. */
+export async function getTaskAttachment(taskId: string, attachmentId: string): Promise<{ name: string; type: string; bytes: Uint8Array } | null> {
+  if (!isUuid(taskId) || !isUuid(attachmentId)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("task_attachments").select("name, content_type, bytes").eq("id", attachmentId).eq("task_id", taskId).maybeSingle();
+  if (error) throw new UpstreamError("supabase", `Reading an attachment on task ${taskId} failed (${error.code})`);
+  if (!data) return null;
+  return { name: data.name, type: data.content_type, bytes: decodeBytea(data.bytes) };
+}
+
+/** Removes the task after its files, comments and activity, as the signed-in client. */
+export async function deleteTask(taskId: string): Promise<TaskWrite> {
+  if (!isUuid(taskId)) return { ok: false, missing: true };
+  const supabase = await createClient();
+  const files = await supabase.from("task_attachments").delete().eq("task_id", taskId);
+  if (files.error) {
+    const refused = refusal(files.error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Deleting attachments on task ${taskId} failed (${files.error.code})`);
+  }
+  const comments = await supabase.from("task_comments").delete().eq("task_id", taskId);
+  if (comments.error) {
+    const refused = refusal(comments.error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Deleting comments on task ${taskId} failed (${comments.error.code})`);
+  }
+  const events = await supabase.from("task_events").delete().eq("task_id", taskId);
+  if (events.error) {
+    const refused = refusal(events.error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Deleting activity on task ${taskId} failed (${events.error.code})`);
+  }
+  const { data, error } = await supabase.from("tasks").delete().eq("id", taskId).select("id");
+  if (error) {
+    const refused = refusal(error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Deleting task ${taskId} failed (${error.code})`);
   }
   if (data.length === 0) return { ok: false, missing: true };
   return { ok: true, id: taskId };
@@ -231,4 +342,32 @@ export async function insertTaskComment(taskId: string, authorId: string, body: 
   }
   if (!data) return { ok: false, form: "not_allowed" };
   return { ok: true, id: data.id };
+}
+
+/** The signed-in author rewrites their own comment. */
+export async function updateTaskComment(commentId: string, body: string): Promise<TaskWrite> {
+  if (!isUuid(commentId)) return { ok: false, missing: true };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("task_comments").update({ body }).eq("id", commentId).select("id");
+  if (error) {
+    const refused = refusal(error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Editing comment ${commentId} failed (${error.code})`);
+  }
+  if (data.length === 0) return { ok: false, missing: true };
+  return { ok: true, id: commentId };
+}
+
+/** The signed-in author removes their own comment. */
+export async function deleteTaskComment(commentId: string): Promise<TaskWrite> {
+  if (!isUuid(commentId)) return { ok: false, missing: true };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("task_comments").delete().eq("id", commentId).select("id");
+  if (error) {
+    const refused = refusal(error.code);
+    if (refused) return refused;
+    throw new UpstreamError("supabase", `Deleting comment ${commentId} failed (${error.code})`);
+  }
+  if (data.length === 0) return { ok: false, missing: true };
+  return { ok: true, id: commentId };
 }

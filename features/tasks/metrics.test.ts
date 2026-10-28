@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskMetric } from "./metrics";
-import { calendarDate, isOnTime, isOverdue, nextStatuses, performance, performanceByVa, sortTasks } from "./metrics";
+import { acceptableDeadline, calendarDate, isOnTime, isOverdue, needsFeedback, nextStatuses, performance, performanceByVa, relativeDay, sortTasks } from "./metrics";
 
 // 11:30 UTC on 26 Oct 2026 is still that calendar day in UTC, and 00:30 the next day in Auckland (NZDT, UTC+13).
 const AUCKLAND = "Pacific/Auckland";
@@ -11,6 +11,7 @@ const task = (over: Partial<TaskMetric> = {}): TaskMetric => ({
   vaId: "va-1",
   status: "todo",
   deadline: "2026-10-27",
+  deadlineTime: null,
   deadlineTimezone: AUCKLAND,
   doneAt: null,
   ...over,
@@ -21,6 +22,21 @@ describe("calendar dates in the snapshot zone", () => {
     expect(calendarDate(INSTANT, "UTC")).toBe("2026-10-26");
     expect(calendarDate(INSTANT, AUCKLAND)).toBe("2026-10-27");
     expect(isOverdue(task({ deadline: "2026-10-27" }), INSTANT)).toBe(false);
+  });
+
+  it("treats a time earlier today as overdue and a later time as still open", () => {
+    expect(isOverdue(task({ deadlineTime: "00:00" }), INSTANT)).toBe(true);
+    expect(isOverdue(task({ deadlineTime: "01:00" }), INSTANT)).toBe(false);
+    const late = task({ status: "done", deadlineTime: "00:00", doneAt: INSTANT.toISOString() });
+    expect(isOnTime(late)).toBe(false);
+    const onTime = task({ status: "done", deadlineTime: "01:00", doneAt: INSTANT.toISOString() });
+    expect(isOnTime(onTime)).toBe(true);
+  });
+
+  it("accepts a future moment and refuses a day outside the window or a time already passed", () => {
+    expect(acceptableDeadline("2026-10-27", "01:00", AUCKLAND, INSTANT)).toBe("ok");
+    expect(acceptableDeadline("2026-10-27", "00:00", AUCKLAND, INSTANT)).toBe("time");
+    expect(acceptableDeadline("2026-10-26", "23:00", AUCKLAND, INSTANT)).toBe("date");
   });
 
   it("does not treat due today as overdue, and does treat the day after as overdue", () => {
@@ -82,12 +98,40 @@ describe("sortTasks", () => {
 });
 
 describe("nextStatuses", () => {
-  it("lets the client only close, and the VA move forward", () => {
+  it("lets the VA start and submit, and never close", () => {
+    expect(nextStatuses("todo", "va")).toEqual(["in_progress", "review"]);
+    expect(nextStatuses("in_progress", "va")).toEqual(["review"]);
+    expect(nextStatuses("review", "va")).toEqual([]);
+    expect(nextStatuses("done", "va")).toEqual([]);
+  });
+
+  it("lets the client decide a review, close an open task, and reopen a closed one", () => {
     expect(nextStatuses("todo", "client")).toEqual(["done"]);
     expect(nextStatuses("in_progress", "client")).toEqual(["done"]);
-    expect(nextStatuses("todo", "va")).toEqual(["in_progress", "done"]);
-    expect(nextStatuses("in_progress", "va")).toEqual(["done"]);
-    expect(nextStatuses("done", "va")).toEqual([]);
-    expect(nextStatuses("done", "client")).toEqual([]);
+    expect(nextStatuses("review", "client")).toEqual(["done", "in_progress"]);
+    expect(nextStatuses("done", "client")).toEqual(["in_progress"]);
+  });
+
+  it("asks for feedback only when work goes back to the VA", () => {
+    expect(needsFeedback("review", "in_progress")).toBe(true);
+    expect(needsFeedback("done", "in_progress")).toBe(true);
+    expect(needsFeedback("todo", "in_progress")).toBe(false);
+    expect(needsFeedback("review", "done")).toBe(false);
+  });
+});
+
+describe("review and relative days", () => {
+  it("does not count a task in review as overdue", () => {
+    expect(isOverdue(task({ deadline: "2026-10-01", status: "review" }), INSTANT)).toBe(false);
+    expect(isOverdue(task({ deadline: "2026-10-01", status: "in_progress" }), INSTANT)).toBe(true);
+  });
+
+  it("names the deadline's day against today in that zone", () => {
+    // INSTANT is 27 Oct in Auckland and 26 Oct in UTC.
+    expect(relativeDay("2026-10-27", AUCKLAND, INSTANT)).toBe("Today");
+    expect(relativeDay("2026-10-27", "UTC", INSTANT)).toBe("Tomorrow");
+    expect(relativeDay("2026-10-30", AUCKLAND, INSTANT)).toBe("In 3 days");
+    expect(relativeDay("2026-10-26", AUCKLAND, INSTANT)).toBe("Yesterday");
+    expect(relativeDay("2026-10-24", AUCKLAND, INSTANT)).toBe("3 days ago");
   });
 });

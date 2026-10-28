@@ -30,10 +30,16 @@ export function refusalOf(code: string | undefined, message: string | undefined)
   return null;
 }
 
-/** Slots the signed-in client may book now, soonest first (RLS returns only bookable ones in their tenant). */
-export async function listOpenSlots() {
+/**
+ * Slots the signed-in client may book now, soonest first (RLS returns only bookable ones in their tenant). With
+ * `vaId`, only that VA's: the match page books a demo with one offered VA.
+ */
+export async function listOpenSlots(vaId?: string) {
+  if (vaId !== undefined && !isUuid(vaId)) return [];
   const supabase = await createClient();
-  const { data, error } = await supabase.from("demo_slots").select("id, starts_at").order("starts_at").limit(500);
+  let query = supabase.from("demo_slots").select("id, starts_at").order("starts_at").limit(500);
+  if (vaId) query = query.eq("va_id", vaId);
+  const { data, error } = await query;
   if (error) throw new UpstreamError("supabase", `Listing open slots failed (${error.code})`);
   return data.map((row) => ({ id: row.id, startsAt: row.starts_at }));
 }
@@ -52,6 +58,28 @@ export async function getLatestDemo(clientId: string): Promise<ClientDemo | null
   if (error) throw new UpstreamError("supabase", `Reading the latest demo failed (${error.code})`);
   if (!data) return null;
   return { id: data.id, status: data.status, startsAt: data.starts_at, endsAt: data.ends_at, vaName: data.va_name, rejectReason: data.reject_reason };
+}
+
+/** Every demo the client has booked, newest first, with the VA it was with. RLS: the client's own only. */
+export async function listClientDemos(clientId: string): Promise<(ClientDemo & { vaId: string })[]> {
+  if (!isUuid(clientId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("demo_bookings")
+    .select("id, va_id, status, starts_at, ends_at, va_name, reject_reason")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw new UpstreamError("supabase", `Listing the client's demos failed (${error.code})`);
+  return data.map((row) => ({
+    id: row.id,
+    vaId: row.va_id,
+    status: row.status,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    vaName: row.va_name,
+    rejectReason: row.reject_reason,
+  }));
 }
 
 type Result<T> = { ok: true; value: T } | { ok: false; reason: BookingRefusal };

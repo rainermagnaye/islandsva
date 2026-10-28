@@ -7,13 +7,16 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, OnboardingField, PaymentReceivedField } from "./contract";
+import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, OnboardingField, PaymentReceivedField, VaMessageField } from "./contract";
 import { acceptClientAttachment } from "./attachment";
 import { acceptPaymentProof } from "./payment-proof";
 import { registrationOrigin } from "./link";
 import { addClientNote, confirmClientReviewPaid, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, submitOnboarding, updateClientDetails } from "./service";
-import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseOnboarding } from "./validation";
+import { listActiveAssignments } from "./assignment-dal";
+import { getOwnClientId } from "./dal";
+import { insertVaMessage } from "./message-dal";
 import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
+import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseOnboarding, parseVaMessage } from "./validation";
 
 /** A Closer adds a pending client with the agreed package, then lands on its profile. */
 export async function addClientProfile(formData: FormData): Promise<SubmitResult<NewClientField>> {
@@ -266,6 +269,28 @@ export async function saveOnboarding(formData: FormData): Promise<SubmitResult<O
     return { ok: false, message: "We couldn't save this registration just now. Please try again in a moment." };
   }
 
+  refresh();
+  return { ok: true };
+}
+
+/** The client leaves a note for one VA they are working with. */
+export async function sendVaMessage(formData: FormData): Promise<SubmitResult<VaMessageField>> {
+  const user = await requireRole(["client"]);
+  const parsed = parseVaMessage(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const clientId = await getOwnClientId(user.id);
+    const assignments = clientId ? await listActiveAssignments(clientId) : [];
+    if (!clientId || !assignments.some((assignment) => assignment.vaId === parsed.value.vaId)) {
+      return { ok: false, message: "That message needs an active assignment with your VA." };
+    }
+    const sent = await insertVaMessage({ clientId, vaId: parsed.value.vaId, authorId: user.id, body: parsed.value.body });
+    if (!sent.ok) return { ok: false, message: "That message couldn't be sent." };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("VA message failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't send that message just now. Please try again in a moment." };
+  }
   refresh();
   return { ok: true };
 }

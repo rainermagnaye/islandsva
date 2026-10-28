@@ -11,8 +11,8 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * Portal shell. The header frame is static (instant on every navigation); only the account controls read
  * the session, behind their own Suspense boundary. On admin pages the logo inset matches the sidebar
  * (see `.portal-header` in globals.css). Access is checked by each page, not here.
- * Search is a slot so its script stays off the VA pages, which are at the size limit.
- * Toasts stay on the pages that show them, for the same reason.
+ * Search is a slot (@search), filled by every portal section; it finds what the signed-in role may see.
+ * Toasts stay on the pages that show them, so their script doesn't reach every page.
  */
 export default function DashboardLayout({ children, search }: { children: ReactNode; search: ReactNode }) {
   return (

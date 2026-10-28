@@ -31,6 +31,8 @@ export const appRoutes = {
   clientTasks: "/client/tasks",
   clientMatch: "/client/match",
   clientCalendar: "/client/calendar",
+  clientVas: "/client/vas",
+  clientAssistants: "/client/assistants",
   va: "/va",
   vaClients: "/va/clients",
   vaTasks: "/va/tasks",
@@ -70,7 +72,17 @@ export const adminClientHref = (id: string) => `${appRoutes.adminClients}/${id}`
 
 /** One task. The id is a random UUID, so the URL carries no personal data. */
 export const clientTaskHref = (id: string) => `${appRoutes.clientTasks}/${id}`;
+
+/** One file on a task. Both ids are random UUIDs. */
+export const clientTaskFileHref = (taskId: string, fileId: string) => `${clientTaskHref(taskId)}/files/${fileId}`;
+
+/** One of the client's virtual assistants. The id is a random UUID, so the URL carries no personal data. */
+export const clientVaHref = (id: string) => `${appRoutes.clientVas}/${id}`;
+/** One task in the VA portal. The id is a random UUID. */
 export const vaTaskHref = (id: string) => `${appRoutes.vaTasks}/${id}`;
+
+/** One file on a task, for the assigned VA. Both ids are random UUIDs. */
+export const vaTaskFileHref = (taskId: string, fileId: string) => `${vaTaskHref(taskId)}/files/${fileId}`;
 
 
 /** A Closer's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */

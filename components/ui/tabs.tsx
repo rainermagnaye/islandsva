@@ -17,6 +17,8 @@ type TabsProps = {
   onChange?: (id: string) => void;
   /** underline (default) or pill for compact filters inside panels. */
   variant?: "underline" | "pill";
+  /** Sits at the end of the tab row (e.g. a Filter button for the open tab). Outside the tab list, so arrow keys skip it. */
+  action?: ReactNode;
   className?: string;
 };
 
@@ -33,7 +35,7 @@ export function nextTab(tabs: readonly Pick<TabItem, "disabled">[], from: number
  * Related views of one thing on one page (2–6 tabs). WAI-ARIA tabs: one tab stop, ←/→ move and activate,
  * Home/End jump. When each tab needs its own URL, render links with aria-current instead (see LeadTabs).
  */
-export function Tabs({ tabs, label, value, defaultValue, onChange, variant = "underline", className }: TabsProps) {
+export function Tabs({ tabs, label, value, defaultValue, onChange, variant = "underline", action, className }: TabsProps) {
   const id = useId();
   const [inner, setInner] = useState(defaultValue ?? tabs.find((tab) => !tab.disabled)?.id);
   const active = value ?? inner;
@@ -63,41 +65,44 @@ export function Tabs({ tabs, label, value, defaultValue, onChange, variant = "un
 
   return (
     <div className={cx("grid gap-4", className)}>
-      <div
-        role="tablist"
-        aria-label={label}
-        onKeyDown={onKeyDown}
-        className={cx("flex overflow-x-auto", variant === "underline" ? "gap-1 border-b border-border" : "gap-1 rounded-lg bg-surface-sunken p-1")}
-      >
-        {tabs.map((tab, index) => {
-          const selected = tab.id === active;
-          return (
-            <button
-              key={tab.id}
-              ref={(node) => {
-                refs.current[index] = node;
-              }}
-              type="button"
-              role="tab"
-              id={`${id}-tab-${tab.id}`}
-              aria-selected={selected}
-              aria-controls={`${id}-panel-${tab.id}`}
-              tabIndex={selected ? 0 : -1}
-              disabled={tab.disabled}
-              onClick={() => select(index)}
-              className={cx(
-                "flex min-h-11 shrink-0 items-center gap-2 px-3 type-menu whitespace-nowrap disabled:cursor-not-allowed disabled:text-disabled-ink",
-                variant === "underline"
-                  ? (selected ? "text-action-secondary shadow-[inset_0_-2px_0_var(--color-action-secondary)]" : "text-ink-muted hover:text-ink")
-                  : cx("rounded-md", selected ? "bg-surface-card text-action-secondary elevation-sm" : "text-ink-muted hover:text-ink"),
-              )}
-            >
-              {tab.icon && <Icon name={tab.icon} size={18} />}
-              {tab.label}
-              {tab.count !== undefined && <CountBadge count={tab.count} label={`${tab.count} ${tab.label}`} />}
-            </button>
-          );
-        })}
+      <div className={cx("flex min-w-0 items-center gap-3", variant === "underline" && "border-b border-border")}>
+        <div
+          role="tablist"
+          aria-label={label}
+          onKeyDown={onKeyDown}
+          className={cx("flex min-w-0 flex-1 overflow-x-auto", variant === "underline" ? "gap-1" : "gap-1 rounded-lg bg-surface-sunken p-1")}
+        >
+          {tabs.map((tab, index) => {
+            const selected = tab.id === active;
+            return (
+              <button
+                key={tab.id}
+                ref={(node) => {
+                  refs.current[index] = node;
+                }}
+                type="button"
+                role="tab"
+                id={`${id}-tab-${tab.id}`}
+                aria-selected={selected}
+                aria-controls={`${id}-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                disabled={tab.disabled}
+                onClick={() => select(index)}
+                className={cx(
+                  "flex min-h-11 shrink-0 items-center gap-2 px-3 type-menu whitespace-nowrap disabled:cursor-not-allowed disabled:text-disabled-ink",
+                  variant === "underline"
+                    ? (selected ? "text-action-secondary shadow-[inset_0_-2px_0_var(--color-action-secondary)]" : "text-ink-muted hover:text-ink")
+                    : cx("rounded-md", selected ? "bg-surface-card text-action-secondary elevation-sm" : "text-ink-muted hover:text-ink"),
+                )}
+              >
+                {tab.icon && <Icon name={tab.icon} size={18} />}
+                {tab.label}
+                {tab.count !== undefined && <CountBadge count={tab.count} label={`${tab.count} ${tab.label}`} />}
+              </button>
+            );
+          })}
+        </div>
+        {action && <div className="flex shrink-0 items-center py-1">{action}</div>}
       </div>
       {tabs.map((tab) => (
         <div key={tab.id} role="tabpanel" id={`${id}-panel-${tab.id}`} aria-labelledby={`${id}-tab-${tab.id}`} tabIndex={0} hidden={tab.id !== active}>

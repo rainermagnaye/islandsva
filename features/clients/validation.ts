@@ -3,7 +3,18 @@ import { z } from "zod";
 import { COUNTRIES } from "@/content/countries";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
 import { INDUSTRIES, STAFF_COUNTS } from "@/features/leads/contract";
-import { CLIENT_BUSINESS_LIMITS, CLIENT_NOTE_LIMIT, CREATE_CLIENT_LIMITS, type ClientBusiness, type ClientDetailField, type ClientNoteField, type CreateClientField, type OnboardingField } from "./contract";
+import {
+  CLIENT_BUSINESS_LIMITS,
+  CLIENT_NOTE_LIMIT,
+  CREATE_CLIENT_LIMITS,
+  VA_MESSAGE_LIMIT,
+  type ClientBusiness,
+  type ClientDetailField,
+  type ClientNoteField,
+  type CreateClientField,
+  type OnboardingField,
+  type VaMessageField,
+} from "./contract";
 
 const CLIENT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
 
@@ -191,3 +202,16 @@ export function parseClientFlag(input: unknown) {
   if (!result.ok) return result;
   return { ok: true as const, value: { clientId: result.value.clientId, disabled: result.value.disabled === "true" } };
 }
+
+const vaMessageSchema = z.strictObject({
+  vaId: z.uuid({ error: FORM_ERROR }),
+  body: z
+    .string({ error: "Write a message." })
+    .trim()
+    .min(1, "Write a message.")
+    .max(VA_MESSAGE_LIMIT, tooLong("the message", VA_MESSAGE_LIMIT))
+    .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, "Remove any unusual characters from the message."),
+});
+
+/** A note from the client to one assigned VA. The VA id is a hidden field. */
+export const parseVaMessage = (input: unknown) => parseWith<typeof vaMessageSchema, VaMessageField>(vaMessageSchema, input, ["body"]);

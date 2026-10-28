@@ -835,7 +835,7 @@ describe("tenants", () => {
     ).rows;
     const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.assign_tenant()'::regprocedure")).rows;
     const missing = tables.map((t) => t.name).filter((name) => !["profiles", "leads"].includes(name) && !src.includes(`when '${name}'`));
-    expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links", "discovery_times", "meetings", "meeting_events"]));
+      expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links", "discovery_times", "meetings", "meeting_events", "va_messages", "task_attachments", "task_events"]));
     expect(missing).toEqual([]);
   });
 
@@ -862,7 +862,8 @@ describe("tenants", () => {
       await db.exec(definition("20261026111332_discovery_calls.sql"));
       expect(await missingNow()).toEqual(expect.arrayContaining(["tasks", "task_comments", "va_shortlists", "va_working_hours"]));
       await db.exec(readFileSync(join(MIGRATIONS, "20261026142144_restore_assign_tenant_cases.sql"), "utf8"));
-      expect(await missingNow()).toEqual([]);
+      // Tables created after that restore file are absent from it. The function in force after every migration still names them.
+      expect((await missingNow()).sort()).toEqual(["task_attachments", "task_events", "va_messages"]);
     } finally {
       await db.exec("rollback");
     }
@@ -2542,7 +2543,30 @@ describe("tasks", () => {
     const odd = await makeCompany("Odd Zone", { user: null, zone: "Not/AZone", va: WORKER });
     await expect(insertAsServer(odd, WORKER)).rejects.toMatchObject({ code: "IVA22" });
     const blank = await makeCompany("No Zone", { user: null, zone: null, va: WORKER });
-    await expect(insertAsServer(blank, WORKER)).rejects.toMatchObject({ code: "IVA22" });
+    const [created] = await insertAsServer(blank, WORKER);
+    const [saved] = await asServer<{ deadline_timezone: string }>("select deadline_timezone from public.tasks where id = $1", [created.id]);
+    expect(saved.deadline_timezone).toBe("Asia/Manila");
+  });
+
+  it("stores a deadline time and refuses one that has already passed", async () => {
+    const [ok] = await asUser<{ deadline_time: string }>(
+      asOwner,
+      `insert into public.tasks (client_id, va_id, title, deadline, deadline_time, created_by)
+       values ($1, $2, 'Timed', ((now() at time zone 'Pacific/Auckland') + interval '2 hours')::date,
+         ((now() at time zone 'Pacific/Auckland') + interval '2 hours')::time, $3)
+       returning deadline_time::text`,
+      [harbor, WORKER, OWNER],
+    );
+    expect(ok.deadline_time).toMatch(/^\d{2}:\d{2}:\d{2}/);
+    await expect(
+      asUser(
+        asOwner,
+        `insert into public.tasks (client_id, va_id, title, deadline, deadline_time, created_by)
+         values ($1, $2, 'Late', ((now() at time zone 'Pacific/Auckland') - interval '2 hours')::date,
+           ((now() at time zone 'Pacific/Auckland') - interval '2 hours')::time, $3)`,
+        [harbor, WORKER, OWNER],
+      ),
+    ).rejects.toMatchObject({ code: "IVA22" });
   });
 
   it("rejects a pending company, a disabled company, a closed portal and an ended assignment", async () => {
@@ -2612,13 +2636,110 @@ describe("tasks", () => {
     ]);
   });
 
+  it("records a description and the moment work starts, and keeps a message append-only", async () => {
+    const [created] = await asUser<{ id: string; description: string; started_at: string | null }>(
+      asOwner,
+      `insert into public.tasks (client_id, va_id, title, description, deadline, created_by)
+       values ($1, $2, 'Write the brief', '  Notes for Monday  ', current_date + 4, $3)
+       returning id, description, started_at`,
+      [harbor, WORKER, OWNER],
+    );
+    expect(created.description).toBe("Notes for Monday");
+    expect(created.started_at).toBeNull();
+    await expect(
+      asUser(asOwner, "insert into public.tasks (client_id, va_id, title, deadline, created_by, started_at) values ($1, $2, 'Already going', current_date + 4, $3, now())", [harbor, WORKER, OWNER]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asServer("insert into public.tasks (client_id, va_id, title, deadline, created_by, started_at) values ($1, $2, 'Already going', current_date + 4, $3, now())", [harbor, WORKER, OWNER]),
+    ).rejects.toMatchObject({ code: "IVA25" });
+    expect(await asUser<{ description: string | null }>(asOwner, "update public.tasks set description = '   ' where id = $1 returning description", [created.id])).toEqual([{ description: null }]);
+    await expect(asUser(asWorker, "update public.tasks set description = 'VA notes' where id = $1", [created.id])).rejects.toMatchObject({ code: "IVA25" });
+
+    // The client closing without review skips the start, so started_at stays empty.
+    const [jumped] = await insertTask(asOwner, harbor, WORKER, OWNER);
+    expect(await asUser<{ started_at: string | null }>(asOwner, "update public.tasks set status = 'done' where id = $1 returning started_at", [jumped.id])).toEqual([{ started_at: null }]);
+    const [started] = await asUser<{ started_at: string | null }>(asWorker, "update public.tasks set status = 'in_progress' where id = $1 returning started_at", [created.id]);
+    expect(started.started_at).not.toBeNull();
+    await expect(asServer("update public.tasks set started_at = null where id = $1", [created.id])).rejects.toMatchObject({ code: "IVA25" });
+
+    const [message] = await asUser<{ id: string; body: string }>(
+      asOwner,
+      "insert into public.va_messages (client_id, va_id, author_id, body) values ($1, $2, $3, '  Please start with the inbox  ') returning id, body",
+      [harbor, WORKER, OWNER],
+    );
+    expect(message.body).toBe("Please start with the inbox");
+    expect(await asUser(asWorker, "select id from public.va_messages where id = $1", [message.id])).toEqual([{ id: message.id }]);
+    expect(await asUser(asOther, "select id from public.va_messages where id = $1", [message.id])).toEqual([]);
+    expect(await asUser(asAdmin, "select id from public.va_messages where id = $1", [message.id])).toEqual([{ id: message.id }]);
+    await expect(asUser(asOwner, "update public.va_messages set body = 'Changed' where id = $1", [message.id])).rejects.toThrow(/permission denied/);
+    await expect(asServer("update public.va_messages set body = 'Changed' where id = $1", [message.id])).rejects.toMatchObject({ code: "IVA35" });
+    await expect(asServer("delete from public.va_messages where id = $1", [message.id])).rejects.toMatchObject({ code: "IVA35" });
+    const [reply] = await asUser<{ id: string }>(
+      asWorker,
+      "insert into public.va_messages (client_id, va_id, author_id, body) values ($1, $2, $3, 'On it') returning id",
+      [harbor, WORKER, WORKER],
+    );
+    expect(reply.id).toEqual(expect.any(String));
+    await expect(asServer("insert into public.va_messages (client_id, va_id, author_id, body) values ($1, $2, $3, 'Not me')", [harbor, WORKER, OTHER])).rejects.toMatchObject({ code: "IVA35" });
+  });
+
+  it("stores a severity and an attachment the client and that VA can read", async () => {
+    const [row] = await asUser<{ id: string; severity: string }>(
+      asOwner,
+      `insert into public.tasks (client_id, va_id, title, deadline, created_by, severity)
+       values ($1, $2, 'Urgent brief', current_date + 3, $3, 'high')
+       returning id, severity`,
+      [harbor, WORKER, OWNER],
+    );
+    expect(row.severity).toBe("high");
+    await expect(asUser(asWorker, "update public.tasks set severity = 'low' where id = $1", [row.id])).rejects.toMatchObject({ code: "IVA25" });
+    const [file] = await asUser<{ id: string }>(
+      asOwner,
+      "insert into public.task_attachments (task_id, name, content_type, bytes) values ($1, 'brief.pdf', 'application/pdf', '\\x25504446'::bytea) returning id",
+      [row.id],
+    );
+    expect(await asUser(asWorker, "select id from public.task_attachments where id = $1", [file.id])).toEqual([{ id: file.id }]);
+    expect(await asUser(asOther, "select id from public.task_attachments where id = $1", [file.id])).toEqual([]);
+    await expect(asServer("delete from public.task_attachments where id = $1", [file.id])).rejects.toMatchObject({ code: "IVA36" });
+    // The VA has the delete grant (for their own comments) but no delete policy on files.
+    expect(await asUser(asWorker, "delete from public.task_attachments where id = $1 returning id", [file.id])).toEqual([]);
+  });
+
+  it("lets the author edit and delete their comment, and no one else", async () => {
+    const [row] = await insertTask(asOwner, harbor, WORKER, OWNER);
+    const [comment] = await asUser<{ id: string }>(
+      asOwner,
+      "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'First note') returning id",
+      [row.id, OWNER],
+    );
+    expect(await asUser<{ body: string }>(asOwner, "update public.task_comments set body = 'Edited note' where id = $1 returning body", [comment.id])).toEqual([{ body: "Edited note" }]);
+    expect(await asUser(asWorker, "update public.task_comments set body = 'Not mine' where id = $1 returning id", [comment.id])).toEqual([]);
+    expect(await asUser(asWorker, "delete from public.task_comments where id = $1 returning id", [comment.id])).toEqual([]);
+    expect(await asUser<{ id: string }>(asOwner, "delete from public.task_comments where id = $1 returning id", [comment.id])).toEqual([{ id: comment.id }]);
+  });
+
+  it("lets the client delete their task and its file, and no one else", async () => {
+    const [row] = await insertTask(asOwner, harbor, WORKER, OWNER);
+    const [file] = await asUser<{ id: string }>(
+      asOwner,
+      "insert into public.task_attachments (task_id, name, content_type, bytes) values ($1, 'note.pdf', 'application/pdf', '\\x25504446'::bytea) returning id",
+      [row.id],
+    );
+    await asUser(asOwner, "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Drop this')", [row.id, OWNER]);
+    expect(await asUser(asOther, "delete from public.tasks where id = $1 returning id", [row.id])).toEqual([]);
+    expect(await asUser<{ id: string }>(asOwner, "delete from public.task_attachments where id = $1 returning id", [file.id])).toEqual([{ id: file.id }]);
+    expect(await asUser(asOwner, "delete from public.task_comments where task_id = $1 returning task_id", [row.id])).toEqual([{ task_id: row.id }]);
+    expect(await asUser<{ id: string }>(asOwner, "delete from public.tasks where id = $1 returning id", [row.id])).toEqual([{ id: row.id }]);
+  });
+
   it("moves status forward, keeps the row with the VA after the assignment ends, and freezes it once done", async () => {
     await expect(asUser(asOwner, "update public.tasks set status = 'in_progress' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
     await expect(asUser(asWorker, "update public.tasks set title = 'VA title' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
     expect(await asUser(asWorker, "update public.tasks set status = 'in_progress' where id = $1 returning id", [otherTask])).toEqual([]);
 
     const [second] = await insertTask(asOwner, harbor, WORKER, OWNER);
-    expect(await asUser<{ status: string }>(asWorker, "update public.tasks set status = 'done' where id = $1 returning status", [second.id])).toEqual([{ status: "done" }]);
+    await expect(asUser(asWorker, "update public.tasks set status = 'done' where id = $1", [second.id])).rejects.toMatchObject({ code: "IVA25" });
+    expect(await asUser<{ status: string }>(asOwner, "update public.tasks set status = 'done' where id = $1 returning status", [second.id])).toEqual([{ status: "done" }]);
     await expect(asUser(asOwner, "update public.tasks set title = 'Again' where id = $1", [second.id])).rejects.toMatchObject({ code: "IVA25" });
     await expect(asServer("update public.tasks set status = 'todo', done_at = null where id = $1", [second.id])).rejects.toMatchObject({ code: "IVA25" });
 
@@ -2648,7 +2769,7 @@ describe("tasks", () => {
     // The guard refuses the VA even where RLS would let the write through.
     await rolledBack(async () => {
       await db.exec("alter table public.tasks disable row level security");
-      await expect(direct(asWorker, "update public.tasks set status = 'done' where id = $1", [taskId], "authenticated")).rejects.toMatchObject({ code: "IVA24" });
+      await expect(direct(asWorker, "update public.tasks set status = 'review' where id = $1", [taskId], "authenticated")).rejects.toMatchObject({ code: "IVA24" });
     });
     await expect(as("service_role", asWorker, "insert into public.task_comments (task_id, author_id, body) values ($1, $2, 'Still here')", [taskId, WORKER])).rejects.toMatchObject({ code: "IVA24" });
     expect(await asUser(asWorker, "select id from public.tasks where id = $1", [taskId])).toEqual([{ id: taskId }]);
@@ -2670,12 +2791,120 @@ describe("tasks", () => {
 
     await expect(asUser(asOwner, "update public.tasks set title = 'After' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
     await expect(asUser(asOwner, "update public.tasks set deadline = current_date + 3 where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
+    // A reopen needs feedback, and an open company with the VA still assigned (here: disabled, ended).
     await expect(asUser(asOwner, "update public.tasks set status = 'in_progress' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA25" });
-    await expect(asUser(asOwner, "update public.task_comments set body = 'Edited' where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asOwner, "delete from public.task_comments where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asWorker, "delete from public.task_comments where task_id = $1", [taskId])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asOwner, "delete from public.tasks where id = $1", [taskId])).rejects.toThrow(/permission denied/);
-    await expect(asUser(asAdmin, "delete from public.tasks where id = $1", [taskId])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asOwner, "update public.tasks set status = 'in_progress', transition_note = 'Redo it' where id = $1", [taskId])).rejects.toMatchObject({ code: "IVA23" });
+    expect(await asUser(asAdmin, "delete from public.tasks where id = $1 returning id", [taskId])).toEqual([]);
+  });
+
+  it("runs the review: the VA submits, the client sends it back with feedback or approves, and every move is in the activity", async () => {
+    const REVIEWER = "22222222-2222-4222-8222-222222222213";
+    const asReviewer = token(REVIEWER, ["client"]);
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email, raw_user_meta_data) values ('${REVIEWER}', 'task-review@x.co', '{"full_name":"Rhea Reviewer"}')`);
+    await asServer(`update public.profiles set status = 'active' where id = '${REVIEWER}'`);
+    await asServer(`insert into public.roles (user_id, role) values ('${REVIEWER}', 'client')`);
+    const review = await makeCompany("Review Co", { user: REVIEWER, va: WORKER });
+    const [{ id: task }] = await insertTask(asReviewer, review, WORKER, REVIEWER);
+    const move = (claims: Claims, status: string, note: string | null = null) =>
+      asUser<{ status: string; transition_note: string | null; done_at: string | null; closed_by: string | null }>(
+        claims,
+        "update public.tasks set status = $2::public.task_status, transition_note = $3 where id = $1 returning status, transition_note, done_at, closed_by",
+        [task, status, note],
+      );
+    const events = (claims: Claims = asReviewer) =>
+      asUser<{ kind: string; note: string | null; actor_id: string | null; actor_first_name: string | null }>(
+        claims,
+        "select kind, note, actor_id, actor_first_name from public.task_events where task_id = $1 order by created_at, kind",
+        [task],
+      );
+
+    // Nothing moves straight from to-do to review for the client, and nobody goes back to to-do.
+    await expect(move(asReviewer, "review")).rejects.toMatchObject({ code: "IVA25" });
+    await expect(move(asWorker, "done")).rejects.toMatchObject({ code: "IVA25" });
+    expect(await move(asWorker, "in_progress")).toEqual([{ status: "in_progress", transition_note: null, done_at: null, closed_by: null }]);
+    await expect(move(asWorker, "todo")).rejects.toMatchObject({ code: "IVA25" });
+    // A note only travels with a move, and is never kept on the row.
+    await expect(asUser(asWorker, "update public.tasks set transition_note = 'Hi' where id = $1", [task])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asUser(asWorker, "update public.tasks set status = 'review', transition_note = $2 where id = $1", [task, "x".repeat(2001)])).rejects.toMatchObject({ code: "IVA25" });
+    expect(await move(asWorker, "review", "  Draft is in the shared folder  ")).toEqual([{ status: "review", transition_note: null, done_at: null, closed_by: null }]);
+
+    // Only the client decides a review, and sending it back needs feedback.
+    await expect(move(asWorker, "done")).rejects.toMatchObject({ code: "IVA25" });
+    await expect(move(asWorker, "in_progress", "Taking it back")).rejects.toMatchObject({ code: "IVA25" });
+    await expect(move(asReviewer, "in_progress")).rejects.toMatchObject({ code: "IVA25" });
+    await expect(move(asReviewer, "in_progress", "   ")).rejects.toMatchObject({ code: "IVA25" });
+    expect(await move(asOther, "in_progress", "Not mine")).toEqual([]);
+    expect(await move(asReviewer, "in_progress", "Use the new logo")).toEqual([{ status: "in_progress", transition_note: null, done_at: null, closed_by: null }]);
+    await move(asWorker, "review");
+    const [approved] = await move(asReviewer, "done");
+    expect(approved).toMatchObject({ status: "done", closed_by: REVIEWER });
+    expect(approved.done_at).not.toBeNull();
+    await expect(asUser(asReviewer, "update public.tasks set title = 'After' where id = $1", [task])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(move(asWorker, "in_progress", "Reopen")).rejects.toMatchObject({ code: "IVA25" });
+    await expect(move(asReviewer, "review", "Look again")).rejects.toMatchObject({ code: "IVA25" });
+
+    // The client reopens with feedback: the close is undone, the start stays.
+    await expect(move(asReviewer, "in_progress")).rejects.toMatchObject({ code: "IVA25" });
+    expect(await move(asReviewer, "in_progress", "The footer is wrong")).toEqual([{ status: "in_progress", transition_note: null, done_at: null, closed_by: null }]);
+    const [{ started }] = await asServer<{ started: boolean }>("select started_at is not null as started from public.tasks where id = $1", [task]);
+    expect(started).toBe(true);
+
+    expect(await events()).toEqual([
+      { kind: "started", note: null, actor_id: WORKER, actor_first_name: "Maria" },
+      { kind: "submitted", note: "Draft is in the shared folder", actor_id: WORKER, actor_first_name: "Maria" },
+      { kind: "changes_requested", note: "Use the new logo", actor_id: REVIEWER, actor_first_name: "Rhea" },
+      { kind: "submitted", note: null, actor_id: WORKER, actor_first_name: "Maria" },
+      { kind: "approved", note: null, actor_id: REVIEWER, actor_first_name: "Rhea" },
+      { kind: "reopened", note: "The footer is wrong", actor_id: REVIEWER, actor_first_name: "Rhea" },
+    ]);
+
+    // Read like the task: its client, its VA, an admin with two-factor. Nobody else.
+    expect(await events(asWorker)).toHaveLength(6);
+    expect(await events(asAdmin)).toHaveLength(6);
+    expect(await events(asSuper)).toHaveLength(6);
+    expect(await events(asOther)).toEqual([]);
+    expect(await events(asFar)).toEqual([]);
+    expect(await events(token(ADMIN, ["admin"], "aal1"))).toEqual([]);
+    await expect(as("anon", {}, "select id from public.task_events")).rejects.toThrow(/permission denied/);
+
+    // Append-only: no signed-in insert or update; the server can't rewrite or delete one either.
+    await expect(asUser(asReviewer, "insert into public.task_events (task_id, kind, note) values ($1, 'approved', null)", [task])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asWorker, "insert into public.task_events (task_id, kind, note) values ($1, 'submitted', 'Fake')", [task])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asReviewer, "update public.task_events set note = 'Changed' where task_id = $1", [task])).rejects.toThrow(/permission denied/);
+    await expect(asServer("update public.task_events set note = 'Changed' where task_id = $1", [task])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asServer("delete from public.task_events where task_id = $1", [task])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asUser(asReviewer, "select private.guard_task_event()")).rejects.toThrow(/permission denied/);
+    expect(await asUser(asWorker, "delete from public.task_events where task_id = $1 returning id", [task])).toEqual([]);
+    // The guard refuses the VA even where RLS would let the delete through.
+    await rolledBack(async () => {
+      await db.exec("alter table public.task_events disable row level security");
+      await expect(direct(asWorker, "delete from public.task_events where task_id = $1", [task], "authenticated")).rejects.toMatchObject({ code: "IVA25" });
+    });
+    const [{ tenant }] = await asServer<{ tenant: boolean }>(
+      "select bool_and(e.tenant_id = t.tenant_id) as tenant from public.task_events e join public.tasks t on t.id = e.task_id where t.id = $1",
+      [task],
+    );
+    expect(tenant).toBe(true);
+
+    // Sending work back to a VA whose assignment ended is refused; closing it is still the client's.
+    await move(asWorker, "review");
+    await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and status = 'active'", [review]);
+    await expect(move(asReviewer, "in_progress", "One more pass")).rejects.toMatchObject({ code: "IVA24" });
+    expect(await move(asReviewer, "done")).toMatchObject([{ status: "done" }]);
+
+    // The client deletes the task with its activity.
+    expect(await asUser(asReviewer, "delete from public.task_events where task_id = $1 returning id", [task])).toHaveLength(8);
+    expect(await asUser(asReviewer, "delete from public.tasks where id = $1 returning id", [task])).toEqual([{ id: task }]);
+  });
+
+  it("refuses a move note on insert and keeps the note column empty", async () => {
+    await expect(
+      asUser(asOwner, "insert into public.tasks (client_id, va_id, title, deadline, created_by, transition_note) values ($1, $2, 'X', current_date + 4, $3, 'Hi')", [otherCo, WORKER2, OWNER]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asServer("insert into public.tasks (client_id, va_id, title, deadline, created_by, transition_note) values ($1, $2, 'X', current_date + 4, $3, 'Hi')", [otherCo, WORKER2, OTHER]),
+    ).rejects.toMatchObject({ code: "IVA25" });
+    expect(await asServer("select count(*)::int as n from public.tasks where transition_note is not null")).toEqual([{ n: 0 }]);
   });
 
   it("a close is the server's in a direct session with a client's claims, and the client's under PostgREST's role", async () => {
@@ -2831,6 +3060,50 @@ describe("VA match", () => {
     });
     await rolledBack(async () => {
       await expect(direct(asCloser, hours, [VA_N], "authenticated")).rejects.toMatchObject({ code: "IVA29" });
+    });
+  });
+
+  it("shows the client a work profile of the VAs offered to them, and nobody else", async () => {
+    await asServer(
+      `insert into public.employee_profiles (user_id, skills, languages, highest_education, employers, key_responsibilities, achievements,
+         date_of_birth, mobile_number, emergency_name, job_references, review_status)
+       values ($1, 'Inbox, Calendar', 'English', 'Bachelor''s',
+         '[{"company":"Brightpath","position":"Executive Assistant","duration":"2022 – 2026","salary":"secret"}]',
+         'Ran two inboxes', 'Faster replies', '1996-04-12', '09170000001', 'Rosa', '[{"name":"Ref"}]', 'approved')`,
+      [VA_M],
+    );
+    // Nora's hours come from the working-hours test above.
+    const hours = (await asServer<{ weekday: number; start: number; end: number }>(
+      "select weekday, start_minute as start, end_minute as end from public.va_working_hours where va_id = $1 order by weekday",
+      [VA_M],
+    ));
+    expect(hours.length).toBeGreaterThan(0);
+
+    const call = "select * from public.offered_va_profiles() order by first_name";
+    const mine = await asUser<Record<string, unknown>>(asMatch, call);
+    expect(mine.map((row) => row.first_name)).toEqual(["Nora", "Omar", "Pia"]);
+    expect(mine[0]).toEqual({
+      va_id: VA_M,
+      first_name: "Nora",
+      skills: "Inbox, Calendar",
+      languages: "English",
+      highest_education: "Bachelor's",
+      certifications: null,
+      employers: [{ company: "Brightpath", position: "Executive Assistant", duration: "2022 – 2026" }],
+      key_responsibilities: "Ran two inboxes",
+      achievements: "Faster replies",
+      working_hours: hours,
+    });
+    // Another client, a VA, an admin, a Lead Gen and a token without the role see nothing; anon can't call it.
+    expect(await asUser(token(OTHER_M, ["client"]), call)).toEqual([]);
+    expect(await asUser(asVaM, call)).toEqual([]);
+    expect(await asUser(asAdmin, call)).toEqual([]);
+    expect(await asUser(asCloser, call)).toEqual([]);
+    expect(await asUser(token(CLIENT_M, []), call)).toEqual([]);
+    await expect(as("anon", {}, call)).rejects.toThrow(/permission denied/);
+    // A direct session with the client's claims is not signed in.
+    await rolledBack(async () => {
+      expect(await direct(asMatch, call)).toEqual([]);
     });
   });
 });
@@ -3429,8 +3702,8 @@ describe("audit log: tasks and VA match", () => {
 
     it("the VA's status change is theirs; the client's title change is a name only; closing records done_at and closed_by", async () => {
       await asUser(asAv, "update public.tasks set status = 'in_progress' where id = $1", [task]);
-      expect(await last("tasks", task)).toMatchObject({ actor_id: AV, changes: { status: ["todo", "in_progress"] } });
-      expect(Object.keys((await last("tasks", task))!.changes)).toEqual(["status"]);
+      expect(await last("tasks", task)).toMatchObject({ actor_id: AV, changes: { status: ["todo", "in_progress"], started_at: null } });
+      expect(Object.keys((await last("tasks", task))!.changes).sort()).toEqual(["started_at", "status"]);
 
       await asUser(asAc, "update public.tasks set title = 'Another secret' where id = $1", [task]);
       expect(await last("tasks", task)).toMatchObject({ actor_id: AC, changes: { title: null } });

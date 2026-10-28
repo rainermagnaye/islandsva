@@ -8,7 +8,7 @@ import { TaskForm } from "@/features/tasks/components/task-form";
 import { TaskMetrics } from "@/features/tasks/components/task-metrics";
 import { TaskTable } from "@/features/tasks/components/task-table";
 import { getOwnCompany, listActiveVas, listTasks } from "@/features/tasks/dal";
-import { deadlineWindow } from "@/features/tasks/metrics";
+import { deadlineWindow, taskTimeZone } from "@/features/tasks/metrics";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Tasks" };
@@ -33,15 +33,16 @@ async function ClientTasks() {
   }
 
   const [tasks, vas] = await Promise.all([listTasks(), listActiveVas(company.id)]);
-  const window = company.timezone ? deadlineWindow(company.timezone) : null;
+  const timeZone = taskTimeZone(company.timezone);
+  const window = deadlineWindow(timeZone);
   const canCreate = company.status === "active" && company.disabledAt === null && window !== null && vas.length >= 1;
 
   return (
     <Workspace title="Tasks" lead="Work for your VA, with a title and a deadline.">
       <TaskMetrics tasks={tasks} href={appRoutes.clientTasks} />
-      {canCreate && window && company.timezone && (
+      {canCreate && window && (
         <Panel title="Add a task">
-          <TaskForm today={window.today} last={window.last} timeZone={company.timezone} vas={vas} />
+          <TaskForm today={window.today} last={window.last} timeZone={timeZone} vas={vas} />
         </Panel>
       )}
       <TaskTable

@@ -15,7 +15,9 @@ import { cx } from "@/lib/cx";
 import { demoCalendarEvents, type DemoCalendarRow } from "../calendar";
 import { VA_TIME_ZONE } from "../contract";
 
-const LEGEND: readonly { tone?: Tone; label: string; done?: boolean }[] = [
+export type CalendarLegendItem = { tone?: Tone; label: string; done?: boolean };
+
+const LEGEND: readonly CalendarLegendItem[] = [
   { tone: "sand", label: "Requested" },
   { tone: "lagoon", label: "Confirmed" },
   { done: true, label: "Completed" },
@@ -34,13 +36,14 @@ type CalendarView = (typeof VIEWS)[number]["id"];
 const navButton = "grid size-11 place-items-center rounded-md hover:bg-action-ghost-hover";
 
 /** Demo calls on a day, week, or month. The date opens a calendar to jump; a call opens the client unless the page handles the click. */
-export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], toolbar, onEventClick, onSlotClick, eventGesture, onEventMove }: {
+export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], toolbar, legend = LEGEND, onEventClick, onSlotClick, eventGesture, onEventMove }: {
   rows: readonly DemoCalendarRow[];
   now: string;
   today: IsoDate;
   nowMinutes: number;
   extraEvents?: readonly ScheduleEvent[];
   toolbar?: ReactNode;
+  legend?: readonly CalendarLegendItem[];
   /** Return true when the page handled the event. Otherwise a demo call opens the client. */
   onEventClick?: (event: ScheduleEvent) => boolean;
   /** Empty hour, or a month day at 09:00. `minute` is minutes since midnight in Manila. */
@@ -150,7 +153,7 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
       </div>
 
       {view === "month" ? (
-        <MonthBoard focus={focus} today={today} events={events} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />
+        <MonthBoard focus={focus} today={today} events={events} legend={legend} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />
       ) : (
         <ScheduleCalendar
           showToolbar={false}
@@ -158,7 +161,7 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
           view={view}
           focus={focus}
           events={events}
-          legend={LEGEND}
+          legend={legend}
           today={today}
           nowMinutes={nowMinutes}
           timeZone={VA_TIME_ZONE}
@@ -172,7 +175,7 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
   );
 }
 
-function MonthBoard({ focus, today, events, onEventClick, onSlotClick, eventGesture, onEventMove, filter }: { focus: IsoDate; today: IsoDate; events: readonly ScheduleEvent[]; onEventClick: (event: ScheduleEvent) => void; onSlotClick?: (day: IsoDate, minute: number) => void; eventGesture?: (event: ScheduleEvent) => ScheduleGesture | null; onEventMove?: (event: ScheduleEvent, next: { start: string; end: string }) => void | boolean | Promise<void | boolean>; filter: ReactNode }) {
+function MonthBoard({ focus, today, events, legend, onEventClick, onSlotClick, eventGesture, onEventMove, filter }: { focus: IsoDate; today: IsoDate; events: readonly ScheduleEvent[]; legend: readonly CalendarLegendItem[]; onEventClick: (event: ScheduleEvent) => void; onSlotClick?: (day: IsoDate, minute: number) => void; eventGesture?: (event: ScheduleEvent) => ScheduleGesture | null; onEventMove?: (event: ScheduleEvent, next: { start: string; end: string }) => void | boolean | Promise<void | boolean>; filter: ReactNode }) {
   const weeks = monthGrid(focus, 1);
   const names = weeks[0].map((day) => formatDate(day, { weekday: "short" }));
   const onDay = (day: IsoDate) => events.filter((event) => event.start.slice(0, 10) === day);
@@ -218,7 +221,7 @@ function MonthBoard({ focus, today, events, onEventClick, onSlotClick, eventGest
     <Card as="section" aria-label={formatDate(focus, { month: "long", year: "numeric" })} padding="sm" className="grid gap-3 text-ink">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {filter}
-        <Legend />
+        <Legend items={legend} />
       </div>
       <div ref={board} className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
         {names.map((name) => (
@@ -264,10 +267,10 @@ function MonthBoard({ focus, today, events, onEventClick, onSlotClick, eventGest
   );
 }
 
-function Legend() {
+function Legend({ items }: { items: readonly CalendarLegendItem[] }) {
   return (
     <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 type-caption text-ink-muted">
-      {LEGEND.map((item) => (
+      {items.map((item) => (
         <li key={item.label} className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className={cx("size-3 rounded-sm", item.done ? "bg-tag-lagoon-ink" : cx("ring-[1.5px] ring-inset", TONE_CLASSES[item.tone ?? "lagoon"].bg, TONE_CLASSES[item.tone ?? "lagoon"].ring))} />
           {item.label}

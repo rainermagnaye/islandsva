@@ -18,7 +18,7 @@ function MenuCaret() {
   return <span aria-hidden="true" className="absolute -top-1.5 right-4 size-3 rotate-45 border-t border-l border-border bg-surface-card" />;
 }
 
-/** The bell and the profile circle. Only one panel stays open. */
+/** Messages, the bell and the profile circle. Only one panel stays open. */
 export function AccountMenus({
   name,
   email,
@@ -39,6 +39,17 @@ export function AccountMenus({
 
   return (
     <AccountMenuFrame>
+      {/* Messaging is its own module, still to come; the icon holds its place in the header. */}
+      <details className="relative">
+        <summary className={cx(summaryClass, "border-0")} aria-label="Messages">
+          <Icon name="message" size={24} />
+        </summary>
+        <div className={notificationsPanel}>
+          <MenuCaret />
+          <p className="m-0 type-label">Messages</p>
+          <p className="m-0 mt-3 type-body-sm text-ink-muted">Messaging is coming soon.</p>
+        </div>
+      </details>
       <details className="relative">
         <summary className={cx(summaryClass, "border-0")} aria-label="Notifications">
           <Icon name="bell" size={24} />
