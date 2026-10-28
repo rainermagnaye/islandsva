@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { TaskForm } from "./task-form";
+
+const TaskForm = lazy(() => import("./task-form").then((m) => ({ default: m.TaskForm })));
 
 /**
  * "Add task" as a button that opens the task form in a dialog, closing once the task is saved. With `va` (a VA's
@@ -43,9 +44,13 @@ export function AddTaskButton({
       >
         Add task
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Add a task">
-        {open && <TaskForm key={formKey} vaId={va?.id} vaName={va?.firstName} vas={vas} today={today} last={last} timeZone={timeZone} stay onSaved={() => setOpen(false)} />}
-      </Modal>
+      {open && (
+        <Modal open onClose={() => setOpen(false)} title="Add a task">
+          <Suspense fallback={null}>
+            <TaskForm key={formKey} vaId={va?.id} vaName={va?.firstName} vas={vas} today={today} last={last} timeZone={timeZone} stay onSaved={() => setOpen(false)} />
+          </Suspense>
+        </Modal>
+      )}
     </>
   );
 }

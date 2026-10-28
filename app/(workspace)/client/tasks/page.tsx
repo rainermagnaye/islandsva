@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
-import { Panel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { appRoutes, clientTaskHref } from "@/content/routes";
-import { TaskForm } from "@/features/tasks/components/task-form";
+import { AddTaskButton } from "@/features/tasks/components/add-task-button";
 import { TaskMetrics } from "@/features/tasks/components/task-metrics";
 import { TaskTable } from "@/features/tasks/components/task-table";
 import { getOwnCompany, listActiveVas, listTasks } from "@/features/tasks/dal";
@@ -38,13 +37,12 @@ async function ClientTasks() {
   const canCreate = company.status === "active" && company.disabledAt === null && window !== null && vas.length >= 1;
 
   return (
-    <Workspace title="Tasks" lead="Work for your VA, with a title and a deadline.">
+    <Workspace
+      title="Tasks"
+      lead="Work for your VA, with a title and a deadline."
+      actions={canCreate && window ? <AddTaskButton vas={vas} today={window.today} last={window.last} timeZone={timeZone} /> : undefined}
+    >
       <TaskMetrics tasks={tasks} href={appRoutes.clientTasks} />
-      {canCreate && window && (
-        <Panel title="Add a task">
-          <TaskForm today={window.today} last={window.last} timeZone={timeZone} vas={vas} />
-        </Panel>
-      )}
       <TaskTable
         tasks={tasks}
         hrefFor={clientTaskHref}

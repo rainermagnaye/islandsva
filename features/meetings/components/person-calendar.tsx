@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { wallClockIn } from "@/components/ui/date-math";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ScheduleCalendar } from "@/components/ui/schedule-calendar";
 import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import { BOOKING_TIME_ZONE, type Booking } from "../contract";
-import { BookingDetail } from "./booking-detail";
+
+const BookingDetail = lazy(() => import("./booking-detail").then((m) => ({ default: m.BookingDetail })));
 
 /** Bookings where this person is the staff member or the client. Read only. */
 export function PersonCalendar({ bookings, today, nowMinutes }: { bookings: readonly Booking[]; today: string; nowMinutes: number }) {
@@ -29,7 +30,9 @@ export function PersonCalendar({ bookings, today, nowMinutes }: { bookings: read
     <>
       <ScheduleCalendar showToolbar={false} events={events} today={today} nowMinutes={nowMinutes} timeZone={BOOKING_TIME_ZONE} onEventClick={(event) => setSelectedId(event.id)} />
       {selected && (
-        <BookingDetail booking={selected} canManage={false} onClose={() => setSelectedId(null)} onEdit={() => undefined} onDone={() => undefined} />
+        <Suspense fallback={null}>
+          <BookingDetail booking={selected} canManage={false} onClose={() => setSelectedId(null)} onDone={() => undefined} />
+        </Suspense>
       )}
     </>
   );

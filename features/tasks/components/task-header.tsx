@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, type MenuItem } from "@/components/ui/dropdown-menu";
-import { Form } from "@/components/ui/form";
-import { Modal } from "@/components/ui/modal";
 import { Stepper } from "@/components/ui/stepper";
-import { deleteTask } from "../actions";
 import { TASK_SEVERITY_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES, type Task } from "../contract";
 import { nextStatuses } from "../metrics";
-import { FeedbackDialog, MoveButton, SubmitDialog } from "./task-moves";
-import { TaskForm } from "./task-form";
+import { MoveButton } from "./task-moves";
+
+const ClientTaskDialogs = lazy(() => import("./task-header-dialogs").then((m) => ({ default: m.ClientTaskDialogs })));
+const FeedbackDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ default: m.FeedbackDialog })));
+const SubmitDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ default: m.SubmitDialog })));
 
 export type TaskNotice = { tone: "info" | "success" | "warning"; title: string; body: string; quote?: string | null };
 
@@ -115,58 +115,21 @@ export function TaskHeader({
         </Alert>
       )}
 
-      {viewer === "client" && (
-        <>
-          <Modal open={dialog === "edit"} onClose={close} title="Edit task" size="wide">
-            {dialog === "edit" && edit && <TaskForm today={edit.today} last={edit.last} timeZone={edit.timeZone} task={task} onSaved={close} />}
-          </Modal>
-          <FeedbackDialog open={dialog === "feedback"} onClose={close} taskId={task.id} vaFirstName={task.vaFirstName} reopen={reopen} />
-          <Modal
-            open={dialog === "close"}
-            onClose={close}
-            title="Close without review?"
-            description={`The task closes now. ${task.vaFirstName} won't be asked to submit it.`}
-            role="alertdialog"
-            footer={
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <Button type="button" variant="ghost" onClick={close}>
-                  Keep it open
-                </Button>
-                <MoveButton taskId={task.id} status="done" label="Close task" pendingLabel="Closing" variant="primary" />
-              </div>
-            }
-          />
-          <Modal
-            open={dialog === "delete"}
-            onClose={close}
-            title="Delete this task?"
-            description="This removes the task, its comments, files and activity."
-            role="alertdialog"
-            footer={<DeleteFooter taskId={task.id} onCancel={close} />}
-          />
-        </>
+      {viewer === "client" && (dialog === "edit" || dialog === "close" || dialog === "delete") && (
+        <Suspense fallback={null}>
+          <ClientTaskDialogs dialog={dialog} task={task} edit={edit} onClose={close} />
+        </Suspense>
       )}
-      {viewer === "va" && <SubmitDialog open={dialog === "submit"} onClose={close} taskId={task.id} companyName={task.companyName} />}
+      {dialog === "feedback" && (
+        <Suspense fallback={null}>
+          <FeedbackDialog open onClose={close} taskId={task.id} vaFirstName={task.vaFirstName} reopen={reopen} />
+        </Suspense>
+      )}
+      {dialog === "submit" && (
+        <Suspense fallback={null}>
+          <SubmitDialog open onClose={close} taskId={task.id} companyName={task.companyName} />
+        </Suspense>
+      )}
     </Card>
-  );
-}
-
-function DeleteFooter({ taskId, onCancel }: { taskId: string; onCancel: () => void }) {
-  return (
-    <Form aria-label="Delete this task" onSubmit={deleteTask}>
-      {({ pending }) => (
-        <>
-          <input type="hidden" name="taskId" value={taskId} />
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="danger" loading={pending}>
-              {pending ? "Deleting" : "Delete task"}
-            </Button>
-          </div>
-        </>
-      )}
-    </Form>
   );
 }

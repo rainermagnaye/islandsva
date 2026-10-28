@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { wallClockIn, type IsoDate } from "@/components/ui/date-math";
 import { DropdownMenu, type MenuItem } from "@/components/ui/dropdown-menu";
@@ -14,14 +14,14 @@ import type { AgendaItem, AgendaKind } from "../agenda";
 import { clientGesture, draftFrom, draftOf, ownMeeting, type BookingDraft } from "../booking-draft";
 import { BOOKING_TIME_ZONE, type Booking, type BookingChoice } from "../contract";
 import type { ScheduleRow } from "../schedule";
-import { BookingDetail } from "./booking-detail";
-import { BookingForm } from "./booking-form";
-import { placeBooking } from "./client-moves";
 import { ScheduleTable } from "./schedule-table";
 import { ComingUp } from "./coming-up";
 
 /** One of the client's demo calls, as the calendar draws it. */
 export type CalendarDemo = { id: string; vaName: string; startsAt: string; endsAt: string; state: "pending" | "confirmed" | "completed" };
+
+const ClientBookingForm = lazy(() => import("./client-booking-form").then((m) => ({ default: m.ClientBookingForm })));
+const ClientBookingDetail = lazy(() => import("./client-booking-detail").then((m) => ({ default: m.ClientBookingDetail })));
 
 const DEMO_PREFIX = "demo:";
 const KINDS: readonly { kind: AgendaKind; label: string }[] = [
@@ -152,9 +152,10 @@ export function ClientCalendar({
         actions={<Button type="button" iconLeft="plus" onClick={() => book(today, 9 * 60)}>New meeting</Button>}
         onSlotClick={book}
         eventGesture={(event) => clientGesture(bookings.find((booking) => booking.id === event.id), userId)}
-        onEventMove={(event, next) => {
+        onEventMove={async (event, next) => {
           const booking = bookings.find((item) => item.id === event.id);
           if (!booking) return false;
+          const { placeBooking } = await import("./client-moves");
           return placeBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
         }}
         toolbar={
@@ -180,30 +181,33 @@ export function ClientCalendar({
       />
       <ScheduleTable rows={schedule} onOpenBooking={open} />
       {draft && (
-        <BookingForm mode="create" audience="client" draft={draft} clients={[]} staff={team} creatorName="You" onClose={() => setDraft(null)} onDone={() => done("Meeting added.")} />
+        <Suspense fallback={null}>
+          <ClientBookingForm mode="create" draft={draft} staff={team} creatorName="You" onClose={() => setDraft(null)} onDone={() => done("Meeting added.")} />
+        </Suspense>
       )}
       {selected && !editing && (
-        <BookingDetail
-          booking={selected}
-          canManage={ownMeeting(selected, userId)}
-          audience="client"
-          onClose={() => setSelectedId(null)}
-          onEdit={() => setEditing(true)}
-          onDone={done}
-        />
+        <Suspense fallback={null}>
+          <ClientBookingDetail
+            booking={selected}
+            canManage={ownMeeting(selected, userId)}
+            onClose={() => setSelectedId(null)}
+            onEdit={() => setEditing(true)}
+            onDone={done}
+          />
+        </Suspense>
       )}
       {selected && editing && (
-        <BookingForm
-          mode="edit"
-          audience="client"
-          booking={selected}
-          draft={draftOf(selected)}
-          clients={[]}
-          staff={team}
-          creatorName="You"
-          onClose={() => setEditing(false)}
-          onDone={() => done("Meeting saved.")}
-        />
+        <Suspense fallback={null}>
+          <ClientBookingForm
+            mode="edit"
+            booking={selected}
+            draft={draftOf(selected)}
+            staff={team}
+            creatorName="You"
+            onClose={() => setEditing(false)}
+            onDone={() => done("Meeting saved.")}
+          />
+        </Suspense>
       )}
     </>
   );

@@ -1,19 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import { Form } from "@/components/ui/form";
-import { Modal } from "@/components/ui/modal";
-import { TextField } from "@/components/ui/text-field";
-import { addTaskComment, deleteTaskComment, editTaskComment } from "../actions";
-import { TASK_LIMITS, type CommentField, type TaskComment } from "../contract";
+import type { TaskComment } from "../contract";
+
+const CommentForm = lazy(() => import("./task-comment-form").then((m) => ({ default: m.CommentForm })));
+const DeleteCommentDialog = lazy(() => import("./task-comment-form").then((m) => ({ default: m.DeleteCommentDialog })));
 
 /**
- * The conversation on the task. The add form stays open under the list; the author edits or deletes from the
- * menu. Status moves and their notes live in the activity, not here.
+ * The conversation on the task. The composer loads when someone writes or edits, so the task page doesn't
+ * ship the form on first load. Status moves and their notes live in the activity, not here.
  */
 export function TaskComments({
   taskId,
@@ -32,6 +31,7 @@ export function TaskComments({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState(0);
   const when = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone });
 
@@ -52,7 +52,9 @@ export function TaskComments({
                 <Avatar name={comment.authorFirstName} tone={mine ? "sand" : "lagoon"} size="sm" />
                 {editingId === comment.id ? (
                   <div className="min-w-0 flex-1">
-                    <CommentForm commentId={comment.id} defaultValue={comment.body} onDone={() => setEditingId(null)} />
+                    <Suspense fallback={null}>
+                      <CommentForm commentId={comment.id} defaultValue={comment.body} onDone={() => setEditingId(null)} />
+                    </Suspense>
                   </div>
                 ) : (
                   <>
@@ -83,79 +85,26 @@ export function TaskComments({
       )}
       {canComment && (
         <div className="border-t border-border pt-4">
-          {/* A new key clears the field after a post, without controlling the textarea. */}
-          <CommentForm key={draft} taskId={taskId} onDone={() => setDraft((n) => n + 1)} />
+          {adding ? (
+            <Suspense fallback={null}>
+              <CommentForm
+                key={draft}
+                taskId={taskId}
+                onDone={() => setDraft((n) => n + 1)}
+              />
+            </Suspense>
+          ) : (
+            <Button type="button" variant="secondary" size="sm" iconLeft="plus" onClick={() => setAdding(true)}>
+              Add a comment
+            </Button>
+          )}
         </div>
       )}
-      <Modal open={deletingId !== null} onClose={() => setDeletingId(null)} title="Delete this comment?" description="This removes the comment." role="alertdialog">
-        {deletingId && (
-          <Form
-            aria-label="Delete this comment"
-            onSubmit={async (formData) => {
-              const result = await deleteTaskComment(formData);
-              if (result.ok) setDeletingId(null);
-              return result;
-            }}
-          >
-            {({ pending }) => (
-              <>
-                <input type="hidden" name="commentId" value={deletingId} />
-                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
-                  <Button type="button" variant="ghost" onClick={() => setDeletingId(null)} disabled={pending}>
-                    Keep it
-                  </Button>
-                  <Button type="submit" variant="danger" loading={pending}>
-                    {pending ? "Deleting" : "Delete comment"}
-                  </Button>
-                </div>
-              </>
-            )}
-          </Form>
-        )}
-      </Modal>
-    </Card>
-  );
-}
-
-function CommentForm({ taskId, commentId, defaultValue = "", onDone }: { taskId?: string; commentId?: string; defaultValue?: string; onDone: () => void }) {
-  const editing = commentId !== undefined;
-  return (
-    <Form<CommentField>
-      aria-label={editing ? "Edit comment" : "Add a comment"}
-      onSubmit={async (formData) => {
-        const result = editing ? await editTaskComment(formData) : await addTaskComment(formData);
-        if (result.ok) onDone();
-        return result;
-      }}
-      className="gap-3"
-    >
-      {({ pending, fieldErrors }) => (
-        <>
-          {taskId && <input type="hidden" name="taskId" value={taskId} />}
-          {commentId && <input type="hidden" name="commentId" value={commentId} />}
-          <TextField
-            label={editing ? "Comment" : "Add a comment"}
-            id={editing ? `comment-${commentId}` : "field-new-comment"}
-            name="body"
-            multiline
-            rows={3}
-            required
-            maxLength={TASK_LIMITS.comment}
-            defaultValue={defaultValue}
-            error={fieldErrors.body}
-          />
-          <div className="flex justify-end gap-3">
-            {editing && (
-              <Button type="button" variant="ghost" size="sm" onClick={onDone} disabled={pending}>
-                Cancel
-              </Button>
-            )}
-            <Button type="submit" variant="secondary" size={editing ? "sm" : "md"} loading={pending}>
-              {pending ? "Saving" : editing ? "Save comment" : "Post comment"}
-            </Button>
-          </div>
-        </>
+      {deletingId && (
+        <Suspense fallback={null}>
+          <DeleteCommentDialog commentId={deletingId} onClose={() => setDeletingId(null)} />
+        </Suspense>
       )}
-    </Form>
+    </Card>
   );
 }

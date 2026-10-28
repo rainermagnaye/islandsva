@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import type { Tone } from "@/components/ui/tone";
-import { DecideDialog, ProfileDialog, RequestDemoDialog } from "./match-dialogs";
 import { OfferCard, type OfferView } from "./offer-card";
+
+const DecideDialog = lazy(() => import("./match-dialogs").then((m) => ({ default: m.DecideDialog })));
+const ProfileDialog = lazy(() => import("./match-dialogs").then((m) => ({ default: m.ProfileDialog })));
+const RequestDemoDialog = lazy(() => import("./match-dialogs").then((m) => ({ default: m.RequestDemoDialog })));
 
 export type { OfferView };
 
@@ -112,7 +115,7 @@ export function MatchList({
       )}
 
       {dialog && (
-        <>
+        <Suspense fallback={null}>
           <ProfileDialog
             open={dialog.kind === "profile"}
             onClose={close}
@@ -124,7 +127,7 @@ export function MatchList({
           />
           <RequestDemoDialog open={dialog.kind === "request"} onClose={close} name={dialog.offer.name} slots={dialog.offer.slots} timeZone={timeZone} today={today} />
           <DecideDialog open={dialog.kind === "accepted" || dialog.kind === "declined"} onClose={close} offerId={dialog.offer.id} name={dialog.offer.name} status={dialog.kind === "declined" ? "declined" : "accepted"} />
-        </>
+        </Suspense>
       )}
     </div>
   );

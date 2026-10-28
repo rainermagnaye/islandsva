@@ -3,7 +3,6 @@
 import { useId, useState } from "react";
 import { cx } from "@/lib/cx";
 import { convertWallClock, formatDate, minutesOf, clockLabel, partOfDay, type IsoDate, type IsoLocalDateTime } from "./date-math";
-import { EmptyState } from "./empty-state";
 import { Icon } from "./icon";
 
 /** A start time, or one with availability and the value a form posts (default: the start time itself). */
@@ -46,7 +45,12 @@ export function TimeSlotPicker({ slots, timeZone = "Asia/Manila", otherTimeZone,
   const title = label ?? (date ? formatDate(date, { weekday: "long", month: "long", day: "numeric" }) : "Pick a time");
 
   if (!normal.some((slot) => slot.available)) {
-    return <EmptyState compact title="No times left that day" description="Please pick another date." />;
+    return (
+      <p className="m-0 grid gap-1">
+        <span className="font-semibold">No times left that day</span>
+        <span className="type-body-sm text-ink-muted">Please pick another date.</span>
+      </p>
+    );
   }
 
   return (

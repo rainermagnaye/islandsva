@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { adminLeadHref, appRoutes } from "@/content/routes";
-import { BookingDetail } from "@/features/meetings/components/booking-detail";
 import { BOOKING_STATUS_LABELS, formatBookingWhen, type Booking } from "@/features/meetings/contract";
 import { LEAD_EVENT_LABELS, type LeadDetail, type LeadEvent } from "../contract";
 import { TimelineButtons } from "./lead-actions";
+
+const AdminBookingDetail = lazy(() => import("@/features/meetings/components/admin-booking-detail").then((m) => ({ default: m.AdminBookingDetail })));
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
 const stamp = (iso: string) => `${when.format(new Date(iso))} UTC`;
@@ -89,13 +90,15 @@ export function LeadTimeline({ lead, events, meetings }: { lead: LeadDetail; eve
       </Card>
 
       {selected && (
-        <BookingDetail
-          booking={selected}
-          canManage
-          onClose={() => setSelectedId(null)}
-          onEdit={() => undefined}
-          onDone={(message) => toast.show({ title: message, tone: "success" })}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingDetail
+            booking={selected}
+            canManage
+            onClose={() => setSelectedId(null)}
+            onEdit={() => undefined}
+            onDone={(message) => toast.show({ title: message, tone: "success" })}
+          />
+        </Suspense>
       )}
     </div>
   );

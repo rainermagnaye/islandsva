@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cx } from "@/lib/cx";
 import { BOOKING_TIME_ZONE } from "../contract";
@@ -31,36 +30,13 @@ const EMPTY: Record<ScheduleKind, string> = { meeting: "No meetings", task: "No 
 
 /**
  * Everything on the client's calendar as one list, newest first, filtered by type. A meeting opens its details;
- * a task opens the task, a demo call VA Match.
+ * a task opens the task, a demo call VA Match. Plain markup so the calendar doesn't pay for the selectable
+ * DataTable on first load.
  */
 export function ScheduleTable({ rows, onOpenBooking }: { rows: readonly ScheduleRow[]; onOpenBooking: (id: string) => void }) {
   const [filter, setFilter] = useState<Filter>("all");
   const shown = filter === "all" ? rows : rows.filter((row) => row.kind === filter);
   const count = shown.length === 1 ? "1 item" : `${shown.length} items`;
-  const columns: Column<ScheduleRow>[] = [
-    {
-      key: "when",
-      label: "When",
-      render: (row) => {
-        const at = when(row);
-        const cell = <CellTitle title={at.title} subtitle={at.subtitle} />;
-        return row.href ? (
-          <Link href={row.href} className="row-link">{cell}</Link>
-        ) : (
-          <button type="button" className="row-link" onClick={() => row.bookingId && onOpenBooking(row.bookingId)}>{cell}</button>
-        );
-      },
-    },
-    { key: "title", label: "Title", render: (row) => <span className="block truncate">{row.title}</span> },
-    { key: "type", label: "Type", nowrap: true, render: (row) => SCHEDULE_KIND_LABELS[row.kind] },
-    { key: "with", label: "With", render: (row) => <span className="block truncate">{row.who}</span> },
-    {
-      key: "status",
-      label: "Status",
-      nowrap: true,
-      render: (row) => <Badge tone={row.status.tone} size="sm" dot>{row.status.label}</Badge>,
-    },
-  ];
 
   return (
     <div className="grid gap-4">
@@ -81,21 +57,62 @@ export function ScheduleTable({ rows, onOpenBooking }: { rows: readonly Schedule
           </button>
         ))}
       </nav>
-      <DataTable
-        caption="Schedules"
-        columns={columns}
-        rows={shown}
-        rowKey={(row) => row.key}
-        rowLabel={(row) => row.title}
-        keepHeader
-        empty={
-          filter === "all" ? (
-            <EmptyState compact title="Nothing scheduled yet" description="Meetings, task deadlines and demo calls show up here." />
-          ) : (
-            <EmptyState compact title={EMPTY[filter]} action={<Button type="button" variant="ghost" size="sm" onClick={() => setFilter("all")}>Show all</Button>} />
-          )
-        }
-      />
+      <div className="data-table">
+        <div className="data-table__scroll">
+          <table>
+            <caption className="sr-only">Schedules</caption>
+            <thead>
+              <tr>
+                <th scope="col">When</th>
+                <th scope="col">Title</th>
+                <th scope="col">Type</th>
+                <th scope="col">With</th>
+                <th scope="col" className="data-table__nowrap">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="data-table__empty">
+                    {filter === "all" ? (
+                      <EmptyState compact title="Nothing scheduled yet" description="Meetings, task deadlines and demo calls show up here." />
+                    ) : (
+                      <EmptyState compact title={EMPTY[filter]} action={<Button type="button" variant="ghost" size="sm" onClick={() => setFilter("all")}>Show all</Button>} />
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                shown.map((row) => {
+                  const at = when(row);
+                  const whenCell = (
+                    <>
+                      <span className="block font-semibold text-ink">{at.title}</span>
+                      <span className="block text-[0.8125rem] font-normal text-ink-muted">{at.subtitle}</span>
+                    </>
+                  );
+                  return (
+                    <tr key={row.key}>
+                      <th scope="row">
+                        {row.href ? (
+                          <Link href={row.href} className="row-link">{whenCell}</Link>
+                        ) : (
+                          <button type="button" className="row-link" onClick={() => row.bookingId && onOpenBooking(row.bookingId)}>{whenCell}</button>
+                        )}
+                      </th>
+                      <td><span className="block truncate">{row.title}</span></td>
+                      <td>{SCHEDULE_KIND_LABELS[row.kind]}</td>
+                      <td><span className="block truncate">{row.who}</span></td>
+                      <td className="data-table__nowrap">
+                        <Badge tone={row.status.tone} size="sm" dot>{row.status.label}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <p className="m-0 type-body-sm text-ink-muted">{count}</p>
     </div>
   );

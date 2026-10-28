@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
-import { Modal } from "@/components/ui/modal";
-import { TextField } from "@/components/ui/text-field";
-import { sendVaMessage } from "../actions";
-import { VA_MESSAGE_LIMIT, type VaMessageField } from "../contract";
 
 export type VaNote = { id: string; body: string; sent: string; author: string };
+
+const VaMessageDialog = lazy(() => import("./va-message-dialog").then((m) => ({ default: m.VaMessageDialog })));
 
 /**
  * "Message <name>" on a VA's profile: a note to the VA in a dialog, with the earlier notes under it. Stays until
@@ -33,47 +30,18 @@ export function VaMessageButton({ name, vaId, messages, compact = false }: { nam
       >
         {compact ? "Message" : `Message ${name}`}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={`Message ${name}`}>
-        <div className="grid gap-5">
-          <Form<VaMessageField>
-            key={formKey}
-            aria-label={`Message ${name}`}
-            onSubmit={async (formData) => {
-              const result = await sendVaMessage(formData);
-              if (result.ok) setFormKey((key) => key + 1);
-              return result;
-            }}
-            className="gap-3"
-          >
-            {({ pending, fieldErrors }) => (
-              <>
-                <input type="hidden" name="vaId" value={vaId} />
-                <TextField label="Message" name="body" multiline required maxLength={VA_MESSAGE_LIMIT} error={fieldErrors.body} data-autofocus />
-                <div className="flex justify-end">
-                  <Button type="submit" variant="secondary" loading={pending}>
-                    {pending ? "Sending" : "Send message"}
-                  </Button>
-                </div>
-              </>
-            )}
-          </Form>
-          {messages.length > 0 && (
-            <section aria-label="Earlier messages" className="grid gap-3 border-t border-border pt-4">
-              <h3 className="m-0 type-label text-ink-muted">Earlier messages</h3>
-              <ul className="m-0 grid list-none gap-3 p-0">
-                {messages.map((message) => (
-                  <li key={message.id} className="grid gap-1">
-                    <p className="m-0 type-body-sm whitespace-pre-line">{message.body}</p>
-                    <p className="m-0 type-caption text-ink-muted">
-                      {message.author} · {message.sent}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      </Modal>
+      {open && (
+        <Suspense fallback={null}>
+          <VaMessageDialog
+            name={name}
+            vaId={vaId}
+            messages={messages}
+            formKey={formKey}
+            onClose={() => setOpen(false)}
+            onSent={() => setFormKey((key) => key + 1)}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

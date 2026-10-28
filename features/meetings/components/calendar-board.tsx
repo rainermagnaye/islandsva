@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { wallClockIn, type IsoDate } from "@/components/ui/date-math";
 import type { ScheduleEvent, ScheduleGesture } from "@/components/ui/schedule-events";
@@ -10,9 +10,10 @@ import type { DemoCalendarRow } from "@/features/demos/calendar";
 import { editBooking, rescheduleDiscoveryAction } from "../actions";
 import { draftFrom, draftOf, MANUAL_GESTURE, type BookingDraft } from "../booking-draft";
 import { BOOKING_TIME_ZONE, type Booking, type BookingChoice } from "../contract";
-import { BookingDetail } from "./booking-detail";
-import { BookingForm } from "./booking-form";
 import { MeetingsTable } from "./meetings-table";
+
+const AdminBookingForm = lazy(() => import("./admin-booking-form").then((m) => ({ default: m.AdminBookingForm })));
+const AdminBookingDetail = lazy(() => import("./admin-booking-detail").then((m) => ({ default: m.AdminBookingDetail })));
 
 function asEvents(bookings: readonly Booking[]): ScheduleEvent[] {
   return bookings.map((booking) => ({
@@ -93,36 +94,42 @@ export function CalendarBoard({
       <MeetingsTable bookings={bookings} onOpen={open} />
 
       {draft && (
-        <BookingForm
-          mode="create"
-          draft={draft}
-          clients={clients}
-          staff={staff}
-          creatorName={creatorName}
-          onClose={() => setDraft(null)}
-          onDone={() => done("Meeting added.")}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingForm
+            mode="create"
+            draft={draft}
+            clients={clients}
+            staff={staff}
+            creatorName={creatorName}
+            onClose={() => setDraft(null)}
+            onDone={() => done("Meeting added.")}
+          />
+        </Suspense>
       )}
       {selected && !editing && (
-        <BookingDetail
-          booking={selected}
-          canManage
-          onClose={() => setSelectedId(null)}
-          onEdit={() => setEditing(true)}
-          onDone={done}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingDetail
+            booking={selected}
+            canManage
+            onClose={() => setSelectedId(null)}
+            onEdit={() => setEditing(true)}
+            onDone={done}
+          />
+        </Suspense>
       )}
       {selected && editing && (
-        <BookingForm
-          mode="edit"
-          booking={selected}
-          draft={draftOf(selected)}
-          clients={clients}
-          staff={staff}
-          creatorName={creatorName}
-          onClose={() => setEditing(false)}
-          onDone={() => done("Meeting saved.")}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingForm
+            mode="edit"
+            booking={selected}
+            draft={draftOf(selected)}
+            clients={clients}
+            staff={staff}
+            creatorName={creatorName}
+            onClose={() => setEditing(false)}
+            onDone={() => done("Meeting saved.")}
+          />
+        </Suspense>
       )}
     </div>
   );

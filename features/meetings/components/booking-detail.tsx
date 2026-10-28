@@ -16,28 +16,32 @@ import { Icon } from "@/components/ui/icon";
 import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
 import { meetingFileHref } from "@/content/routes";
+import type { SubmitResult } from "@/types/form";
 import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
-import { cancelBookingAction, completeBookingAction, confirmDiscoveryAction, deleteBookingNoteAction, rescheduleDiscoveryAction, saveBookingNote } from "../actions";
-import { cancelClientBookingAction, completeClientBookingAction, saveClientBookingNote } from "../client-actions";
-import { BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField } from "../contract";
+import { BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingNoteField } from "../contract";
 import { NoteForm } from "./booking-note-form";
 import { at, useStarted, clocks, guestNames, Field } from "./booking-detail-parts";
 
-const ACTIONS = {
-  admin: { cancel: cancelBookingAction, complete: completeBookingAction, note: saveBookingNote },
-  client: { cancel: cancelClientBookingAction, complete: completeClientBookingAction, note: saveClientBookingNote },
+export type BookingDetailActions = {
+  cancel: (formData: FormData) => Promise<SubmitResult>;
+  complete: (formData: FormData) => Promise<SubmitResult>;
+  note: (formData: FormData) => Promise<SubmitResult<BookingNoteField>>;
+  editNote?: (formData: FormData) => Promise<SubmitResult<BookingNoteField>>;
+  deleteNote?: (formData: FormData) => Promise<SubmitResult>;
+  confirmDiscovery?: (formData: FormData) => Promise<SubmitResult>;
+  rescheduleDiscovery?: (formData: FormData) => Promise<SubmitResult<BookingField>>;
 };
 
 /**
- * A booking's details and notes. Admins can edit, cancel and add a note. A client manages the meetings they booked
- * the same way, except that only an admin edits or deletes a note.
+ * A booking's details and notes. The caller passes the Server Actions so admin and client calendars don't
+ * ship each other's code. A read-only view (VA calendar) omits them.
  */
-export function BookingDetail({ booking, canManage, audience = "admin", onClose, onEdit, onDone }: {
+export function BookingDetail({ booking, canManage, actions, onClose, onEdit, onDone }: {
   booking: Booking;
   canManage: boolean;
-  audience?: "admin" | "client";
+  actions?: BookingDetailActions;
   onClose: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDone: (message: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -49,17 +53,20 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
   const [claimError, setClaimError] = useState<string | null>(null);
   const [dates, setDates] = useState<{ min: IsoDate; max: IsoDate } | null>(null);
   const started = useStarted(booking.startsAt);
-  const act = ACTIONS[audience];
-  const editsNotes = canManage && audience === "admin";
+  const manage = canManage && actions;
+  const editNote = actions?.editNote;
+  const deleteNote = actions?.deleteNote;
+  const rescheduleDiscovery = actions?.rescheduleDiscovery;
+  const editsNotes = Boolean(manage && editNote && deleteNote);
   const discovery = booking.kind === "discovery";
   const openCall = booking.status === "requested" || booking.status === "scheduled";
   const notes = booking.events.filter((event) => event.kind === "note");
   const attachments = notes.filter((note) => note.attachmentName && note.attachmentType);
-  const menu: MenuItem[] = !canManage ? [] : discovery ? [
-    ...(booking.status === "requested" ? [{ label: "Assign to me and confirm", icon: "check" as const, onSelect: claim }] : []),
-    ...(openCall ? [{ label: "Reschedule", icon: "calendar" as const, onSelect: openReschedule }] : []),
+  const menu: MenuItem[] = !manage ? [] : discovery ? [
+    ...(booking.status === "requested" && actions.confirmDiscovery ? [{ label: "Assign to me and confirm", icon: "check" as const, onSelect: claim }] : []),
+    ...(openCall && actions.rescheduleDiscovery ? [{ label: "Reschedule", icon: "calendar" as const, onSelect: openReschedule }] : []),
   ] : [
-    { label: "Edit", icon: "edit", onSelect: onEdit, disabled: booking.status !== "scheduled" },
+    { label: "Edit", icon: "edit", onSelect: onEdit ?? (() => undefined), disabled: booking.status !== "scheduled" },
     { label: "Cancel meeting", danger: true, onSelect: () => setConfirming(true), disabled: booking.status !== "scheduled" },
   ];
 
@@ -70,10 +77,11 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
   }
 
   async function claim() {
+    if (!actions?.confirmDiscovery) return;
     setClaimError(null);
     const data = new FormData();
     data.set("meetingId", booking.id);
-    const result = await confirmDiscoveryAction(data);
+    const result = await actions.confirmDiscovery(data);
     if (result.ok) onDone("Meeting confirmed.");
     else setClaimError(result.message);
   }
@@ -88,9 +96,9 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
         actions={menu.length > 0 ? (
           <DropdownMenu label="More" icon="menu" iconOnly align="end" items={menu} />
         ) : undefined}
-        footer={canManage && booking.status === "scheduled" ? (
+        footer={manage && booking.status === "scheduled" ? (
           <Form aria-label="Complete booking" className="w-full justify-items-end gap-2" onSubmit={async (formData) => {
-            const result = await act.complete(formData);
+            const result = await actions.complete(formData);
             if (result.ok) onDone("Booking completed.");
             return result;
           }}>
@@ -124,7 +132,7 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
           <Card as="section" padding="none">
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
               <h3 className="m-0 type-label">Notes</h3>
-              {canManage && (
+              {manage && (
                 <button
                   type="button"
                   aria-label={adding ? "Close note" : "Add a note"}
@@ -143,9 +151,9 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
                 <ul className="m-0 grid list-none gap-3 p-0">
                   {notes.map((note) => (
                     <li key={note.id} className="flex items-start gap-2">
-                      {editingId === note.id ? (
+                      {editingId === note.id && editNote ? (
                         <div className="min-w-0 flex-1">
-                          <NoteForm eventId={note.id} defaultValue={note.body ?? ""} onDone={() => { setEditingId(null); onDone("Note saved."); }} />
+                          <NoteForm eventId={note.id} defaultValue={note.body ?? ""} save={editNote} onDone={() => { setEditingId(null); onDone("Note saved."); }} />
                         </div>
                       ) : (
                         <>
@@ -171,13 +179,13 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
                   ))}
                 </ul>
               )}
-              {canManage && adding && <NoteForm meetingId={booking.id} audience={audience} onDone={() => { setAdding(false); onDone("Note added."); }} />}
+              {manage && adding && <NoteForm meetingId={booking.id} save={actions.note} onDone={() => { setAdding(false); onDone("Note added."); }} />}
             </div>
           </Card>
           <Card as="section" padding="none">
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
               <h3 className="m-0 type-label">Attachments</h3>
-              {canManage && (
+              {manage && (
                 <button
                   type="button"
                   aria-label={attaching ? "Close file" : "Add a file"}
@@ -201,7 +209,7 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
                   ))}
                 </ul>
               )}
-              {canManage && attaching && (
+              {manage && attaching && (
                 <Form aria-label="Add a file" onSubmit={async (formData) => {
                   const file = formData.get("attachment");
                   const title = formData.get("attachmentName");
@@ -210,7 +218,7 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
                   if (!accepted.ok) return { ok: false, message: accepted.message };
                   formData.set("meetingId", booking.id);
                   formData.set("note", accepted.name);
-                  const result = await act.note(formData);
+                  const result = await actions.note(formData);
                   if (result.ok) {
                     setAttaching(false);
                     onDone("File added.");
@@ -231,10 +239,10 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
           </Card>
         </div>
       </Modal>
-      {deletingId && (
+      {deletingId && deleteNote && (
         <Modal open onClose={() => setDeletingId(null)} title="Delete note" description="Are you sure you want to delete this note?" role="alertdialog">
           <Form aria-label="Delete note" onSubmit={async (formData) => {
-            const result = await deleteBookingNoteAction(formData);
+            const result = await deleteNote(formData);
             if (result.ok) {
               setDeletingId(null);
               onDone("Note deleted.");
@@ -253,10 +261,10 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
           </Form>
         </Modal>
       )}
-      {rescheduling && dates && (
+      {rescheduling && dates && rescheduleDiscovery && (
         <Modal open onClose={() => setRescheduling(false)} title="Reschedule" description="Choose a new time in Philippine time.">
           <Form<BookingField> aria-label="Reschedule discovery call" onSubmit={async (formData) => {
-            const result = await rescheduleDiscoveryAction(formData);
+            const result = await rescheduleDiscovery(formData);
             if (result.ok) {
               setRescheduling(false);
               onDone("Meeting rescheduled.");
@@ -279,10 +287,10 @@ export function BookingDetail({ booking, canManage, audience = "admin", onClose,
           </Form>
         </Modal>
       )}
-      {confirming && (
+      {confirming && actions && (
         <Modal open onClose={() => setConfirming(false)} title="Cancel meeting" description="Are you sure you want to cancel this meeting?" role="alertdialog">
           <Form aria-label="Cancel meeting" onSubmit={async (formData) => {
-            const result = await act.cancel(formData);
+            const result = await actions.cancel(formData);
             if (result.ok) onDone("Meeting cancelled.");
             return result;
           }}>
