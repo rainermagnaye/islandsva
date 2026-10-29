@@ -23,7 +23,7 @@ export default function VaHomePage() {
 async function VaHome() {
   const user = await requireRole(["va"]);
   const access = await loadVaAccess(user.id);
-  if (access.open) return <VaDashboard vaId={user.id} firstName={access.account?.fullName.split(" ")[0] ?? "there"} />;
+  if (access.open) return <VaDashboard vaId={user.id} firstName={access.account?.fullName.trim().split(/\s+/)[0] || "there"} />;
   if (!access.account) return <Workspace title="Dashboard" />;
   const account = access.account;
   const review = access.profile?.reviewStatus ?? "pending";
