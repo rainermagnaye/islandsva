@@ -16,13 +16,14 @@ import { BOOKING_TIME_ZONE } from "@/features/meetings/contract";
 import { AddTaskButton } from "@/features/tasks/components/add-task-button";
 import { ReviewBanner } from "@/features/tasks/components/review-banner";
 import { TASK_STATUS_LABELS, TASK_STATUS_TONES, type Task } from "@/features/tasks/contract";
-import { getOwnCompany, listTasks } from "@/features/tasks/dal";
+import { getOwnCompany, listTasks, listWorkSessions } from "@/features/tasks/dal";
 import { deadlineWindow, isOverdue, sortTasks, taskTimeZone } from "@/features/tasks/metrics";
 import { dashboardFigures, datedTasks, reviewQueue, taskLine, vaWork } from "@/features/tasks/team";
+import { delayedIds, hoursLabel, msBetween, packageWeek } from "@/features/tasks/time";
 import { employeeHasAvatar } from "@/features/users/employee-dal";
 import { requireRole } from "@/lib/auth/session";
 import { DashboardTasks, type DashboardTask } from "./_components/dashboard-tasks";
-import { ComingUpCard, TeamCard, type TeamMember } from "./_components/dashboard-side";
+import { ComingUpCard, PackageCard, TeamCard, type TeamMember } from "./_components/dashboard-side";
 import { greeting, longDay } from "./_components/greeting";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -61,9 +62,11 @@ async function ClientHome() {
     listBookings(),
     listClientDemos(client.id),
   ]);
-  const [photos, latestDemo] = await Promise.all([
+  const [photos, latestDemo, sessions] = await Promise.all([
     Promise.all(assignments.map((assignment) => employeeHasAvatar(assignment.vaId))),
     assignments.length === 0 ? getLatestDemo(client.id) : Promise.resolve(null),
+    // Every session on the client's tasks: Delayed needs a task's whole time, the package card this week's.
+    listWorkSessions(tasks.map((task) => task.id)),
   ]);
 
   const now = new Date();
@@ -71,6 +74,9 @@ async function ClientHome() {
   const window = deadlineWindow(zone);
   const canCreate = assignments.length > 0 && company?.status === "active" && company.disabledAt === null && window !== null;
   const figures = dashboardFigures(tasks, zone, now);
+  const delayed = delayedIds(tasks, sessions, now);
+  const week = packageWeek(zone, now);
+  const weekHours = hoursLabel(msBetween([...sessions.values()].flat(), week.start, week.end, now));
   const waiting = reviewQueue(tasks);
 
   // Each assistant's tone and photo, shared by their task rows and their line in "My assistants".
@@ -91,6 +97,7 @@ async function ClientHome() {
       photoSrc: people.get(task.vaId)?.photoSrc,
       line: taskLine(task, zone, now),
       late,
+      delayed: delayed.has(task.id),
       status: late ? { label: "Overdue", tone: "danger" } : { label: TASK_STATUS_LABELS[task.status], tone: TASK_STATUS_TONES[task.status] },
       group,
     };
@@ -179,6 +186,7 @@ async function ClientHome() {
           />
         </div>
         <aside aria-label="Your week" className="grid min-w-0 flex-[1_1_18rem] gap-5 lg:max-w-[23.75rem]">
+          <PackageCard usedHours={weekHours} packageHours={client.hoursPerWeek} weekOf={week.monday} tasksHref={appRoutes.clientTasks} />
           <ComingUpCard items={next} today={todayIn(BOOKING_TIME_ZONE, now)} calendarHref={appRoutes.clientCalendar} />
           <TeamCard team={team} allHref={appRoutes.clientAssistants} empty={<ClientDemoCard demo={latestDemo} timeZone={client.timezone} />} />
         </aside>

@@ -7,10 +7,11 @@ import { TextField } from "@/components/ui/text-field";
 import { createTask, updateTask } from "../actions";
 import { TASK_LIMITS, type Task, type TaskField } from "../contract";
 import { DeadlineFields } from "./deadline-fields";
+import { SeverityDurationFields } from "./severity-duration-fields";
 import { VaAssignField } from "./va-assign-field";
 
 /**
- * Add a task, or change its title and deadline. A new task names its VAs: chosen in the form when it opens from
+ * Add a task, or change its title, severity, duration and deadline. A new task names its VAs: chosen in the form when it opens from
  * a general place, or fixed (shown, not editable) when it opens from one VA's card or profile.
  */
 export function TaskForm({
@@ -56,6 +57,13 @@ export function TaskForm({
           {stay && <input type="hidden" name="stay" value="1" />}
           <TextField label="Title" name="title" required maxLength={TASK_LIMITS.title} defaultValue={task?.title} error={fieldErrors.title} />
           <TextField label="Description" name="description" multiline optional maxLength={TASK_LIMITS.description} defaultValue={task?.description ?? ""} error={fieldErrors.description} />
+          <SeverityDurationFields
+            severity={task?.severity}
+            durationMinutes={task?.durationMinutes}
+            severityError={fieldErrors.severity}
+            hoursError={fieldErrors.durationHours}
+            minutesError={fieldErrors.durationMinutes}
+          />
           <DeadlineFields
             today={today}
             last={last}

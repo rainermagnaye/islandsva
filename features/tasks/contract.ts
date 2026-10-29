@@ -14,6 +14,19 @@ export const TASK_SEVERITY_LABELS: Record<TaskSeverity, string> = {
   high: "High",
 };
 
+/**
+ * How long a task should take, in minutes. The client picks it; the severity sets the starting value. The VA's
+ * timer is measured against it (more time is "Delayed"). Matches the tasks_duration_range check.
+ */
+export const TASK_DURATION = {
+  min: 5,
+  max: 600,
+  defaults: { low: 30, medium: 60, high: 120 } satisfies Record<TaskSeverity, number>,
+} as const;
+
+/** One stretch of the VA's work on a task. `endedAt` is null while the timer runs. Times are UTC ISO. */
+export type WorkSession = { id: string; taskId: string; startedAt: string; endedAt: string | null };
+
 /** In order. `done` is stored under that name and shown as Closed: the client approved it or closed it. */
 export const TASK_STATUSES = ["todo", "in_progress", "review", "done"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -47,7 +60,7 @@ export type TaskEvent = {
   createdAt: string;
 };
 
-export type TaskField = "title" | "description" | "severity" | "deadline" | "deadlineTime" | "vaId";
+export type TaskField = "title" | "description" | "severity" | "durationHours" | "durationMinutes" | "deadline" | "deadlineTime" | "vaId";
 export type TaskStatusField = "status";
 /** The handover note (VA) or the feedback (client) sent with a move. */
 export type TaskNoteField = "note";
@@ -61,6 +74,8 @@ export type Task = {
   title: string;
   description: string | null;
   severity: TaskSeverity;
+  /** How long the work should take, in minutes. */
+  durationMinutes: number;
   deadline: string;
   /** "HH:MM" in `deadlineTimezone`. Null is the end of that day. */
   deadlineTime: string | null;

@@ -12,6 +12,7 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   title: id,
   description: null,
   severity: "medium",
+  durationMinutes: 60,
   deadline: "2026-11-05",
   deadlineTime: null,
   deadlineTimezone: ZONE,

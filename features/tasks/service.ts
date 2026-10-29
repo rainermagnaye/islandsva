@@ -1,7 +1,25 @@
 import "server-only";
 import { TASK_LIMITS, type TaskSeverity, type TaskStatus } from "./contract";
-import { deleteTask as deleteTaskRow, deleteTaskComment, getOwnCompany, getTask, insertTask, insertTaskAttachment, insertTaskComment, listActiveVas, listTaskAttachments, listTasks, setTaskStatus, updateTask, updateTaskComment, type TaskWrite } from "./dal";
+import {
+  deleteTask as deleteTaskRow,
+  deleteTaskComment,
+  getOwnCompany,
+  getTask,
+  insertTask,
+  insertTaskAttachment,
+  insertTaskComment,
+  listActiveVas,
+  listTaskAttachments,
+  listTasks,
+  pauseTaskTimer,
+  setTaskStatus,
+  startTaskTimer,
+  updateTask,
+  updateTaskComment,
+  type TaskWrite,
+} from "./dal";
 import { acceptableDeadline, taskTimeZone } from "./metrics";
+import { defaultDuration } from "./time";
 
 export type { TaskWrite };
 
@@ -10,7 +28,17 @@ export type { TaskWrite };
 
 export async function createTask(
   actorId: string,
-  input: { title: string; description?: string; severity?: TaskSeverity; deadline: string; deadlineTime: string; vaId?: string; vaIds?: readonly string[] },
+  input: {
+    title: string;
+    description?: string;
+    severity?: TaskSeverity;
+    /** Minutes; the severity's default when the form sent none. */
+    durationMinutes?: number;
+    deadline: string;
+    deadlineTime: string;
+    vaId?: string;
+    vaIds?: readonly string[];
+  },
   files: readonly { name: string; contentType: string; bytes: Uint8Array }[] = [],
 ): Promise<TaskWrite> {
   const company = await getOwnCompany(actorId);
@@ -23,9 +51,20 @@ export async function createTask(
   const requested = input.vaIds && input.vaIds.length > 0 ? input.vaIds : input.vaId ? [input.vaId] : [];
   if (requested.length === 0 || requested.some((vaId) => !vas.some((va) => va.id === vaId))) return { ok: false, field: "vaId" };
   const severity = input.severity ?? "medium";
+  const durationMinutes = input.durationMinutes ?? defaultDuration(severity);
   let first = "";
   for (const vaId of requested) {
-    const created = await insertTask({ clientId: company.id, vaId, title: input.title, description: input.description || null, severity, deadline: input.deadline, deadlineTime: input.deadlineTime, createdBy: actorId });
+    const created = await insertTask({
+      clientId: company.id,
+      vaId,
+      title: input.title,
+      description: input.description || null,
+      severity,
+      durationMinutes,
+      deadline: input.deadline,
+      deadlineTime: input.deadlineTime,
+      createdBy: actorId,
+    });
     if (!created.ok) return created;
     if (!first) first = created.id;
     for (const file of files) {
@@ -36,7 +75,10 @@ export async function createTask(
   return { ok: true, id: first };
 }
 
-export async function editTask(actorId: string, input: { taskId: string; title: string; description?: string; deadline: string; deadlineTime: string }): Promise<TaskWrite> {
+export async function editTask(
+  actorId: string,
+  input: { taskId: string; title: string; description?: string; severity?: TaskSeverity; durationMinutes?: number; deadline: string; deadlineTime: string },
+): Promise<TaskWrite> {
   const company = await getOwnCompany(actorId);
   if (!company) return { ok: false, missing: true };
   const existing = await getTask(input.taskId);
@@ -44,16 +86,38 @@ export async function editTask(actorId: string, input: { taskId: string; title: 
   const when = acceptableDeadline(input.deadline, input.deadlineTime, existing.deadlineTimezone);
   if (when === "date") return { ok: false, field: "deadline" };
   if (when === "time") return { ok: false, field: "deadlineTime" };
-  return updateTask(input.taskId, { title: input.title, description: input.description || null, deadline: input.deadline, deadlineTime: input.deadlineTime });
+  return updateTask(input.taskId, {
+    title: input.title,
+    description: input.description || null,
+    // A form without these keeps what the task has.
+    severity: input.severity ?? existing.severity,
+    durationMinutes: input.durationMinutes ?? existing.durationMinutes,
+    deadline: input.deadline,
+    deadlineTime: input.deadlineTime,
+  });
 }
 
 export async function removeTask(taskId: string): Promise<TaskWrite> {
   return deleteTaskRow(taskId);
 }
 
-/** A move with no note: the VA starts, the client approves or closes. The database decides who may. */
+/**
+ * A move with no note: the VA starts, the client approves or closes. The database decides who may. Starting
+ * (to In progress) goes through the VA's timer, so the first session opens with the move.
+ */
 export async function changeTaskStatus(input: { taskId: string; status: TaskStatus }): Promise<TaskWrite> {
+  if (input.status === "in_progress") return startTaskTimer(input.taskId);
   return setTaskStatus(input.taskId, input.status);
+}
+
+/** The VA starts or resumes their clock on a task. */
+export async function startTimer(taskId: string): Promise<TaskWrite> {
+  return startTaskTimer(taskId);
+}
+
+/** The VA pauses their clock on a task. */
+export async function pauseTimer(taskId: string): Promise<TaskWrite> {
+  return pauseTaskTimer(taskId);
 }
 
 /** The VA hands the task over for review, with an optional note on what was done. */

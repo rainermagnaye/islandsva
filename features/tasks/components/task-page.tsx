@@ -5,12 +5,14 @@ import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
 import { Card } from "@/components/ui/card";
 import { clockLabel, formatDate, minutesOf } from "@/components/ui/date-math";
 import { ACTIVITY_LABELS, lastAt, openFeedback, progressStep, taskActivity } from "../activity";
-import { TASK_SEVERITY_LABELS, type Task, type TaskComment, type TaskEvent } from "../contract";
+import { TASK_SEVERITY_LABELS, type Task, type TaskComment, type TaskEvent, type WorkSession } from "../contract";
 import { isOverdue, relativeDay } from "../metrics";
+import { formatMinutes } from "../time";
 import { TaskComments } from "./task-comments";
 import { TaskDetails, type ActivityView } from "./task-details";
 import { TaskFiles, type TaskFileView } from "./task-files";
 import { TaskHeader, type TaskNotice } from "./task-header";
+import { TaskTime } from "./task-time";
 
 type Viewer = "client" | "va";
 
@@ -24,6 +26,7 @@ export function TaskPage({
   viewerId,
   task,
   events,
+  sessions,
   comments,
   files,
   timeZone,
@@ -39,6 +42,8 @@ export function TaskPage({
   viewerId: string;
   task: Task;
   events: readonly TaskEvent[];
+  /** The VA's work sessions on this task, oldest first. */
+  sessions: readonly WorkSession[];
   comments: readonly TaskComment[];
   files: readonly TaskFileView[];
   /** The zone the viewer reads times in: the client's company zone, or Philippine time for a VA. */
@@ -146,12 +151,14 @@ export function TaskPage({
           { label: "Assigned VA", value: vaFact },
           { label: "Due", value: due },
           { label: "Priority", value: TASK_SEVERITY_LABELS[task.severity] },
+          { label: "Duration", value: formatMinutes(task.durationMinutes) },
           { label: "Company", value: company },
         ]
       : [
           { label: "Company", value: company },
           { label: "Due", value: due },
           { label: "Priority", value: TASK_SEVERITY_LABELS[task.severity] },
+          { label: "Duration", value: formatMinutes(task.durationMinutes) },
           { label: "Assigned VA", value: vaFact },
         ];
 
@@ -163,6 +170,7 @@ export function TaskPage({
       <TaskHeader task={task} viewer={viewer} meta={meta} steps={steps} step={progressStep(task.status)} notice={notice} canMove={canMove} waiting={waiting} edit={edit} />
       <div className="flex flex-wrap items-start gap-6">
         <div className="grid min-w-0 flex-[999_1_32rem] gap-6">
+          <TaskTime taskId={task.id} canResume={canMove} durationMinutes={task.durationMinutes} sessions={sessions} status={task.status} vaName={va} viewer={viewer} timeZone={timeZone} now={now} />
           <Card as="section" aria-labelledby="task-description" className="grid gap-3">
             <h2 id="task-description" className="m-0 type-h4">
               Description

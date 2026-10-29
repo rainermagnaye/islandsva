@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FORM_ERROR } from "@/lib/validation";
-import { parseAttach, parseComment, parseCommentDelete, parseCommentEdit, parseCreate, parseDelete, parseFeedback, parseStatus, parseSubmit, parseUpdate } from "./validation";
+import { parseAttach, parseComment, parseCommentDelete, parseCommentEdit, parseCreate, parseDelete, parseFeedback, parseStatus, parseSubmit, parseTimer, parseUpdate } from "./validation";
 
 const day = "2026-11-02";
 
@@ -61,5 +61,30 @@ describe("task validation", () => {
     expect(parseFeedback({ taskId: "nope", note: "Fix it" })).toEqual({ ok: false, formError: FORM_ERROR });
     expect(parseAttach({ taskId })).toEqual({ ok: true, value: { taskId } });
     expect(parseAttach({ taskId, extra: 1 })).toEqual({ ok: false, formError: FORM_ERROR });
+  });
+
+  it("takes only resume or pause for the VA's timer", () => {
+    const taskId = "11111111-1111-4111-8111-111111111111";
+    expect(parseTimer({ taskId, timer: "start" })).toEqual({ ok: true, value: { taskId, timer: "start" } });
+    expect(parseTimer({ taskId, timer: "pause" })).toEqual({ ok: true, value: { taskId, timer: "pause" } });
+    expect(parseTimer({ taskId, timer: "stop" })).toEqual({ ok: false, formError: FORM_ERROR });
+    expect(parseTimer({ taskId: "nope", timer: "start" })).toEqual({ ok: false, formError: FORM_ERROR });
+    expect(parseTimer({ taskId, timer: "pause", extra: 1 })).toEqual({ ok: false, formError: FORM_ERROR });
+  });
+
+  it("turns the hours and minutes selects into one duration, 5 minutes to 10 hours", () => {
+    const base = { title: "Call", deadline: day, deadlineTime: "17:00" };
+    expect(parseCreate({ ...base, severity: "high", durationHours: "1", durationMinutes: "30" })).toMatchObject({ ok: true, value: { severity: "high", durationMinutes: 90 } });
+    expect(parseCreate({ ...base, durationHours: "0", durationMinutes: "5" })).toMatchObject({ ok: true, value: { durationMinutes: 5 } });
+    expect(parseCreate({ ...base, durationHours: "10", durationMinutes: "0" })).toMatchObject({ ok: true, value: { durationMinutes: 600 } });
+    expect(parseCreate(base)).toMatchObject({ ok: true, value: { durationMinutes: undefined } });
+    for (const [hours, minutes] of [["0", "0"], ["0", "4"], ["10", "5"], ["11", "0"], ["1", "60"], ["-1", "0"], ["1.5", "0"], ["x", "0"]]) {
+      const result = parseCreate({ ...base, durationHours: hours, durationMinutes: minutes });
+      // A bad hours value is reported on the hours select, everything else on the minutes select.
+      expect(result).toMatchObject({ ok: false, fieldErrors: expect.objectContaining({ [["-1", "1.5", "x", "11"].includes(hours) ? "durationHours" : "durationMinutes"]: expect.any(String) }) });
+    }
+    expect(parseCreate({ ...base, severity: "urgent" })).toMatchObject({ ok: false, fieldErrors: { severity: "Choose a severity." } });
+    const taskId = "11111111-1111-4111-8111-111111111111";
+    expect(parseUpdate({ taskId, ...base, severity: "low", durationHours: "0", durationMinutes: "45" })).toMatchObject({ ok: true, value: { severity: "low", durationMinutes: 45 } });
   });
 });

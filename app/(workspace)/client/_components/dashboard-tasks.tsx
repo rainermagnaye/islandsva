@@ -19,6 +19,8 @@ export type DashboardTask = {
   /** "Due tomorrow, 2:30 pm", "Closed Oct 27 · on time". */
   line: string;
   late: boolean;
+  /** Worked past its duration. */
+  delayed: boolean;
   status: { label: string; tone: "neutral" | "info" | "warning" | "success" | "danger" };
   group: TaskTab;
 };
@@ -88,9 +90,16 @@ export function DashboardTasks({ tasks, allHref, emptyOpen }: { tasks: readonly 
                     {task.va} · {task.line}
                   </span>
                 </span>
-                <Badge tone={task.status.tone} size="sm" dot>
-                  {task.status.label}
-                </Badge>
+                <span className="flex flex-wrap items-center justify-end gap-1.5">
+                  {task.delayed && (
+                    <Badge tone="warning" size="sm">
+                      Delayed
+                    </Badge>
+                  )}
+                  <Badge tone={task.status.tone} size="sm" dot>
+                    {task.status.label}
+                  </Badge>
+                </span>
               </Link>
             </li>
           ))}

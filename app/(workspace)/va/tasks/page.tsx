@@ -6,7 +6,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { appRoutes, vaTaskHref } from "@/content/routes";
 import { TaskMetrics } from "@/features/tasks/components/task-metrics";
 import { TaskTable } from "@/features/tasks/components/task-table";
-import { listTasks } from "@/features/tasks/dal";
+import { listTasks, listWorkSessions } from "@/features/tasks/dal";
+import { delayedIds } from "@/features/tasks/time";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
 
@@ -25,6 +26,7 @@ async function VaTasks() {
   const access = await loadVaAccess(user.id);
   if (!access.open) redirect(appRoutes.va);
   const tasks = await listTasks();
+  const sessions = await listWorkSessions(tasks.map((task) => task.id));
 
   return (
     <Workspace title="Tasks" lead="Tasks across your clients, and how many are done, on time or overdue.">
@@ -32,6 +34,7 @@ async function VaTasks() {
       <TaskTable
         tasks={tasks}
         hrefFor={vaTaskHref}
+        delayed={delayedIds(tasks, sessions, new Date())}
         empty={<EmptyState compact title="No tasks yet" description="When a client adds a task for you, it shows up here." />}
       />
     </Workspace>

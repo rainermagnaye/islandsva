@@ -835,7 +835,7 @@ describe("tenants", () => {
     ).rows;
     const [{ src }] = (await db.query<{ src: string }>("select prosrc as src from pg_proc where oid = 'private.assign_tenant()'::regprocedure")).rows;
     const missing = tables.map((t) => t.name).filter((name) => !["profiles", "leads"].includes(name) && !src.includes(`when '${name}'`));
-      expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links", "discovery_times", "meetings", "meeting_events", "va_messages", "task_attachments", "task_events"]));
+      expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining(["demo_slots", "demo_bookings", "payments", "client_onboarding_links", "discovery_times", "meetings", "meeting_events", "va_messages", "task_attachments", "task_events", "task_work_sessions"]));
     expect(missing).toEqual([]);
   });
 
@@ -863,7 +863,7 @@ describe("tenants", () => {
       expect(await missingNow()).toEqual(expect.arrayContaining(["tasks", "task_comments", "va_shortlists", "va_working_hours"]));
       await db.exec(readFileSync(join(MIGRATIONS, "20261026142144_restore_assign_tenant_cases.sql"), "utf8"));
       // Tables created after that restore file are absent from it. The function in force after every migration still names them.
-      expect((await missingNow()).sort()).toEqual(["task_attachments", "task_events", "va_messages"]);
+      expect((await missingNow()).sort()).toEqual(["task_attachments", "task_events", "task_work_sessions", "va_messages"]);
     } finally {
       await db.exec("rollback");
     }
@@ -2624,7 +2624,7 @@ describe("tasks", () => {
     let late = "";
     try {
       const [row] = await asServer<{ id: string }>(
-        "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Late', date '2000-01-01', $3) returning id",
+        "insert into public.tasks (client_id, va_id, title, deadline, duration_minutes, created_by) values ($1, $2, 'Late', date '2000-01-01', 60, $3) returning id",
         [harbor, WORKER, OWNER],
       );
       late = row.id;
@@ -2922,6 +2922,95 @@ describe("tasks", () => {
     await rolledBack(async () => {
       expect(await closeAs("authenticated")).toEqual([{ closed_by: OTHER }]);
     });
+  });
+
+  it("keeps the VA's time as sessions: the client sets the duration, the VA starts, pauses and resumes, and handing over stops the clock", async () => {
+    const TIMER = "22222222-2222-4222-8222-222222222214";
+    const asTimer = token(TIMER, ["client"]);
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email, raw_user_meta_data) values ('${TIMER}', 'task-timer@x.co', '{"full_name":"Tess Timer"}')`);
+    await asServer(`update public.profiles set status = 'active' where id = '${TIMER}'`);
+    await asServer(`insert into public.roles (user_id, role) values ('${TIMER}', 'client')`);
+    const co = await makeCompany("Timer Co", { user: TIMER, va: WORKER });
+    const add = (columns: string, values: string) =>
+      asUser<{ id: string; duration_minutes: number }>(
+        asTimer,
+        `insert into public.tasks (client_id, va_id, title, deadline, created_by${columns}) values ($1, $2, 'Timed', current_date + 5, $3${values}) returning id, duration_minutes`,
+        [co, WORKER, TIMER],
+      );
+    const start = (claims: Claims, task: string) => asUser<{ started: string }>(claims, "select public.start_task_timer($1) as started", [task]);
+    const pause = (claims: Claims, task: string) => asUser<{ ended: string }>(claims, "select public.pause_task_timer($1) as ended", [task]);
+    const sessions = (claims: Claims, task: string) =>
+      asUser<{ open: boolean }>(claims, "select ended_at is null as open from public.task_work_sessions where task_id = $1 order by started_at", [task]);
+    const move = (claims: Claims, task: string, status: string, note: string | null = null) =>
+      asUser(claims, "update public.tasks set status = $2::public.task_status, transition_note = $3 where id = $1 returning status", [task, status, note]);
+
+    // The duration: the severity's default when none is sent, the client's own value otherwise, 5 min to 10 h.
+    expect((await add(", severity", ", 'high'"))[0].duration_minutes).toBe(120);
+    expect((await add(", severity", ", 'low'"))[0].duration_minutes).toBe(30);
+    const [task] = await add(", duration_minutes", ", 45");
+    expect(task.duration_minutes).toBe(45);
+    await expect(add(", duration_minutes", ", 4")).rejects.toMatchObject({ code: "23514" });
+    await expect(add(", duration_minutes", ", 601")).rejects.toMatchObject({ code: "23514" });
+    await expect(asUser(asWorker, "update public.tasks set duration_minutes = 90 where id = $1", [task.id])).rejects.toMatchObject({ code: "IVA25" });
+    expect(await asUser(asTimer, "update public.tasks set duration_minutes = 50 where id = $1 returning duration_minutes", [task.id])).toEqual([{ duration_minutes: 50 }]);
+
+    // Only that VA starts the clock; the first start moves the task to In progress with its 'started' event.
+    await expect(start(asTimer, task.id)).rejects.toMatchObject({ code: "IVA25" });
+    await expect(start(token(VA2, ["va"]), task.id)).rejects.toMatchObject({ code: "IVA25" });
+    expect(await start(asWorker, task.id)).toHaveLength(1);
+    expect(await asUser(asTimer, "select status, started_at is not null as started from public.tasks where id = $1", [task.id])).toEqual([{ status: "in_progress", started: true }]);
+    expect(await asUser(asTimer, "select kind from public.task_events where task_id = $1", [task.id])).toEqual([{ kind: "started" }]);
+
+    // One running clock per VA, on any task.
+    await expect(start(asWorker, task.id)).rejects.toMatchObject({ code: "IVA39" });
+    const [second] = await add("", "");
+    await expect(start(asWorker, second.id)).rejects.toMatchObject({ code: "IVA39" });
+
+    // The client and the VA read the sessions; another client doesn't. Nobody writes them directly.
+    expect(await sessions(asTimer, task.id)).toEqual([{ open: true }]);
+    expect(await sessions(asWorker, task.id)).toEqual([{ open: true }]);
+    expect(await sessions(asOther, task.id)).toEqual([]);
+    await expect(asUser(asWorker, "insert into public.task_work_sessions (task_id, va_id) values ($1, $2)", [task.id, WORKER])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asWorker, "update public.task_work_sessions set ended_at = now() where task_id = $1", [task.id])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asTimer, "delete from public.task_work_sessions where task_id = $1", [task.id])).rejects.toThrow(/permission denied/);
+
+    // Pause ends the session; a second pause has nothing to end; resume opens a new one.
+    await expect(pause(asTimer, task.id)).rejects.toMatchObject({ code: "IVA25" });
+    expect(await pause(asWorker, task.id)).toHaveLength(1);
+    await expect(pause(asWorker, task.id)).rejects.toMatchObject({ code: "IVA40" });
+    expect(await start(asWorker, task.id)).toHaveLength(1);
+    expect(await sessions(asWorker, task.id)).toEqual([{ open: false }, { open: true }]);
+
+    // Handing over for review stops the clock, and the clock can't run while the client reviews.
+    await move(asWorker, task.id, "review", "Done, see the folder");
+    expect(await sessions(asWorker, task.id)).toEqual([{ open: false }, { open: false }]);
+    await expect(start(asWorker, task.id)).rejects.toMatchObject({ code: "IVA39" });
+
+    // Sent back: the VA resumes as a new session; the client closing the task stops it.
+    await move(asTimer, task.id, "in_progress", "Fix the totals");
+    expect(await start(asWorker, task.id)).toHaveLength(1);
+    expect(await sessions(asTimer, task.id)).toEqual([{ open: false }, { open: false }, { open: true }]);
+    await move(asTimer, task.id, "done");
+    expect(await sessions(asTimer, task.id)).toEqual([{ open: false }, { open: false }, { open: false }]);
+    await expect(start(asWorker, task.id)).rejects.toMatchObject({ code: "IVA39" });
+    await expect(asUser(asTimer, "update public.tasks set duration_minutes = 90 where id = $1", [task.id])).rejects.toMatchObject({ code: "IVA25" });
+
+    // Sessions are kept: an end is never changed, a session never deleted, and a task with time can't be deleted.
+    await expect(asServer("update public.task_work_sessions set ended_at = now() + interval '1 hour' where task_id = $1", [task.id])).rejects.toMatchObject({ code: "IVA25" });
+    await expect(asServer("delete from public.task_work_sessions where task_id = $1", [task.id])).rejects.toMatchObject({ code: "IVA25" });
+    await asUser(asTimer, "delete from public.task_events where task_id = $1", [task.id]);
+    await expect(asUser(asTimer, "delete from public.tasks where id = $1", [task.id])).rejects.toMatchObject({ code: "23001" });
+    const [{ tenant }] = await asServer<{ tenant: boolean }>(
+      "select bool_and(s.tenant_id = t.tenant_id) as tenant from public.task_work_sessions s join public.tasks t on t.id = s.task_id where t.id = $1",
+      [task.id],
+    );
+    expect(tenant).toBe(true);
+
+    // A VA whose assignment ended can still stop a clock, but not start one.
+    expect(await start(asWorker, second.id)).toHaveLength(1);
+    await asServer("update public.client_va_assignments set status = 'ended', ended_at = now() where client_id = $1 and status = 'active'", [co]);
+    expect(await pause(asWorker, second.id)).toHaveLength(1);
+    await expect(start(asWorker, second.id)).rejects.toMatchObject({ code: "IVA24" });
   });
 });
 

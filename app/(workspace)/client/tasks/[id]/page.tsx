@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { appRoutes, clientTaskFileHref, clientVaHref } from "@/content/routes";
 import { TaskPage } from "@/features/tasks/components/task-page";
-import { getOwnCompany, getTask, listTaskAttachments, listTaskComments, listTaskEvents } from "@/features/tasks/dal";
+import { getOwnCompany, getTask, listTaskAttachments, listTaskComments, listTaskEvents, listWorkSessions } from "@/features/tasks/dal";
 import { deadlineWindow, taskTimeZone } from "@/features/tasks/metrics";
 import { requireRole } from "@/lib/auth/session";
 
@@ -24,7 +24,13 @@ async function ClientTask({ params }: { params: PageProps<"/client/tasks/[id]">[
   const task = await getTask(id);
   if (!task) notFound();
 
-  const [company, comments, attachments, events] = await Promise.all([getOwnCompany(user.id), listTaskComments(task.id), listTaskAttachments(task.id), listTaskEvents(task.id)]);
+  const [company, comments, attachments, events, sessions] = await Promise.all([
+    getOwnCompany(user.id),
+    listTaskComments(task.id),
+    listTaskAttachments(task.id),
+    listTaskEvents(task.id),
+    listWorkSessions([task.id]),
+  ]);
   const timeZone = task.deadlineTimezone || taskTimeZone(company?.timezone);
   const window = deadlineWindow(timeZone);
   const companyOpen = company?.status === "active" && company.disabledAt === null;
@@ -39,6 +45,7 @@ async function ClientTask({ params }: { params: PageProps<"/client/tasks/[id]">[
         viewerId={user.id}
         task={task}
         events={events}
+        sessions={sessions.get(task.id) ?? []}
         comments={comments}
         files={attachments.map((file) => ({ ...file, href: clientTaskFileHref(task.id, file.id) }))}
         timeZone={timeZone}
