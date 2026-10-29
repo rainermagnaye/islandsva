@@ -686,6 +686,11 @@ export type Database = {
         Args: { client_id: string; actor: string; amount_cents: number; fee_cents: number; paid_on: string; reference: string | null };
         Returns: string;
       };
+      /** Replaces accept_client_review_paid: also needs a unique bank reference and a current acceptance (or legacy consent). */
+      approve_client_payment: {
+        Args: { client_id: string; actor: string; amount_cents: number; fee_cents: number; paid_on: string; reference: string };
+        Returns: string;
+      };
       activate_client: { Args: { client_id: string; user_id: string; activated_by: string }; Returns: undefined };
       issue_client_onboarding_link: { Args: { client_id: string; token: string; token_hash: string }; Returns: undefined };
       save_client_review: { Args: { client_id: string; issues: string[]; note: string }; Returns: undefined };
