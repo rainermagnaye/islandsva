@@ -15,6 +15,7 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | google_connections | An employee's encrypted refresh token, calendar id, push channel | New (M9) |
 | va_working_hours | A VA's weekly hours (PHT), one half-hour window per weekday. Read when intro calls exist | Built (M10); unused until meetings and Google |
 | clients · client_packets · client_notes | Company and package; registration; notes | Built |
+| client_agreements | Agreement acceptance evidence: version, text shown, terms snapshot (from the client row), typed name, contact email on file, hashed IP, time. Append-only, server-only | Schema and packet steps written (registration agreement slice 1a, not yet applied); app in later slices |
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined). Accept creates the assignment | Built (M10) |
 | client_va_assignments | Client ↔ VA, several active VAs, one active row per pair | Built |
 | tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments) |
@@ -85,7 +86,7 @@ Plain text through `sendPlainEmail`, sent in `after()`, Reply-To the team inbox.
 
 - Built for leads, meetings, clients, assignments, tasks, shortlists, roles and account status: `supabase/CLAUDE.md` (access model and the actor rule). Google sync (M9) adds a `google` actor kind.
 - Readers: admins with 2FA, and the owning Lead Gen for leads, calls, clients and assignments (task and shortlist entries are admins only). Whether clients and VAs see entries for their own records is decided with the activity screens (M8 slice 9).
-- **Not audited for now:** payments (recorded by an admin through `accept_client_review_paid`, with `recorded_by` on the row), discovery times, VA working hours, and the timelines (`lead_events`, `meeting_events`, `client_notes`, `task_comments`), which stay the readable story behind the audit log.
+- **Not audited for now:** payments (recorded by an admin through `accept_client_review_paid`, with `recorded_by` on the row), discovery times, VA working hours, and the timelines (`lead_events`, `meeting_events`, `client_notes`, `task_comments`, `client_agreements`), which stay the readable story behind the audit log.
 - Before launch (follow-up `db/audit-actors`): the remaining secret-key writes that show as System today — the registration-packet functions (`save_client_review`, `record_client_invite`, `issue_client_onboarding_link`), `accept_client_review_paid`, the admin's "add lead", and removing an employee account (`removeEmployeeAccount` → `deleteAuthUser`: its roles cascade is logged as System and the profile deletion isn't logged) — take an actor and set `app.actor`. The app's deactivation moves to `set_account_status` in its own PR once `audit_log` is live.
 
 ## Metrics
