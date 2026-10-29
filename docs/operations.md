@@ -65,6 +65,17 @@ Migrations are applied by a person, one at a time, in order. The CLI isn't linke
 
 If any statement fails, the transaction rolls back and nothing is applied.
 
+**Before `20261029175327_payment_verification`:** it adds a unique index on paid payment references per agency (whitespace removed, case ignored, hyphens kept) and stops if existing rows break it. Check first, read-only, and correct any duplicate reference by hand (with the admin who recorded it) before applying:
+
+```sql
+select tenant_id, lower(regexp_replace(provider_ref, '\s+', '', 'g')) as reference, count(*) as payments,
+  array_agg(id order by created_at) as payment_ids
+from public.payments
+where status = 'paid' and provider_ref is not null
+group by 1, 2
+having count(*) > 1;
+```
+
 **If the audit log starts refusing writes** (the `*_audit` triggers sit on every write to leads, meetings, clients, assignments, roles and account status, so a fault there stops the contact form or sign-in): a person disables the failing trigger — `alter table public.<table> disable trigger <table>_audit;` — and fixes forward with a new migration that re-enables it. Writes made meanwhile aren't audited; note the window.
 
 ### Creating an admin

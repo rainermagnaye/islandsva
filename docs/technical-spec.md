@@ -23,6 +23,11 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
 | client_onboarding_links · payments | Replaced by the registration packet | Drop |
 
+## Registration payment verification (app slice, planned)
+
+- The database side is written (`approve_client_payment`, 20261029175327_payment_verification; rules in `supabase/CLAUDE.md`); the app still calls `accept_client_review_paid` until its slice swaps the call.
+- The app's bank-reference parser normalises the text to NFKC and strips format and control characters (Unicode `Cf`, `Cc`) before calling `approve_client_payment`, so look-alike or invisible characters can't slip a duplicate past the database's comparison (whitespace removed, case ignored).
+
 ## Meetings
 
 One model for every call; one Google integration; one history.

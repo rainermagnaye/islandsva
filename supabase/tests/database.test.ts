@@ -1150,8 +1150,10 @@ describe("client payments and activation", () => {
     await asServer("select * from public.issue_onboarding_link($1, $2, $3)", [client, closer, sha(value)]);
     await asServer("select public.submit_onboarding($1, 'C', '', '{}'::jsonb, '{}'::jsonb, true)", [sha(value)]);
   };
+  // Each payment gets its own reference: a paid reference is unique per agency (payments_paid_reference_key).
+  let references = 0;
   const pay = (client: string, by: string, amount = 85500, paidOn = "2026-10-20") =>
-    asServer<{ id: string }>("select public.record_manual_payment($1, $2, $3, ' TRX-1 ', $4) as id", [client, by, amount, paidOn]);
+    asServer<{ id: string }>("select public.record_manual_payment($1, $2, $3, $5, $4) as id", [client, by, amount, paidOn, ` TRX-${++references} `]);
   const activate = (client: string, login: string, by: string) => asServer("select public.activate_client($1, $2, $3)", [client, login, by]);
   const grant = (user: string, role: string, by: string) =>
     asServer("insert into public.roles (user_id, role, assigned_by) values ($1, $2, $3) returning id", [user, role, by]);
@@ -2156,6 +2158,242 @@ describe("registration agreement", () => {
       const [{ dated }] = await asServer<{ dated: boolean }>(
         "select c.onboarding_submitted_at = p.submitted_at as dated from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
         [signed],
+      );
+      expect(dated).toBe(true);
+    });
+  });
+});
+
+describe("payment verification", () => {
+  // approve_client_payment: approve a packet in review and record the payment, with a unique bank reference and a
+  // current acceptance (or a legacy consent). Self-contained: its own agency, admins and packets.
+  const OTHER_ADMIN = "00000000-0000-0000-0000-000000000191";
+  const OTHER_CLOSER = "00000000-0000-0000-0000-000000000192";
+  const GONE_ADMIN = "00000000-0000-0000-0000-000000000193";
+  const details = { industry: "Legal", country: "United States", city: "Austin", about: "Inbox", website: "", jobTitle: "", street: "", state: "", zip: "", staffCount: "" };
+  const linkToken = (n: string) => `${"p".repeat(41)}${n}`;
+  const hash = (n: string) => `9${n}`.padEnd(64, "7");
+  const terms = (company: string, monthly = 85500) => ({
+    company_name: company,
+    country: "United States",
+    package_code: "essentials",
+    hours_per_week: 20,
+    term_months: 6,
+    monthly_cents: monthly,
+    starts_on: "2026-11-01",
+  });
+  let otherTenant = "";
+
+  /**
+   * A pending client with a package and an open link. In review by: `agreement` (the new steps), `legacy` (the old
+   * submit, marked as signed with the sample consent) or `none` (the old submit, no acceptance and no legacy mark).
+   */
+  const packet = async (name: string, n: string, mode: "agreement" | "legacy" | "none" | "open", createdBy = CLOSER) => {
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone) values ($1, 'Nia', $2, $3, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id",
+      [name, `${name.toLowerCase().replace(/\s+/g, "")}@verify.co`, createdBy],
+    );
+    await asServer("select public.issue_client_onboarding_link($1, $2, $3)", [id, linkToken(n), hash(n)]);
+    if (mode === "agreement") {
+      await asServer("select public.save_client_packet_details($1, $2, 'Nia', null, $3::jsonb)", [hash(n), name, JSON.stringify(details)]);
+      await asServer("select public.save_client_payment_proof($1, 'receipt.pdf', 'application/pdf', 'YQ==')", [hash(n)]);
+      await asServer("select public.accept_client_agreement($1, 'v1', 'The agreement', $2::jsonb, 'Nia', null)", [hash(n), JSON.stringify(terms(name))]);
+    } else if (mode !== "open") {
+      await asServer("select public.submit_client_packet($1, $2, 'Nia', null, $3::jsonb, 'Nia', 'receipt.pdf', 'application/pdf', 'YQ==')", [hash(n), name, JSON.stringify(details)]);
+      if (mode === "legacy") await asServer("update public.client_packets set legacy_consent = true where client_id = $1", [id]);
+    }
+    return id;
+  };
+  const approve = (client: string, reference: string | null, actor = ADMIN) =>
+    asServer<{ id: string }>("select public.approve_client_payment($1, $2, 85500, 1500, '2026-10-20', $3) as id", [client, actor, reference]);
+  const stageOf = async (client: string) => (await asServer<{ s: string }>("select onboarding_status::text as s from public.clients where id = $1", [client]))[0].s;
+  const paymentsOf = (client: string) => asServer<{ provider_ref: string }>("select provider_ref from public.payments where client_id = $1", [client]);
+
+  beforeAll(async () => {
+    [{ id: otherTenant }] = await asServer<{ id: string }>("insert into public.tenants (name, slug) values ('Verify agency', 'verify-agency') returning id");
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email) values
+        ('${OTHER_ADMIN}', 'verify-admin@x.co'), ('${OTHER_CLOSER}', 'verify-closer@x.co'), ('${GONE_ADMIN}', 'verify-gone@x.co')`);
+    await asServer(`update public.profiles set tenant_id = $1 where id in ('${OTHER_ADMIN}', '${OTHER_CLOSER}')`, [otherTenant]);
+    await asServer(`insert into public.roles (user_id, role) values ('${OTHER_ADMIN}', 'admin'), ('${OTHER_CLOSER}', 'closer'), ('${GONE_ADMIN}', 'admin')`);
+    await asServer("update public.profiles set status = 'inactive' where id = $1", [GONE_ADMIN]);
+  });
+
+  it("only the secret key may call it", async () => {
+    const sql = "select public.approve_client_payment($1, $2, 1, 0, current_date, 'R')";
+    const denied = /permission denied for function approve_client_payment/;
+    await expect(as("anon", {}, sql, [ADMIN, ADMIN])).rejects.toThrow(denied);
+    await expect(asUser(asClient, sql, [ADMIN, ADMIN])).rejects.toThrow(denied);
+    await expect(asUser(asAdmin, sql, [ADMIN, ADMIN])).rejects.toThrow(denied);
+    // The secret key reaches the function's own checks (an unknown client).
+    await expect(asServer(sql, ["00000000-0000-0000-0000-000000000199", ADMIN])).rejects.toMatchObject({ code: "IVA06" });
+  });
+
+  it("only an active admin of the client's agency may approve; nothing is stored otherwise", async () => {
+    const id = await packet("Verify Actor", "01", "legacy");
+    for (const actor of [CLOSER, VA, OTHER_ADMIN, GONE_ADMIN]) {
+      await expect(approve(id, "ACT-1", actor)).rejects.toMatchObject({ code: "IVA14" });
+    }
+    expect(await paymentsOf(id)).toEqual([]);
+    expect(await stageOf(id)).toBe("pending_review");
+    await expect(approve(id, "ACT-1")).resolves.toHaveLength(1);
+  });
+
+  it("checks the amount, fee and date (IVA21) and needs a reference (IVA42)", async () => {
+    const id = await packet("Verify Input", "02", "legacy");
+    await expect(
+      asServer("select public.approve_client_payment($1, $2, 1000, 1001, '2026-10-20', 'IN-1')", [id, ADMIN]),
+    ).rejects.toMatchObject({ code: "IVA21" });
+    for (const paidOn of ["2999-01-01", null]) {
+      await expect(
+        asServer("select public.approve_client_payment($1, $2, 1000, 0, $3::date, 'IN-1')", [id, ADMIN, paidOn]),
+      ).rejects.toMatchObject({ code: "IVA21" });
+    }
+    for (const reference of [null, "", "   "]) {
+      await expect(approve(id, reference)).rejects.toMatchObject({ code: "IVA42" });
+    }
+    expect(await paymentsOf(id)).toEqual([]);
+  });
+
+  it("refuses a reference already paid in the agency, ignoring case and spaces but not hyphens (IVA41)", async () => {
+    const first = await packet("Verify Ref One", "03", "legacy");
+    await approve(first, " TRX 77-A ");
+    expect(await paymentsOf(first)).toEqual([{ provider_ref: "TRX 77-A" }]);
+
+    const second = await packet("Verify Ref Two", "04", "legacy");
+    await expect(approve(second, "trx77-a")).rejects.toMatchObject({ code: "IVA41" });
+    await expect(approve(second, "TRX\t77-a")).rejects.toMatchObject({ code: "IVA41" });
+    expect(await stageOf(second)).toBe("pending_review");
+    // Hyphens count: TRX77A is another reference.
+    await expect(approve(second, "TRX77A")).resolves.toHaveLength(1);
+
+    // The same client: a paid payment already recorded under this reference blocks its approval too.
+    const same = await packet("Verify Ref Same", "05", "legacy");
+    await asServer("insert into public.payments (client_id, amount_cents, term_months, provider_ref, paid_on, recorded_by) values ($1, 100, 6, 'SAME-1', '2026-10-01', $2)", [same, ADMIN]);
+    await expect(approve(same, " same-1 ")).rejects.toMatchObject({ code: "IVA41" });
+
+    // A voided payment doesn't hold its reference.
+    await asServer(
+      "insert into public.payments (client_id, status, amount_cents, term_months, provider_ref, paid_on, recorded_by, voided_at, voided_by) values ($1, 'void', 100, 6, 'VOID-1', '2026-10-01', $2, now(), $2)",
+      [same, ADMIN],
+    );
+    await expect(approve(same, "void-1")).resolves.toHaveLength(1);
+
+    // Another agency may use the same reference.
+    const elsewhere = await packet("Verify Ref Elsewhere", "06", "legacy", OTHER_CLOSER);
+    await expect(approve(elsewhere, "TRX 77-A", OTHER_ADMIN)).resolves.toHaveLength(1);
+  });
+
+  it("the unique index refuses a second paid payment with the same reference, whoever writes it", async () => {
+    const a = await packet("Verify Index A", "07", "open");
+    const b = await packet("Verify Index B", "08", "open");
+    const insert = "insert into public.payments (client_id, amount_cents, term_months, provider_ref, paid_on, recorded_by) values ($1, 100, 6, $2, '2026-10-01', $3)";
+    await asServer(insert, [a, "IDX 1", ADMIN]);
+    await expect(asServer(insert, [b, "idx1", ADMIN])).rejects.toMatchObject({ code: "23505" });
+    // The old function meets the index too.
+    const old = await packet("Verify Index Old", "09", "none");
+    await expect(
+      asServer("select public.accept_client_review_paid($1, $2, 85500, 0, '2026-10-20', 'Idx1')", [old, ADMIN]),
+    ).rejects.toMatchObject({ code: "23505" });
+  });
+
+  it("needs a current acceptance or a legacy consent (IVA43)", async () => {
+    const none = await packet("Verify No Consent", "0a", "none");
+    await expect(approve(none, "AG-1")).rejects.toMatchObject({ code: "IVA43" });
+
+    const stale = await packet("Verify Stale", "0b", "agreement");
+    expect(await stageOf(stale)).toBe("pending_review");
+    // A Closer's edit during review: the acceptance no longer covers the terms.
+    await asServer("update public.clients set monthly_cents = 90000 where id = $1", [stale]);
+    await expect(approve(stale, "AG-2")).rejects.toMatchObject({ code: "IVA43" });
+    expect(await paymentsOf(stale)).toEqual([]);
+
+    const legacy = await packet("Verify Legacy", "0c", "legacy");
+    await expect(approve(legacy, "AG-3")).resolves.toHaveLength(1);
+
+    const current = await packet("Verify Current", "0d", "agreement");
+    await expect(approve(current, "AG-4")).resolves.toHaveLength(1);
+  });
+
+  it("a legacy packet that has since accepted the agreement is checked against its acceptance", async () => {
+    // Signed with the sample consent, returned, then accepted through the new steps and back in review.
+    const id = await packet("Verify Legacy Accepted", "15", "legacy");
+    await asServer("select public.save_client_review($1, $2::text[], null)", [id, ["address"]]);
+    await asServer("select public.save_client_packet_details($1, 'Verify Legacy Accepted', 'Nia', null, $2::jsonb)", [hash("15"), JSON.stringify(details)]);
+    await asServer("select public.accept_client_agreement($1, 'v1', 'The agreement', $2::jsonb, 'Nia', null)", [hash("15"), JSON.stringify(terms("Verify Legacy Accepted"))]);
+    expect(await stageOf(id)).toBe("pending_review");
+    const [{ legacy }] = await asServer<{ legacy: boolean }>("select legacy_consent as legacy from public.client_packets where client_id = $1", [id]);
+    expect(legacy).toBe(true);
+    // A Closer's edit makes that acceptance stale: the legacy mark doesn't stand in for it.
+    await asServer("update public.clients set monthly_cents = 90000 where id = $1", [id]);
+    await expect(approve(id, "AG-5")).rejects.toMatchObject({ code: "IVA43" });
+    expect(await paymentsOf(id)).toEqual([]);
+    expect(await stageOf(id)).toBe("pending_review");
+  });
+
+  it("refuses a packet that isn't in review (IVA08), a disabled client (IVA09) and an unknown one (IVA06)", async () => {
+    const open = await packet("Verify Open", "0e", "open");
+    await expect(approve(open, "ST-1")).rejects.toMatchObject({ code: "IVA08" });
+    const disabled = await packet("Verify Disabled", "0f", "legacy");
+    await asServer("update public.clients set disabled_at = now() where id = $1", [disabled]);
+    await expect(approve(disabled, "ST-2")).rejects.toMatchObject({ code: "IVA09" });
+    await expect(approve("00000000-0000-0000-0000-000000000199", "ST-3")).rejects.toMatchObject({ code: "IVA06" });
+    expect(await paymentsOf(open)).toEqual([]);
+  });
+
+  it("approves the packet, records the payment, and the audit log names the admin", async () => {
+    const id = await packet("Verify Success", "10", "agreement");
+    await asServer("update public.client_packets set review_note = 'Old note' where client_id = $1", [id]);
+    const [{ id: payment }] = await approve(id, " OK-1 ");
+    const [row] = await asServer<Record<string, unknown>>(
+      "select client_id, status, amount_cents, fee_cents, provider_ref, recorded_by, term_months from public.payments where id = $1",
+      [payment],
+    );
+    expect(row).toEqual({ client_id: id, status: "paid", amount_cents: 85500, fee_cents: 1500, provider_ref: "OK-1", recorded_by: ADMIN, term_months: 6 });
+    expect(await stageOf(id)).toBe("approved");
+    const [{ note }] = await asServer<{ note: string | null }>("select review_note as note from public.client_packets where client_id = $1", [id]);
+    expect(note).toBeNull();
+    // payments isn't audited; the client's move to approved is, as the admin.
+    const entries = (
+      await db.query<{ actor_kind: string; actor_id: string | null }>(
+        "select actor_kind::text, actor_id from public.audit_log where record_type = 'clients' and record_id = $1 and action = 'update' and changes -> 'onboarding_status' ->> 1 = 'approved'",
+        [id],
+      )
+    ).rows;
+    expect(entries).toEqual([{ actor_kind: "user", actor_id: ADMIN }]);
+    // A second approval is refused: no longer in review.
+    await expect(approve(id, "OK-2")).rejects.toMatchObject({ code: "IVA08" });
+  });
+
+  it("the migration's guard stops on duplicate paid references", async () => {
+    const sql = readFileSync(join(MIGRATIONS, "20261029175327_payment_verification.sql"), "utf8");
+    const guard = sql.slice(sql.indexOf("-- Duplicate reference guard"), sql.indexOf("-- End of duplicate reference guard"));
+    await db.exec(guard);
+    const a = await packet("Verify Guard A", "11", "open");
+    const b = await packet("Verify Guard B", "12", "open");
+    await rolledBack(async () => {
+      await db.exec("drop index public.payments_paid_reference_key");
+      const insert = "insert into public.payments (client_id, amount_cents, term_months, provider_ref, paid_on, recorded_by) values ($1, 100, 6, $2, '2026-10-01', $3)";
+      await db.query(insert, [a, "GUARD 1", ADMIN]);
+      await db.query(insert, [b, "guard1", ADMIN]);
+      await expect(db.exec(guard)).rejects.toThrow(/used more than once/);
+    });
+  });
+
+  it("the backfill marks packets the old app submitted after slice 1a, never one with an acceptance", async () => {
+    const sql = readFileSync(join(MIGRATIONS, "20261029175327_payment_verification.sql"), "utf8");
+    const backfill = sql.slice(sql.indexOf("-- Backfill"), sql.indexOf("-- End of backfill"));
+    const oldSubmit = await packet("Verify Backfill Old", "13", "none");
+    const accepted = await packet("Verify Backfill New", "14", "agreement");
+    await rolledBack(async () => {
+      await db.exec(backfill);
+      const legacyOf = async (client: string) =>
+        (await asServer<{ l: boolean }>("select legacy_consent as l from public.client_packets where client_id = $1", [client]))[0].l;
+      expect(await legacyOf(oldSubmit)).toBe(true);
+      expect(await legacyOf(accepted)).toBe(false);
+      const [{ dated }] = await asServer<{ dated: boolean }>(
+        "select c.onboarding_submitted_at = p.submitted_at as dated from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+        [oldSubmit],
       );
       expect(dated).toBe(true);
     });
