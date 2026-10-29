@@ -1787,6 +1787,381 @@ describe("payment at review (sales)", () => {
   });
 });
 
+describe("registration agreement", () => {
+  // The packet in three steps (details, agreement, payment proof) through the link; it goes to review once all are done.
+  const details = { industry: "Legal", country: "United States", city: "Austin", about: "Inbox", website: "", jobTitle: "", street: "", state: "", zip: "", staffCount: "" };
+  const linkToken = (n: string) => `${"r".repeat(41)}${n.padStart(2, "0")}`;
+  const hash = (n: string) => `d${n}`.padEnd(64, "e");
+  const IP = "f".repeat(64);
+  const terms = (company: string, country: string | null = "United States", monthly = 85500) => ({
+    company_name: company,
+    country,
+    package_code: "essentials",
+    hours_per_week: 20,
+    term_months: 6,
+    monthly_cents: monthly,
+    starts_on: "2026-11-01",
+  });
+  const names = new Map<string, string>();
+
+  /** A client with an agreed package and an open link (pending_customer). n: one or two hex characters. */
+  const openPacket = async (name: string, n: string) => {
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by, package_code, hours_per_week, term_months, monthly_cents, starts_on, timezone) values ($1, 'Nia', $2, $3, 'essentials', 20, 6, 85500, '2026-11-01', 'America/New_York') returning id",
+      [name, `${name.toLowerCase().replace(/\s+/g, "")}@agree.co`, CLOSER],
+    );
+    await asServer("select public.issue_client_onboarding_link($1, $2, $3)", [id, linkToken(n), hash(n)]);
+    names.set(n, name);
+    return id;
+  };
+  const saveDetails = async (n: string, company = names.get(n)!, d: Record<string, string> = details) =>
+    (await asServer<{ s: string }>("select public.save_client_packet_details($1, $2, 'Nia', null, $3::jsonb)::text as s", [hash(n), company, JSON.stringify(d)]))[0].s;
+  const accept = async (n: string, seen: object = terms(names.get(n)!), signer = " Nia Signer ") =>
+    (await asServer<{ s: string }>("select public.accept_client_agreement($1, 'v1', 'The agreement text', $2::jsonb, $3, $4)::text as s", [hash(n), JSON.stringify(seen), signer, IP]))[0].s;
+  const pay = async (n: string) =>
+    (await asServer<{ s: string }>("select public.save_client_payment_proof($1, 'receipt.pdf', 'application/pdf', 'YQ==')::text as s", [hash(n)]))[0].s;
+  const packetOf = async (client: string) =>
+    (
+      await asServer<{ stage: string; agreement_id: string | null; review_issues: string[]; submitted: boolean; consent_name: string | null; legacy_consent: boolean }>(
+        "select c.onboarding_status::text as stage, p.agreement_id, p.review_issues, p.submitted_at is not null as submitted, p.consent_name, p.legacy_consent from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+        [client],
+      )
+    )[0];
+  /** A packet with all three steps done: in review. */
+  const inReview = async (name: string, n: string) => {
+    const id = await openPacket(name, n);
+    await saveDetails(n);
+    await pay(n);
+    expect(await accept(n)).toBe("pending_review");
+    return id;
+  };
+
+  describe("client_agreements", () => {
+    let client = "";
+    let agreement = "";
+    let tenant = "";
+    beforeAll(async () => {
+      client = await inReview("Agree Evidence", "01");
+      ({ agreement_id: agreement } = (await packetOf(client)) as { agreement_id: string });
+      [{ tenant_id: tenant }] = await asServer<{ tenant_id: string }>("select tenant_id from public.clients where id = $1", [client]);
+    });
+
+    it("no signed-in user or visitor reads or writes it, an admin with two-factor included", async () => {
+      const insert = "insert into public.client_agreements (tenant_id, client_id, version, body, terms, signer_name, contact_email_on_file) values ($1, $2, 'v1', 'x', '{}', 'N', 'n@x.co')";
+      const callers = [
+        (sql: string, p: unknown[] = []) => as("anon", {}, sql, p),
+        (sql: string, p: unknown[] = []) => asUser(asClient, sql, p),
+        (sql: string, p: unknown[] = []) => asUser(asCloser, sql, p),
+        (sql: string, p: unknown[] = []) => asUser(token(ADMIN, ["admin"], "aal1"), sql, p),
+        (sql: string, p: unknown[] = []) => asUser(asAdmin, sql, p),
+      ];
+      for (const run of callers) {
+        await expect(run("select id from public.client_agreements")).rejects.toThrow(/permission denied/);
+        await expect(run(insert, [tenant, client])).rejects.toThrow(/permission denied/);
+        await expect(run("update public.client_agreements set signer_name = 'X' where id = $1", [agreement])).rejects.toThrow(/permission denied/);
+        await expect(run("delete from public.client_agreements where id = $1", [agreement])).rejects.toThrow(/permission denied/);
+      }
+    });
+
+    it("the secret key reads and inserts; nobody changes, deletes or truncates a row, the database owner included", async () => {
+      expect(await asServer("select id from public.client_agreements where id = $1", [agreement])).toEqual([{ id: agreement }]);
+      await rolledBack(async () => {
+        const insert = "insert into public.client_agreements (tenant_id, client_id, version, body, terms, signer_name, contact_email_on_file) values ($1, $2, 'v1', 'x', '{}', 'N', 'n@x.co') returning id";
+        await expect(asServer(insert, [tenant, client])).resolves.toHaveLength(1);
+      });
+      await expect(asServer("update public.client_agreements set signer_name = 'X' where id = $1", [agreement])).rejects.toThrow(/permission denied/);
+      await expect(asServer("delete from public.client_agreements where id = $1", [agreement])).rejects.toThrow(/permission denied/);
+      await expect(db.query("update public.client_agreements set signer_name = 'X' where id = $1", [agreement])).rejects.toMatchObject({ code: "IVA44" });
+      await expect(db.query("delete from public.client_agreements where id = $1", [agreement])).rejects.toMatchObject({ code: "IVA44" });
+      await rolledBack(async () => {
+        // Both tables at once, so the foreign key from client_packets doesn't refuse it first.
+        await expect(db.query("truncate public.client_agreements, public.client_packets")).rejects.toMatchObject({ code: "IVA44" });
+      });
+    });
+
+    it("a row can't belong to another tenant than its client's", async () => {
+      await rolledBack(async () => {
+        const [{ id: other }] = (await db.query<{ id: string }>("insert into public.tenants (name, slug) values ('Agree agency', 'agree-agency') returning id")).rows;
+        const insert = "insert into public.client_agreements (tenant_id, client_id, version, body, terms, signer_name, contact_email_on_file) values ($1, $2, 'v1', 'x', '{}', 'N', 'n@x.co')";
+        // As the secret key, transaction-local: the rollback resets the role.
+        await expect(direct({}, insert, [other, client], "service_role")).rejects.toThrow(/client_agreements_client_tenant_fkey/);
+      });
+    });
+
+    it("a direct insert with a malformed IP hash is refused", async () => {
+      await rolledBack(async () => {
+        const insert = "insert into public.client_agreements (tenant_id, client_id, version, body, terms, signer_name, contact_email_on_file, ip_hash) values ($1, $2, 'v1', 'x', '{}', 'N', 'n@x.co', 'not-a-hash')";
+        await expect(direct({}, insert, [tenant, client], "service_role")).rejects.toThrow(/client_agreements_ip_hash_check/);
+      });
+    });
+
+    it("stores the evidence: the database's terms, trimmed name, the email on file, the hashed IP and the client's tenant", async () => {
+      const [row] = await asServer<Record<string, unknown>>(
+        "select tenant_id, client_id, version, body, terms, signer_name, contact_email_on_file, ip_hash from public.client_agreements where id = $1",
+        [agreement],
+      );
+      expect(row).toEqual({
+        tenant_id: tenant,
+        client_id: client,
+        version: "v1",
+        body: "The agreement text",
+        terms: terms("Agree Evidence"),
+        signer_name: "Nia Signer",
+        contact_email_on_file: "agreeevidence@agree.co",
+        ip_hash: IP,
+      });
+    });
+
+    it("a packet can't point at another client's acceptance", async () => {
+      const other = await openPacket("Agree Other", "02");
+      await expect(asServer("update public.client_packets set agreement_id = $1 where client_id = $2", [agreement, other])).rejects.toThrow(/foreign key/);
+    });
+  });
+
+  it("the steps and their helpers are secret-key only", async () => {
+    const steps = [
+      "select public.save_client_packet_details($1, 'X', 'N', null, '{}'::jsonb)",
+      "select public.accept_client_agreement($1, 'v1', 'x', '{}'::jsonb, 'N', null)",
+      "select public.save_client_payment_proof($1, 'r.pdf', 'application/pdf', 'YQ==')",
+    ];
+    for (const sql of steps) {
+      const name = /public\.(\w+)\(/.exec(sql)![1];
+      const denied = new RegExp(`permission denied for function ${name}`);
+      await expect(as("anon", {}, sql, [hash("0f")])).rejects.toThrow(denied);
+      await expect(asUser(asClient, sql, [hash("0f")])).rejects.toThrow(denied);
+      await expect(asUser(asAdmin, sql, [hash("0f")])).rejects.toThrow(denied);
+    }
+    // The secret key may call all five helpers (they run with its rights); signed-in users and visitors none.
+    const helpers: Record<string, string> = {
+      packet_section: "select private.packet_section('address') as r",
+      client_agreement_terms: "select private.client_agreement_terms(null::public.clients) as r",
+      packet_open_sections: "select private.packet_open_sections(null::public.client_packets, null::public.clients) as r",
+      lock_client_packet: `select private.lock_client_packet('${hash("0f")}', 'basic') as r`,
+      finish_client_packet: `select private.finish_client_packet('${ADMIN}'::uuid) as r`,
+    };
+    for (const [name, sql] of Object.entries(helpers)) {
+      const denied = new RegExp(`permission denied for function ${name}`);
+      await expect(asUser(asAdmin, sql)).rejects.toThrow(denied);
+      await expect(asUser(asClient, sql)).rejects.toThrow(denied);
+      await expect(as("anon", {}, sql)).rejects.toThrow(/permission denied for schema private/);
+    }
+    expect(await asServer(helpers.packet_section)).toEqual([{ r: "basic" }]);
+    await expect(asServer(helpers.client_agreement_terms)).resolves.toHaveLength(1);
+    await expect(asServer(helpers.packet_open_sections)).resolves.toHaveLength(1);
+    await expect(asServer(helpers.lock_client_packet)).rejects.toMatchObject({ code: "IVA06" });
+    expect(await asServer(helpers.finish_client_packet)).toEqual([{ r: null }]);
+    await expect(asServer("select private.guard_client_agreement_immutable()")).rejects.toThrow(/permission denied for function guard_client_agreement_immutable/);
+  });
+
+  it("each step refuses an unknown link, a disabled client and a packet that isn't open", async () => {
+    const all = (n: string) => [() => saveDetails(n, "X"), () => accept(n, terms("X")), () => pay(n)];
+    for (const step of [...all("0e"), () => saveDetails("zz", "X")]) {
+      await expect(step()).rejects.toMatchObject({ code: "IVA06" });
+    }
+
+    const disabled = await openPacket("Agree Disabled", "03");
+    await asServer("update public.clients set disabled_at = now() where id = $1", [disabled]);
+    for (const step of all("03")) await expect(step()).rejects.toMatchObject({ code: "IVA09" });
+
+    const reviewed = await inReview("Agree Reviewed", "04");
+    for (const step of all("04")) await expect(step()).rejects.toMatchObject({ code: "IVA08" });
+    await asServer("select public.accept_client_review($1)", [reviewed]);
+    for (const step of all("04")) await expect(step()).rejects.toMatchObject({ code: "IVA08" });
+  });
+
+  it("goes to review only once all three steps are done, as submit_client_packet does", async () => {
+    const id = await openPacket("Agree Order", "05");
+    expect(await saveDetails("05")).toBe("pending_customer");
+    expect(await pay("05")).toBe("pending_customer");
+    expect((await packetOf(id)).submitted).toBe(false);
+    expect(await accept("05")).toBe("pending_review");
+    expect(await packetOf(id)).toMatchObject({ stage: "pending_review", submitted: true, consent_name: "Nia Signer", review_issues: [] });
+    const [client] = await asServer<{ submitted: boolean; consent_matches: boolean }>(
+      "select c.onboarding_submitted_at is not null as submitted, c.consented_at = a.accepted_at as consent_matches from public.clients c join public.client_packets p on p.client_id = c.id join public.client_agreements a on a.id = p.agreement_id where c.id = $1",
+      [id],
+    );
+    expect(client).toEqual({ submitted: true, consent_matches: true });
+  });
+
+  it("refuses stale terms (IVA43) and stores nothing; the snapshot comes from the database", async () => {
+    const id = await openPacket("Agree Stale", "06");
+    await saveDetails("06");
+    const count = async () => (await asServer<{ n: number }>("select count(*)::int as n from public.client_agreements where client_id = $1", [id]))[0].n;
+    await expect(accept("06", terms("Agree Stale", "United States", 1))).rejects.toMatchObject({ code: "IVA43" });
+    await expect(accept("06", { ...terms("Agree Stale"), extra: true })).rejects.toMatchObject({ code: "IVA43" });
+    // The Closer changes the price: what the customer saw before is stale, the new price is what is stored.
+    await asServer("update public.clients set monthly_cents = 90000 where id = $1", [id]);
+    await expect(accept("06")).rejects.toMatchObject({ code: "IVA43" });
+    expect(await count()).toBe(0);
+    await accept("06", terms("Agree Stale", "United States", 90000));
+    const [row] = await asServer<{ terms: { monthly_cents: number } }>("select terms from public.client_agreements where client_id = $1", [id]);
+    expect(row.terms.monthly_cents).toBe(90000);
+  });
+
+  it("refuses a bad version, empty text or a name with control characters", async () => {
+    await openPacket("Agree Input", "07");
+    const seen = JSON.stringify(terms("Agree Input", null));
+    const call = (version: string, body: string, signer: string) =>
+      asServer("select public.accept_client_agreement($1, $2, $3, $4::jsonb, $5, null)", [hash("07"), version, body, seen, signer]);
+    await expect(call("1", "text", "Nia")).rejects.toThrow(/agreement acceptance is not valid/);
+    await expect(call("v1", "", "Nia")).rejects.toThrow(/agreement acceptance is not valid/);
+    await expect(call("v1", "text", "  ")).rejects.toThrow(/agreement acceptance is not valid/);
+    await expect(call("v1", "text", "Nia\u0007")).rejects.toThrow(/agreement acceptance is not valid/);
+    await expect(
+      asServer("select public.accept_client_agreement($1, 'v1', 'text', $2::jsonb, 'Nia', 'not-a-hash')", [hash("07"), seen]),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("refuses an agreement while the package isn't set (IVA45) and keeps that step open; an empty country is fine", async () => {
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Agree No Package', 'Nia', 'nopackage@agree.co', $1) returning id",
+      [CLOSER],
+    );
+    await asServer("select public.issue_client_onboarding_link($1, $2, $3)", [id, linkToken("12"), hash("12")]);
+    names.set("12", "Agree No Package");
+    const bare = { company_name: "Agree No Package", country: null, package_code: null, hours_per_week: null, term_months: null, monthly_cents: null, starts_on: null };
+    await expect(accept("12", bare)).rejects.toMatchObject({ code: "IVA45" });
+    // Details and proof saved, still no package: the agreement step stays open and the packet out of review.
+    expect(await saveDetails("12")).toBe("pending_customer");
+    expect(await pay("12")).toBe("pending_customer");
+    const [{ open }] = await asServer<{ open: string[] }>(
+      "select private.packet_open_sections(p, c) as open from public.client_packets p join public.clients c on c.id = p.client_id where c.id = $1",
+      [id],
+    );
+    expect(open).toEqual(["agreement"]);
+    // clients_package_complete keeps the package all-or-nothing, so setting it opens the agreement for acceptance.
+    await asServer(
+      "update public.clients set package_code = 'essentials', hours_per_week = 20, term_months = 6, monthly_cents = 85500, starts_on = '2026-11-01', timezone = 'America/New_York' where id = $1",
+      [id],
+    );
+    expect(await accept("12")).toBe("pending_review");
+    // The country alone may still be empty when accepting.
+    await openPacket("Agree No Country", "16");
+    expect(await accept("16", terms("Agree No Country", null))).toBe("pending_customer");
+  });
+
+  it("a package change after acceptance blocks review until the new terms are accepted, even after a return", async () => {
+    const id = await openPacket("Agree Price Change", "14");
+    await saveDetails("14");
+    expect(await accept("14")).toBe("pending_customer");
+    // The server (a Closer's edit) changes the package after the customer accepted. Proof is saved before details,
+    // so only the comparison with the current terms keeps the packet out of review.
+    await asServer("update public.clients set monthly_cents = 99000, term_months = 12 where id = $1", [id]);
+    expect(await pay("14")).toBe("pending_customer");
+    expect(await saveDetails("14")).toBe("pending_customer");
+    expect(await packetOf(id)).toMatchObject({ stage: "pending_customer", submitted: false });
+    const newTerms = { ...terms("Agree Price Change", "United States", 99000), term_months: 12 };
+    expect(await accept("14", newTerms)).toBe("pending_review");
+
+    // Returned for the details only; then the price changes: the agreement opens although it wasn't sent back.
+    await asServer("select public.save_client_review($1, $2::text[], null)", [id, ["basic"]]);
+    await asServer("update public.clients set monthly_cents = 99500 where id = $1", [id]);
+    await expect(pay("14")).rejects.toMatchObject({ code: "IVA08" });
+    expect(await accept("14", { ...newTerms, monthly_cents: 99500 })).toBe("changes_requested");
+    expect(await saveDetails("14")).toBe("pending_review");
+  });
+
+  it("accepting the same version, terms and name again stores no new row", async () => {
+    const id = await openPacket("Agree Twice", "15");
+    await saveDetails("15");
+    expect(await accept("15")).toBe("pending_customer");
+    const rows = async () => (await asServer<{ n: number }>("select count(*)::int as n from public.client_agreements where client_id = $1", [id]))[0].n;
+    const first = (await packetOf(id)).agreement_id;
+    expect(await accept("15")).toBe("pending_customer");
+    expect(await rows()).toBe(1);
+    expect((await packetOf(id)).agreement_id).toBe(first);
+    // A new version is new evidence.
+    await asServer("select public.accept_client_agreement($1, 'v2', 'The agreement text', $2::jsonb, 'Nia Signer', null)", [hash("15"), JSON.stringify(terms("Agree Twice"))]);
+    expect(await rows()).toBe(2);
+    expect((await packetOf(id)).agreement_id).not.toBe(first);
+  });
+
+  it("a change to the company name or country clears the acceptance and blocks review until it is accepted again", async () => {
+    const id = await openPacket("Agree Rename", "08");
+    // Accepted before the details: the country was still empty.
+    expect(await accept("08", terms("Agree Rename", null))).toBe("pending_customer");
+    expect((await packetOf(id)).agreement_id).not.toBeNull();
+    expect(await saveDetails("08")).toBe("pending_customer");
+    expect((await packetOf(id)).agreement_id).toBeNull();
+    expect(await pay("08")).toBe("pending_customer");
+    expect(await accept("08")).toBe("pending_review");
+  });
+
+  it("after a return only the steps sent back (old or new section names) may be saved; any open flag blocks review", async () => {
+    const id = await inReview("Agree Return", "09");
+    // Stored with the old app's names: address → details; consent and payment → agreement and payment.
+    await asServer("select public.save_client_review($1, $2::text[], 'Fix these')", [id, ["address"]]);
+    await expect(accept("09")).rejects.toMatchObject({ code: "IVA08" });
+    await expect(pay("09")).rejects.toMatchObject({ code: "IVA08" });
+    expect(await saveDetails("09")).toBe("pending_review");
+    expect(await packetOf(id)).toMatchObject({ review_issues: [], submitted: true });
+
+    await asServer("select public.save_client_review($1, $2::text[], 'Again')", [id, ["consent", "payment"]]);
+    await expect(saveDetails("09")).rejects.toMatchObject({ code: "IVA08" });
+    expect(await accept("09")).toBe("changes_requested");
+    expect((await packetOf(id)).review_issues).toEqual(["payment"]);
+    expect(await pay("09")).toBe("pending_review");
+    const [{ note }] = await asServer<{ note: string | null }>("select review_note as note from public.client_packets where client_id = $1", [id]);
+    expect(note).toBeNull();
+  });
+
+  it("a rename after a return opens the agreement again, even if it wasn't sent back", async () => {
+    const id = await inReview("Agree Return Rename", "0a");
+    await asServer("select public.save_client_review($1, $2::text[], null)", [id, ["basic"]]);
+    expect(await saveDetails("0a", "Agree Renamed")).toBe("changes_requested");
+    expect((await packetOf(id)).agreement_id).toBeNull();
+    await expect(pay("0a")).rejects.toMatchObject({ code: "IVA08" });
+    expect(await accept("0a", terms("Agree Renamed"))).toBe("pending_review");
+  });
+
+  it("a packet returned under the old flow needs the new agreement too", async () => {
+    // Submitted with the sample consent (no acceptance row), then sent back for its address.
+    const id = await openPacket("Agree Legacy Return", "0b");
+    await asServer("select public.submit_client_packet($1, 'Agree Legacy Return', 'Nia', null, $2::jsonb, 'Nia', 'receipt.pdf', 'application/pdf', 'YQ==')", [hash("0b"), JSON.stringify(details)]);
+    await asServer("select public.save_client_review($1, $2::text[], null)", [id, ["address"]]);
+    expect(await saveDetails("0b")).toBe("changes_requested");
+    expect(await accept("0b")).toBe("pending_review");
+  });
+
+  it("the review sections accept 'agreement' alongside the old names", async () => {
+    const id = await openPacket("Agree Sections", "0c");
+    await rolledBack(async () => {
+      await asServer("update public.client_packets set review_issues = '{agreement,consent,basic}' where client_id = $1", [id]);
+    });
+    await expect(asServer("update public.client_packets set review_issues = '{nope}' where client_id = $1", [id])).rejects.toThrow(/client_packets_review_issues_check/);
+  });
+
+  it("the old submit_client_packet still submits in one call", async () => {
+    const id = await openPacket("Agree Old Submit", "0d");
+    await asServer("select public.submit_client_packet($1, 'Agree Old Submit', 'Nia', null, $2::jsonb, 'Nia', 'receipt.pdf', 'application/pdf', 'YQ==')", [hash("0d"), JSON.stringify(details)]);
+    expect(await packetOf(id)).toMatchObject({ stage: "pending_review", submitted: true, agreement_id: null });
+  });
+
+  it("the backfill marks packets signed with the sample consent and dates the ones in review", async () => {
+    // The fixtures are created after the migration ran, so re-run its backfill statements on them.
+    const sql = readFileSync(join(MIGRATIONS, "20261029172015_registration_agreement.sql"), "utf8");
+    const backfill = sql.slice(sql.indexOf("-- Backfill"), sql.indexOf("-- End of backfill"));
+    const signed = await openPacket("Agree Legacy", "10");
+    await asServer("select public.submit_client_packet($1, 'Agree Legacy', 'Nia', null, $2::jsonb, 'Nia', 'receipt.pdf', 'application/pdf', 'YQ==')", [hash("10"), JSON.stringify(details)]);
+    const waiting = await openPacket("Agree Waiting", "11");
+    const returned = await openPacket("Agree Legacy Returned", "17");
+    await asServer("select public.submit_client_packet($1, 'Agree Legacy Returned', 'Nia', null, $2::jsonb, 'Nia', 'receipt.pdf', 'application/pdf', 'YQ==')", [hash("17"), JSON.stringify(details)]);
+    await asServer("select public.save_client_review($1, $2::text[], null)", [returned, ["address"]]);
+    await rolledBack(async () => {
+      await db.exec(backfill);
+      expect((await packetOf(signed)).legacy_consent).toBe(true);
+      expect((await packetOf(waiting)).legacy_consent).toBe(false);
+      // Signed with the sample consent but sent back: it must accept the new agreement, so it isn't marked.
+      expect(await packetOf(returned)).toMatchObject({ stage: "changes_requested", legacy_consent: false });
+      const [{ dated }] = await asServer<{ dated: boolean }>(
+        "select c.onboarding_submitted_at = p.submitted_at as dated from public.clients c join public.client_packets p on p.client_id = c.id where c.id = $1",
+        [signed],
+      );
+      expect(dated).toBe(true);
+    });
+  });
+});
+
 describe("discovery calls", () => {
   // LG_A and LG_B are Lead Gens of the default tenant; LG_OFF is one who was deactivated (their token still carries
   // the role for up to an hour). CLOSER_B, ADMIN_B and SUPER come from "tenants".

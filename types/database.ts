@@ -294,8 +294,26 @@ type ClientPacketRow = {
   review_issues: string[];
   review_note: string | null;
   submitted_at: string | null;
+  /** The acceptance covering the client's current terms; null until accepted, or after the terms change. */
+  agreement_id: string | null;
+  /** Signed with the earlier sample consent, before agreements existed. */
+  legacy_consent: boolean;
   created_at: string;
   updated_at: string;
+};
+
+/** Agreement acceptance evidence: append-only, server-only. */
+type ClientAgreementRow = {
+  id: string;
+  tenant_id: string;
+  client_id: string;
+  version: string;
+  body: string;
+  terms: Json;
+  signer_name: string;
+  contact_email_on_file: string;
+  ip_hash: string | null;
+  accepted_at: string;
 };
 
 type AssignmentRow = {
@@ -464,6 +482,12 @@ export type Database = {
         Row: ClientPacketRow;
         Insert: InsertOf<ClientPacketRow, "client_id" | "token" | "token_hash">;
         Update: Optional<ClientPacketRow>;
+        Relationships: [];
+      };
+      client_agreements: {
+        Row: ClientAgreementRow;
+        Insert: InsertOf<ClientAgreementRow, "tenant_id" | "client_id" | "version" | "body" | "terms" | "signer_name" | "contact_email_on_file">;
+        Update: never;
         Relationships: [];
       };
       client_notes: {
@@ -680,6 +704,19 @@ export type Database = {
           proof_base64: string;
         };
         Returns: string;
+      };
+      // Registration packet steps (secret key only): each returns the packet's status afterwards.
+      save_client_packet_details: {
+        Args: { token_hash: string; company_name: string; contact_name: string; contact_phone?: string | null; details: Json };
+        Returns: Enum<"client_onboarding_status">;
+      };
+      accept_client_agreement: {
+        Args: { token_hash: string; version: string; body: string; terms_seen: Json; signer_name: string; ip_hash: string | null };
+        Returns: Enum<"client_onboarding_status">;
+      };
+      save_client_payment_proof: {
+        Args: { token_hash: string; proof_name: string; proof_type: string; proof_base64: string };
+        Returns: Enum<"client_onboarding_status">;
       };
       // Demo scheduling: executable by the secret key only; each returns the details its email needs.
       book_demo: { Args: { client_id: string; slot_id: string; actor: string; note: string | null }; Returns: Json };
