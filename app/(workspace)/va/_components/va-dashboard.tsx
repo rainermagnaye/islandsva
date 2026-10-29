@@ -120,17 +120,19 @@ export async function VaDashboard({ vaId, firstName }: { vaId: string; firstName
       </section>
 
       <Grid>
-        <GridItem span={4} md={8} lg={8} className="content-start">
+        {/* Each row's cards stretch to the taller side, so the columns end together; the schedule sits under the
+            tasks to balance the demo requests beside them. */}
+        <GridItem span={4} md={8} lg={8} className="grid-rows-[auto_1fr] gap-6">
           <TodayTasks tasks={shown} total={today.length} delayed={delayedIds(shown, todaySessions, now)} tones={tones} now={now} />
-        </GridItem>
-        <GridItem span={4} md={8} lg={4} className="content-start gap-6">
-          <DemoRequests demos={demos} />
           <TodaySchedule items={schedule} />
         </GridItem>
-        <GridItem span={4} md={8} lg={8} className="content-start">
+        <GridItem span={4} md={8} lg={4}>
+          <DemoRequests demos={demos} />
+        </GridItem>
+        <GridItem span={4} md={8} lg={8}>
           <ClientsPanel clients={clientWeeks.slice(0, CLIENTS_SHOWN)} total={clients.length} now={now} />
         </GridItem>
-        <GridItem span={4} md={8} lg={4} className="content-start">
+        <GridItem span={4} md={8} lg={4}>
           <HoursByClient clients={clientWeeks} />
         </GridItem>
       </Grid>
@@ -143,6 +145,7 @@ function DemoRequests({ demos }: { demos: readonly VaDemo[] }) {
   return (
     <Panel
       boxed
+      className="content-start"
       title="Demo requests"
       action={
         waiting > 0 && (

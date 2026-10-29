@@ -41,6 +41,7 @@ export function TodayTasks({
   return (
     <Panel
       boxed
+      className="content-start"
       title="Today's tasks"
       action={
         <Link href={appRoutes.vaTasks} className="type-label">

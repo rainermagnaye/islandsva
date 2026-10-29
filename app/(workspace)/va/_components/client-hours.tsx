@@ -10,8 +10,6 @@ import type { AssignedClient } from "@/features/clients/contract";
 import { safeTimeZone } from "@/features/demos/contract";
 import { hoursOf, hoursStatus } from "@/features/tasks/weekly";
 
-const day = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-
 /** A client with the hours the VA logged for them this week. */
 export type ClientWeek = AssignedClient & { ms: number };
 
@@ -19,22 +17,42 @@ const hoursText = (client: ClientWeek) => (client.hoursPerWeek ? `${hoursOf(clie
 
 function columns(now: Date): Column<ClientWeek>[] {
   return [
-    { key: "company", label: "Company", render: (client) => <CellTitle title={client.companyName} subtitle={client.contactName} /> },
+    {
+      key: "company",
+      label: "Company",
+      // One line each, cut with an ellipsis; the full name is in the tooltip.
+      render: (client) => (
+        <CellTitle
+          title={
+            <span className="block truncate" title={client.companyName}>
+              {client.companyName}
+            </span>
+          }
+          subtitle={
+            <span className="block truncate" title={client.contactName}>
+              {client.contactName}
+            </span>
+          }
+        />
+      ),
+    },
+    // Shares, not fixed widths: the panel is two-thirds of the page, so fixed tracks left the company a sliver on
+    // smaller screens. The time stacks over the city to stay narrow.
     {
       key: "time",
-      label: "Their time now",
-      nowrap: true,
+      label: "Their time",
+      width: "18%",
       render: (client) => {
         if (!client.timezone) return "—";
         const zone = safeTimeZone(client.timezone);
-        return `${zoneCity(zone)} · ${clockLabel(minutesOf(wallClockIn(now.toISOString(), zone)))}`;
+        return <CellTitle title={clockLabel(minutesOf(wallClockIn(now.toISOString(), zone)))} subtitle={zoneCity(zone)} />;
       },
     },
-    { key: "hours", label: "Hours this week", align: "end", nowrap: true, render: hoursText },
+    { key: "hours", label: "This week", align: "end", width: "18%", render: hoursText },
     {
       key: "status",
       label: "Status",
-      nowrap: true,
+      width: "22%",
       render: (client) => {
         const status = hoursStatus(client.ms, client.hoursPerWeek);
         return status ? (
@@ -46,15 +64,15 @@ function columns(now: Date): Column<ClientWeek>[] {
         );
       },
     },
-    { key: "since", label: "Client since", nowrap: true, render: (client) => <span className="text-ink-muted">{day.format(new Date(client.startedAt))}</span> },
   ];
 }
 
-/** The VA's clients this week: where they are, the hours logged against what was agreed, and how long they've worked together. */
+/** The VA's clients this week: their time now and the hours logged against what was agreed. The Clients page has the rest. */
 export function ClientsPanel({ clients, total, now }: { clients: readonly ClientWeek[]; total: number; now: Date }) {
   return (
     <Panel
       boxed
+      className="content-start"
       title="Your clients"
       action={
         total > clients.length && (
@@ -80,7 +98,7 @@ export function ClientsPanel({ clients, total, now }: { clients: readonly Client
 export function HoursByClient({ clients }: { clients: readonly ClientWeek[] }) {
   const agreed = clients.filter((client) => client.hoursPerWeek);
   return (
-    <Panel boxed title="Hours by client">
+    <Panel boxed className="content-start" title="Hours by client">
       {agreed.length === 0 ? (
         <p className="m-0 type-body-sm text-ink-muted">None of your clients has agreed weekly hours yet.</p>
       ) : (

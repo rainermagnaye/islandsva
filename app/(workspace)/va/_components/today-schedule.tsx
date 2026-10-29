@@ -9,6 +9,7 @@ export function TodaySchedule({ items }: { items: readonly AgendaItem[] }) {
   return (
     <Panel
       boxed
+      className="content-start"
       title="Today's schedule"
       action={
         <Link href={appRoutes.vaCalendar} className="type-label">
