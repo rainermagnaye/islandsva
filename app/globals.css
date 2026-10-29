@@ -348,6 +348,16 @@ body:has(nav.portal-nav) .portal-header {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* The dashboard task table is full-bleed inside a padded card. Match the card's inset so Title lines up with the heading, and keep Deadline, Assigned VA and Status at the widths they need. */
+.task-board .data-table thead th:first-child,
+.task-board .data-table tbody th:first-child {
+  padding-left: var(--space-6);
+}
+.task-board .data-table thead th:last-child,
+.task-board .data-table td:last-child {
+  padding-right: var(--space-6);
+}
+
 .data-table .data-table__check {
   position: relative;
   z-index: 1;

@@ -10,12 +10,12 @@ export default function ClientLayout({ children }: LayoutProps<"/client">) {
         items={[
           { href: appRoutes.client, label: "Dashboard", icon: "home", exact: true },
           { href: appRoutes.clientCalendar, label: "Calendar", icon: "calendar" },
+          { href: appRoutes.clientAssistants, label: "My assistants", icon: "user" },
           { href: appRoutes.clientMatch, label: "VA Match", icon: "users" },
-          { href: appRoutes.clientTasks, label: "Tasks", icon: "check" },
         ]}
         footer={{ href: routes.home, label: "View site", icon: "external" }}
       />
-      <div className="min-w-0">{children}</div>
+      <div className="client-workspace min-w-0 [&_.workspace-page]:gap-5 [&_.workspace-page]:px-5 [&_.workspace-page]:py-4 [&_.workspace-page]:md:px-6 [&_.workspace-page]:md:py-5">{children}</div>
     </div>
   );
 }

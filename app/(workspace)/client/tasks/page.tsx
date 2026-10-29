@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
-import { Panel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { appRoutes, clientTaskHref } from "@/content/routes";
-import { TaskForm } from "@/features/tasks/components/task-form";
+import { AddTaskButton } from "@/features/tasks/components/add-task-button";
 import { TaskMetrics } from "@/features/tasks/components/task-metrics";
 import { TaskTable } from "@/features/tasks/components/task-table";
-import { getOwnCompany, listActiveVas, listTasks } from "@/features/tasks/dal";
-import { deadlineWindow } from "@/features/tasks/metrics";
+import { getOwnCompany, listActiveVas, listTasks, listWorkSessions } from "@/features/tasks/dal";
+import { deadlineWindow, taskTimeZone } from "@/features/tasks/metrics";
+import { delayedIds } from "@/features/tasks/time";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Tasks" };
@@ -33,20 +33,22 @@ async function ClientTasks() {
   }
 
   const [tasks, vas] = await Promise.all([listTasks(), listActiveVas(company.id)]);
-  const window = company.timezone ? deadlineWindow(company.timezone) : null;
+  const sessions = await listWorkSessions(tasks.map((task) => task.id));
+  const timeZone = taskTimeZone(company.timezone);
+  const window = deadlineWindow(timeZone);
   const canCreate = company.status === "active" && company.disabledAt === null && window !== null && vas.length >= 1;
 
   return (
-    <Workspace title="Tasks" lead="Work for your VA, with a title and a deadline.">
+    <Workspace
+      title="Tasks"
+      lead="Work for your VA, with a deadline and how long it should take."
+      actions={canCreate && window ? <AddTaskButton vas={vas} today={window.today} last={window.last} timeZone={timeZone} /> : undefined}
+    >
       <TaskMetrics tasks={tasks} href={appRoutes.clientTasks} />
-      {canCreate && window && company.timezone && (
-        <Panel title="Add a task">
-          <TaskForm today={window.today} last={window.last} timeZone={company.timezone} vas={vas} />
-        </Panel>
-      )}
       <TaskTable
         tasks={tasks}
         hrefFor={clientTaskHref}
+        delayed={delayedIds(tasks, sessions, new Date())}
         empty={
           canCreate ? (
             <EmptyState compact title="No tasks yet" description="Add a task with a deadline for your VA." />

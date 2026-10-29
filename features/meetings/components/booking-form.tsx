@@ -1,35 +1,37 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { AttachmentField } from "@/components/ui/attachment-field";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Form } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
-import { addBooking, editBooking } from "../actions";
-import { InviteField } from "./invite-field";
+import type { SubmitResult } from "@/types/form";
+import type { BookingDraft } from "../booking-draft";
 import { acceptBookingAttachment, BOOKING_ATTACHMENT_ACCEPT } from "../attachment";
-import { BOOKING_LIMITS, BOOKING_TIME_ZONE, type Booking, type BookingChoice, type BookingField } from "../contract";
+import { BOOKING_LIMITS, BOOKING_TIME_ZONE, type Booking, type BookingField } from "../contract";
 
-export type BookingDraft = { startDate: string; startTime: string; endDate: string; endTime: string };
-
-/** The create and edit modal. The creator is the signed-in admin and is not editable. */
+/**
+ * The create and edit modal. The creator is the signed-in person and is not editable. Guests and the save
+ * action come from the caller so admin and client calendars don't ship each other's Server Actions.
+ */
 export function BookingForm({
   mode,
   booking,
   draft,
-  clients,
-  staff,
   creatorName,
+  save,
+  guests,
   onClose,
   onDone,
 }: {
   mode: "create" | "edit";
   booking?: Booking;
   draft: BookingDraft;
-  clients: readonly BookingChoice[];
-  staff: readonly BookingChoice[];
   creatorName: string;
+  save: (formData: FormData) => Promise<SubmitResult<BookingField>>;
+  guests: (fieldErrors: Partial<Record<BookingField, string>>) => ReactNode;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -46,7 +48,7 @@ export function BookingForm({
               if (!accepted.ok) return { ok: false, message: accepted.message };
             }
           }
-          const result = mode === "create" ? await addBooking(formData) : await editBooking(formData);
+          const result = await save(formData);
           if (result.ok) onDone();
           return result;
         }}
@@ -61,7 +63,7 @@ export function BookingForm({
               <DatePicker label="End date" name="endDate" required defaultValue={draft.endDate} timeZone={BOOKING_TIME_ZONE} weekStartsOn={1} error={fieldErrors.endDate} />
               <TextField label="End time" name="endTime" type="time" required defaultValue={draft.endTime} error={fieldErrors.endTime} />
             </div>
-            <InviteField clients={clients} staff={staff} guests={booking?.guests ?? []} error={fieldErrors.clientIds ?? fieldErrors.staffIds} />
+            {guests(fieldErrors)}
             <p className="m-0 type-body-sm text-ink-muted">Created by {booking?.creatorName ?? creatorName}</p>
             {mode === "create" && (
               <>

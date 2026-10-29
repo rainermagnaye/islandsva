@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card } from "@/components/ui/card";
 import { addDays, addMonths, formatDate, monthGrid, sameMonth, startOfWeek, type IsoDate } from "@/components/ui/date-math";
@@ -15,7 +16,9 @@ import { cx } from "@/lib/cx";
 import { demoCalendarEvents, type DemoCalendarRow } from "../calendar";
 import { VA_TIME_ZONE } from "../contract";
 
-const LEGEND: readonly { tone?: Tone; label: string; done?: boolean }[] = [
+export type CalendarLegendItem = { tone?: Tone; label: string; done?: boolean };
+
+const LEGEND: readonly CalendarLegendItem[] = [
   { tone: "sand", label: "Requested" },
   { tone: "lagoon", label: "Confirmed" },
   { done: true, label: "Completed" },
@@ -31,16 +34,24 @@ const VIEWS = [
 
 type CalendarView = (typeof VIEWS)[number]["id"];
 
-const navButton = "grid size-11 place-items-center rounded-md hover:bg-action-ghost-hover";
+const navButton = "grid size-9 place-items-center rounded-md text-ink hover:bg-action-ghost-hover";
 
 /** Demo calls on a day, week, or month. The date opens a calendar to jump; a call opens the client unless the page handles the click. */
-export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], toolbar, onEventClick, onSlotClick, eventGesture, onEventMove }: {
+export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], toolbar, actions, viewsInHeader = false, aside, legend = LEGEND, onEventClick, onSlotClick, eventGesture, onEventMove }: {
   rows: readonly DemoCalendarRow[];
   now: string;
   today: IsoDate;
   nowMinutes: number;
   extraEvents?: readonly ScheduleEvent[];
+  /** Inside the calendar card, after the view switch (e.g. the filter). */
   toolbar?: ReactNode;
+  /** In the page header, beside the title (e.g. New meeting). */
+  actions?: ReactNode;
+  /** The Daily/Weekly/Monthly switch beside `actions` in the page header (admin) instead of in the card. */
+  viewsInHeader?: boolean;
+  /** A side panel beside the calendar (the client's "Coming up"), as tall as the calendar card. */
+  aside?: ReactNode;
+  legend?: readonly CalendarLegendItem[];
   /** Return true when the page handled the event. Otherwise a demo call opens the client. */
   onEventClick?: (event: ScheduleEvent) => boolean;
   /** Empty hour, or a month day at 09:00. `minute` is minutes since midnight in Manila. */
@@ -90,67 +101,91 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
         ? formatDate(focus, { month: "long", year: "numeric" })
         : `${formatDate(weekStart, { month: "short", day: "numeric" })} – ${formatDate(addDays(weekStart, 6), { month: "short", day: "numeric", year: "numeric" })}`;
 
+  const viewSwitch = (
+    <div role="group" aria-label="Calendar view" className="flex gap-1 rounded-md bg-surface-sunken p-1">
+      {VIEWS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          aria-pressed={view === item.id}
+          onClick={() => setView(item.id)}
+          className={cx("min-h-9 rounded-sm px-3.5 type-label", view === item.id ? "bg-action-secondary text-on-action-secondary" : "text-ink hover:bg-action-ghost-hover")}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const dateFilter = (
-    <div ref={picker} className="relative flex items-center">
-      <button type="button" aria-label="Previous" onClick={() => step(-1)} className={navButton}>
-        <Icon name="chevron-left" size={20} />
-      </button>
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={picking}
-        aria-label={`Choose a date, ${range}`}
-        onClick={() => setPicking((open) => !open)}
-        className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 type-body-sm text-ink hover:bg-action-ghost-hover"
-      >
-        <span aria-live="polite">{range}</span>
-        <Icon name="calendar" size={18} className="text-ink-muted" />
-      </button>
-      <button type="button" aria-label="Next" onClick={() => step(1)} className={navButton}>
-        <Icon name="chevron-right" size={20} />
-      </button>
-      {picking && (
-        <div className="absolute top-full left-0 z-30 mt-1">
-          <Calendar
-            value={focus}
-            onChange={(date) => {
-              setFocus(date);
-              setPicking(false);
-            }}
-            today={today}
-            weekStartsOn={1}
-            timeZone={VA_TIME_ZONE}
-            className="elevation-md"
-          />
-        </div>
-      )}
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+      <div ref={picker} className="relative flex items-center gap-1">
+        <button type="button" aria-label="Previous" onClick={() => step(-1)} className={navButton}>
+          <Icon name="chevron-left" size={18} />
+        </button>
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={picking}
+          aria-label={`Choose a date, ${range}`}
+          onClick={() => setPicking((open) => !open)}
+          className="inline-flex min-h-10 items-center gap-3 rounded-md px-3 type-body-sm text-ink hover:bg-action-ghost-hover"
+        >
+          <span aria-live="polite">{range}</span>
+          <Icon name="calendar" size={18} className="text-ink" />
+        </button>
+        <button type="button" aria-label="Next" onClick={() => step(1)} className={navButton}>
+          <Icon name="chevron-right" size={18} />
+        </button>
+        {picking && (
+          <div className="absolute top-full left-0 z-30 mt-1">
+            <Calendar
+              value={focus}
+              onChange={(date) => {
+                setFocus(date);
+                setPicking(false);
+              }}
+              today={today}
+              weekStartsOn={1}
+              timeZone={VA_TIME_ZONE}
+              footer={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFocus(today);
+                    setPicking(false);
+                  }}
+                >
+                  Today
+                </Button>
+              }
+              className="elevation-md"
+            />
+          </div>
+        )}
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        {!viewsInHeader && viewSwitch}
+        {toolbar}
+      </div>
     </div>
   );
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <h1 className="m-0 type-h1">Calendar</h1>
         <div className="flex flex-wrap items-center gap-3">
-          {toolbar}
-          <div role="group" aria-label="Calendar view" className="flex rounded-md border border-border bg-surface-card p-0.5">
-          {VIEWS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={view === item.id}
-              onClick={() => setView(item.id)}
-              className={cx("min-h-9 rounded-sm px-3 type-label", view === item.id ? "bg-action-secondary text-on-action-secondary" : "text-ink-muted hover:bg-action-ghost-hover hover:text-ink")}
-            >
-              {item.label}
-            </button>
-          ))}
-          </div>
+          {viewsInHeader && viewSwitch}
+          {actions}
         </div>
       </div>
 
+      <div className="flex flex-wrap items-stretch gap-5">
+      <div className="min-w-0 flex-[999_1_40rem]">
       {view === "month" ? (
-        <MonthBoard focus={focus} today={today} events={events} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />
+        <MonthBoard focus={focus} today={today} events={events} legend={legend} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />
       ) : (
         <ScheduleCalendar
           showToolbar={false}
@@ -158,7 +193,7 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
           view={view}
           focus={focus}
           events={events}
-          legend={LEGEND}
+          legend={legend}
           today={today}
           nowMinutes={nowMinutes}
           timeZone={VA_TIME_ZONE}
@@ -168,11 +203,14 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
           onEventMove={onEventMove}
         />
       )}
+      </div>
+      {aside && <div className="flex min-w-0 flex-[1_1_18rem] lg:max-w-[22rem]">{aside}</div>}
+      </div>
     </div>
   );
 }
 
-function MonthBoard({ focus, today, events, onEventClick, onSlotClick, eventGesture, onEventMove, filter }: { focus: IsoDate; today: IsoDate; events: readonly ScheduleEvent[]; onEventClick: (event: ScheduleEvent) => void; onSlotClick?: (day: IsoDate, minute: number) => void; eventGesture?: (event: ScheduleEvent) => ScheduleGesture | null; onEventMove?: (event: ScheduleEvent, next: { start: string; end: string }) => void | boolean | Promise<void | boolean>; filter: ReactNode }) {
+function MonthBoard({ focus, today, events, legend, onEventClick, onSlotClick, eventGesture, onEventMove, filter }: { focus: IsoDate; today: IsoDate; events: readonly ScheduleEvent[]; legend: readonly CalendarLegendItem[]; onEventClick: (event: ScheduleEvent) => void; onSlotClick?: (day: IsoDate, minute: number) => void; eventGesture?: (event: ScheduleEvent) => ScheduleGesture | null; onEventMove?: (event: ScheduleEvent, next: { start: string; end: string }) => void | boolean | Promise<void | boolean>; filter: ReactNode }) {
   const weeks = monthGrid(focus, 1);
   const names = weeks[0].map((day) => formatDate(day, { weekday: "short" }));
   const onDay = (day: IsoDate) => events.filter((event) => event.start.slice(0, 10) === day);
@@ -218,7 +256,7 @@ function MonthBoard({ focus, today, events, onEventClick, onSlotClick, eventGest
     <Card as="section" aria-label={formatDate(focus, { month: "long", year: "numeric" })} padding="sm" className="grid gap-3 text-ink">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {filter}
-        <Legend />
+        <Legend items={legend} />
       </div>
       <div ref={board} className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border">
         {names.map((name) => (
@@ -264,10 +302,10 @@ function MonthBoard({ focus, today, events, onEventClick, onSlotClick, eventGest
   );
 }
 
-function Legend() {
+function Legend({ items }: { items: readonly CalendarLegendItem[] }) {
   return (
     <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 type-caption text-ink-muted">
-      {LEGEND.map((item) => (
+      {items.map((item) => (
         <li key={item.label} className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className={cx("size-3 rounded-sm", item.done ? "bg-tag-lagoon-ink" : cx("ring-[1.5px] ring-inset", TONE_CLASSES[item.tone ?? "lagoon"].bg, TONE_CLASSES[item.tone ?? "lagoon"].ring))} />
           {item.label}

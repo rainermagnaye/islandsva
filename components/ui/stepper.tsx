@@ -4,7 +4,7 @@ import { Icon } from "./icon";
 
 type StepperProps = {
   steps: readonly { label: string; description?: string; href?: string }[];
-  /** 0-based index of the current step. */
+  /** 0-based index of the current step. `steps.length` means every step is done. */
   current: number;
   label?: string;
   className?: string;
@@ -20,8 +20,7 @@ export function Stepper({ steps, current, label = "Progress", className }: Stepp
   return (
     <nav aria-label={label} className={cx("@container grid gap-3", className)}>
       <p className="m-0 type-label text-ink">
-        Step {Math.min(current + 1, steps.length)} of {steps.length}
-        {now ? `: ${now.label}` : ""}
+        {current >= steps.length ? `All ${steps.length} steps done` : `Step ${current + 1} of ${steps.length}${now ? `: ${now.label}` : ""}`}
       </p>
       <ol className="m-0 grid list-none gap-3 p-0 @[720px]:grid-flow-col @[720px]:auto-cols-fr">
         {steps.map((step, index) => {

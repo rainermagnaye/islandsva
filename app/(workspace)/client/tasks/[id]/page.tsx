@@ -2,15 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
-import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { Panel } from "@/components/ui/card";
-import { appRoutes } from "@/content/routes";
-import { TaskComments } from "@/features/tasks/components/task-comments";
-import { TaskForm } from "@/features/tasks/components/task-form";
-import { TaskStatusForm } from "@/features/tasks/components/task-status-form";
-import { TaskSummary } from "@/features/tasks/components/task-table";
-import { getOwnCompany, getTask, listTaskComments } from "@/features/tasks/dal";
-import { deadlineWindow, nextStatuses } from "@/features/tasks/metrics";
+import { appRoutes, clientTaskFileHref, clientVaHref } from "@/content/routes";
+import { TaskPage } from "@/features/tasks/components/task-page";
+import { getOwnCompany, getTask, listTaskAttachments, listTaskComments, listTaskEvents, listWorkSessions } from "@/features/tasks/dal";
+import { deadlineWindow, taskTimeZone } from "@/features/tasks/metrics";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Task" };
@@ -29,24 +24,43 @@ async function ClientTask({ params }: { params: PageProps<"/client/tasks/[id]">[
   const task = await getTask(id);
   if (!task) notFound();
 
-  const [company, comments] = await Promise.all([getOwnCompany(user.id), listTaskComments(task.id)]);
-  const window = company?.timezone ? deadlineWindow(company.timezone) : null;
+  const [company, comments, attachments, events, sessions] = await Promise.all([
+    getOwnCompany(user.id),
+    listTaskComments(task.id),
+    listTaskAttachments(task.id),
+    listTaskEvents(task.id),
+    listWorkSessions([task.id]),
+  ]);
+  const timeZone = task.deadlineTimezone || taskTimeZone(company?.timezone);
+  const window = deadlineWindow(timeZone);
   const companyOpen = company?.status === "active" && company.disabledAt === null;
-  const options = nextStatuses(task.status, "client").map((status) => ({
-    status,
-    label: "Close task",
-  }));
+  const open = task.status !== "done";
+  // The client may always decide a review or close (canMove). Sending work back also needs the VA on the
+  // assignment: the database checks that (IVA24) and the action says so.
 
   return (
-    <Workspace title="Task" breadcrumbs={<Breadcrumbs items={[{ label: "Tasks", href: appRoutes.clientTasks }, { label: "Task" }]} />}>
-      <TaskSummary task={task} />
-      {task.status !== "done" && companyOpen && window && company?.timezone && (
-        <Panel title="Title and deadline" headingLevel={2}>
-          <TaskForm today={window.today} last={window.last} timeZone={company.timezone} task={task} />
-        </Panel>
-      )}
-      <TaskStatusForm taskId={task.id} options={options} />
-      <TaskComments taskId={task.id} comments={comments} canComment />
+    <Workspace compact>
+      <TaskPage
+        viewer="client"
+        viewerId={user.id}
+        task={task}
+        events={events}
+        sessions={sessions.get(task.id) ?? []}
+        comments={comments}
+        files={attachments.map((file) => ({ ...file, href: clientTaskFileHref(task.id, file.id) }))}
+        timeZone={timeZone}
+        crumbs={[
+          { label: "Dashboard", href: appRoutes.client },
+          { label: "My assistants", href: appRoutes.clientAssistants },
+          { label: task.vaFirstName, href: clientVaHref(task.vaId) },
+          { label: task.title },
+        ]}
+        vaHref={clientVaHref(task.vaId)}
+        canMove
+        canComment
+        canAddFiles={open && companyOpen}
+        edit={open && companyOpen && window ? { today: window.today, last: window.last, timeZone } : null}
+      />
     </Workspace>
   );
 }

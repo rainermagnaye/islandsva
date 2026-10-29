@@ -3,15 +3,22 @@
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { TextField } from "@/components/ui/text-field";
-import { saveBookingNote, saveBookingNoteEdit } from "../actions";
+import type { SubmitResult } from "@/types/form";
 import { BOOKING_LIMITS, type BookingNoteField } from "../contract";
 
-// Adding or editing a note on a meeting's history (Server Actions saveBookingNote / saveBookingNoteEdit).
+// Adding or editing a note on a meeting's history. The save action comes from the caller so admin and client
+// calendars don't ship each other's Server Actions.
 
-export function NoteForm({ meetingId, eventId, defaultValue = "", onDone }: { meetingId?: string; eventId?: string; defaultValue?: string; onDone: () => void }) {
+export function NoteForm({ meetingId, eventId, defaultValue = "", save, onDone }: {
+  meetingId?: string;
+  eventId?: string;
+  defaultValue?: string;
+  save: (formData: FormData) => Promise<SubmitResult<BookingNoteField>>;
+  onDone: () => void;
+}) {
   return (
     <Form<BookingNoteField> aria-label={eventId ? "Edit note" : "Add a note"} onSubmit={async (formData) => {
-      const result = eventId ? await saveBookingNoteEdit(formData) : await saveBookingNote(formData);
+      const result = await save(formData);
       if (result.ok) onDone();
       return result;
     }}>

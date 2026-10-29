@@ -12,6 +12,8 @@ export type Column<Row> = {
   align?: "end";
   /** Show the whole value. Status badges must not be cut off with an ellipsis. */
   nowrap?: boolean;
+  /** Fixed track for this column. The first column keeps whatever width is left. */
+  width?: string;
   /** Hide the label visually (e.g. an actions column) — it's still read out and shown on phone cards. */
   hideLabel?: boolean;
 };
@@ -66,6 +68,12 @@ export function DataTable<Row>({
     <TableSelection className="data-table">
       <div className={cx("data-table__scroll", attached && "data-table__scroll--plain")}>
         <table>
+          <colgroup>
+            {selectable && <col className="data-table__check" />}
+            {columns.map((column) => (
+              <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+            ))}
+          </colgroup>
           <caption className={showCaption ? undefined : "sr-only"}>{caption}</caption>
           <thead>
             <tr>

@@ -1,7 +1,7 @@
 import { cx } from "@/lib/cx";
 import { TONE_CLASSES, type Tone } from "./tone";
 
-const SIZES = { sm: "size-7 type-caption", md: "size-10 type-label" } as const;
+const SIZES = { sm: "size-7 type-caption", md: "size-10 type-label", lg: "size-16 type-h4" } as const;
 
 /** Up to two initials: "Lia Santos" → "LS". */
 export const initialsOf = (name: string) =>

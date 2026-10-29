@@ -178,16 +178,67 @@ type TaskRow = {
   va_id: string;
   title: string;
   deadline: string;
+  deadline_time: string | null;
   deadline_timezone: string;
   company_name: string;
   va_first_name: string;
+  description: string | null;
+  severity: "low" | "medium" | "high";
+  /** 5–600. Defaults from the severity when an insert leaves it out. */
+  duration_minutes: number;
   status: Enum<"task_status">;
   done_at: string | null;
+  started_at: string | null;
   closed_by: string | null;
+  /** Sent with a status move only; guard_task copies it into task_events and the row always reads null. */
+  transition_note: string | null;
   created_by: string;
   tenant_id: string;
   created_at: string;
   updated_at: string;
+};
+
+/** Written by guard_task with each status move. Signed-in users read it, and the task's client deletes it with the task. */
+type TaskEventRow = {
+  id: string;
+  task_id: string;
+  kind: Enum<"task_event_kind">;
+  note: string | null;
+  actor_id: string | null;
+  actor_first_name: string | null;
+  tenant_id: string;
+  created_at: string;
+};
+
+/** The VA's time on a task. Written only by start_task_timer, pause_task_timer and guard_task; signed-in users read it. */
+type TaskWorkSessionRow = {
+  id: string;
+  task_id: string;
+  va_id: string;
+  started_at: string;
+  ended_at: string | null;
+  tenant_id: string;
+  created_at: string;
+};
+
+type TaskAttachmentRow = {
+  id: string;
+  task_id: string;
+  name: string;
+  content_type: string;
+  bytes: string;
+  tenant_id: string;
+  created_at: string;
+};
+
+type VaMessageRow = {
+  id: string;
+  client_id: string;
+  va_id: string;
+  author_id: string;
+  body: string;
+  tenant_id: string;
+  created_at: string;
 };
 
 type TaskCommentRow = {
@@ -459,8 +510,26 @@ export type Database = {
       };
       tasks: {
         Row: TaskRow;
-        Insert: InsertOf<TaskRow, "client_id" | "va_id" | "title" | "deadline" | "created_by">;
+        Insert: InsertOf<TaskRow, "client_id" | "va_id" | "title" | "deadline" | "created_by" | "severity">;
         Update: Optional<TaskRow>;
+        Relationships: [];
+      };
+      task_attachments: {
+        Row: TaskAttachmentRow;
+        Insert: InsertOf<TaskAttachmentRow, "task_id" | "name" | "content_type" | "bytes">;
+        Update: Optional<TaskAttachmentRow>;
+        Relationships: [];
+      };
+      task_events: {
+        Row: TaskEventRow;
+        Insert: InsertOf<TaskEventRow, "task_id" | "kind">;
+        Update: Optional<TaskEventRow>;
+        Relationships: [];
+      };
+      task_work_sessions: {
+        Row: TaskWorkSessionRow;
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       task_comments: {
@@ -473,6 +542,12 @@ export type Database = {
         Row: AuditLogRow;
         Insert: never;
         Update: never;
+        Relationships: [];
+      };
+      va_messages: {
+        Row: VaMessageRow;
+        Insert: InsertOf<VaMessageRow, "client_id" | "va_id" | "author_id" | "body">;
+        Update: Optional<VaMessageRow>;
         Relationships: [];
       };
       client_onboarding_links: {
@@ -640,6 +715,28 @@ export type Database = {
       };
       update_manual_meeting_note: { Args: { event_id: string; note: string }; Returns: undefined };
       delete_manual_meeting_note: { Args: { event_id: string }; Returns: undefined };
+      create_client_meeting: {
+        Args: {
+          title: string;
+          starts_at: string;
+          ends_at: string;
+          staff_ids: string[];
+          note?: string | null;
+          attachment_name?: string | null;
+          attachment_type?: string | null;
+          attachment_base64?: string | null;
+        };
+        Returns: string;
+      };
+      update_client_meeting: { Args: { meeting_id: string; title: string; starts_at: string; ends_at: string; staff_ids: string[] }; Returns: undefined };
+      cancel_client_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      complete_client_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      start_task_timer: { Args: { task_id: string }; Returns: string };
+      pause_task_timer: { Args: { task_id: string }; Returns: string };
+      add_client_meeting_note: {
+        Args: { meeting_id: string; note: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
+        Returns: string;
+      };
       submit_discovery_request: {
         Args: {
           full_name: string;
@@ -681,6 +778,22 @@ export type Database = {
         Returns: Json;
       };
       record_discovery_outcome: { Args: { meeting_id: string; actor: string; outcome: "done" | "no_show"; note: string | null }; Returns: undefined };
+      // VA Match: signed in as a client; rows only for VAs offered to the caller's own company. Work details only.
+      offered_va_profiles: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          va_id: string;
+          first_name: string;
+          skills: string | null;
+          languages: string | null;
+          highest_education: string | null;
+          certifications: string | null;
+          employers: Json;
+          key_responsibilities: string | null;
+          achievements: string | null;
+          working_hours: Json;
+        }[];
+      };
       discovery_inbox: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -717,7 +830,8 @@ export type Database = {
       meeting_kind: "discovery" | "manual";
       meeting_status: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "cancelled" | "expired";
       meeting_event_kind: "requested" | "scheduled" | "rejected" | "done" | "no_show" | "note" | "expired" | "updated" | "cancelled";
-      task_status: "todo" | "in_progress" | "done";
+      task_status: "todo" | "in_progress" | "review" | "done";
+      task_event_kind: "started" | "submitted" | "changes_requested" | "approved" | "closed" | "reopened";
     };
     CompositeTypes: { [_ in never]: never };
   };

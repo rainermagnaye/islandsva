@@ -8,13 +8,7 @@ import { cardSurface } from "@/components/ui/card-surface";
 import { SearchField } from "@/components/ui/search-field";
 import { SEARCH_MIN_LENGTH, type SearchHit, type SearchResults } from "@/features/search/contract";
 
-const GROUPS = [
-  ["leads", "Leads"],
-  ["clients", "Clients"],
-  ["employees", "Team"],
-] as const;
-
-/** Header search. The list stays closed until three letters, then shows leads, clients, and employees. */
+/** Header search. The list stays closed until three letters, then shows the groups the server sends for this role. */
 export function HeaderSearchField() {
   const router = useRouter();
   const listId = useId();
@@ -91,14 +85,14 @@ export function HeaderSearchField() {
   }
 
   function openFirst() {
-    const first = results ? GROUPS.flatMap(([key]) => results[key])[0] : undefined;
+    const first = results?.groups.flatMap((group) => group.hits)[0];
     if (!first) return;
     clear();
     router.push(first.href);
   }
 
   const show = open && ready;
-  const hits = results ? GROUPS.flatMap(([key]) => results[key]) : [];
+  const hits = results ? results.groups.flatMap((group) => group.hits) : [];
 
   return (
     <div ref={root} className="relative w-full">
@@ -130,8 +124,8 @@ export function HeaderSearchField() {
           )}
           {hits.length > 0 && (
             <div className="grid gap-2 p-2">
-              {GROUPS.map(([key, label]) => (
-                <ResultGroup key={key} label={label} hits={results?.[key] ?? []} onPick={clear} />
+              {results?.groups.map((group) => (
+                <ResultGroup key={group.key} label={group.label} hits={group.hits} onPick={clear} />
               ))}
             </div>
           )}

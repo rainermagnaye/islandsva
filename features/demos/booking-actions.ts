@@ -25,10 +25,16 @@ const REFUSED: Record<BookingRefusal, string> = {
   too_late: "This demo has already started or been answered, so it can't change now.",
   inactive: "Your account isn't active, so a demo can't be booked. Please contact your Islands VA contact.",
 };
-/** "Book this time": books the chosen slot, tells the VA, and returns the client to their dashboard. */
+/**
+ * "Book this time": books the chosen slot and tells the VA. From the demo page the client goes back to their
+ * dashboard; from VA Match (`stay`) the page refreshes in place, so the offer shows the request.
+ */
 export async function bookDemoAction(formData: FormData): Promise<SubmitResult<BookField>> {
   const user = await requireRole(["client"]);
-  const parsed = parseBooking(formEntries(formData));
+  const entries = formEntries(formData);
+  const stay = entries.stay === "1";
+  delete entries.stay;
+  const parsed = parseBooking(entries);
   if (!parsed.ok) return toSubmitResult(parsed);
   try {
     const result = await requestDemo(user.id, parsed.value.slotId, parsed.value.note);
@@ -41,6 +47,10 @@ export async function bookDemoAction(formData: FormData): Promise<SubmitResult<B
     });
   } catch (error) {
     return outageResult(error, "Booking a demo");
+  }
+  if (stay) {
+    refresh();
+    return { ok: true };
   }
   redirect(appRoutes.client);
 }

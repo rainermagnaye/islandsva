@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { cx } from "@/lib/cx";
 import { Avatar } from "./avatar";
 import { Badge } from "./badge";
@@ -26,12 +27,38 @@ type ProfileCardProps = {
   stats?: readonly { label: string; value: string }[];
   /** Usually "Message" (secondary) and "Schedule" (ghost). */
   actions?: ReactNode;
+  /** Portrait centres the photo, then the name, then the role. Row is the horizontal introduction. */
+  layout?: "row" | "portrait";
+  /** The whole card opens this page. The name is the link's accessible name. */
+  href?: string;
   className?: string;
 };
 
 /** Introduces a VA or a client contact: who, whether they're on shift, their local time, skills and how to reach them. */
-export function ProfileCard({ name, role, avatar, tone, status, localTime, skills = [], stats = [], actions, className }: ProfileCardProps) {
+export function ProfileCard({ name, role, avatar, tone, status, localTime, skills = [], stats = [], actions, layout = "row", href, className }: ProfileCardProps) {
   const presence = status ? PRESENCE[status] : null;
+  if (layout === "portrait") {
+    const classes = cx(cardSurface, "grid w-36 justify-items-center gap-1.5 p-4 text-center", className);
+    const body = (
+      <>
+        <Avatar name={name} src={avatar} tone={tone} size="lg" />
+        <h3 className="m-0 type-label text-ink">{name}</h3>
+        {role && <p className="m-0 type-caption text-ink-muted">{role}</p>}
+      </>
+    );
+    if (href) {
+      return (
+        <Link href={href} aria-label={role ? `${name}, ${role}` : name} className={cx(classes, "text-ink no-underline hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring")}>
+          {body}
+        </Link>
+      );
+    }
+    return (
+      <section aria-label={name} className={classes}>
+        {body}
+      </section>
+    );
+  }
   return (
     <section aria-label={name} className={cx(cardSurface, "grid gap-4 p-6", className)}>
       <div className="flex items-center gap-4">

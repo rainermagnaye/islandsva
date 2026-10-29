@@ -5,9 +5,9 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FORM_ERROR, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { acceptBookingAttachment } from "./attachment";
 import type { BookingField, BookingNoteField, DiscoveryTimesField } from "./contract";
 import { saveDiscoveryTimes, type DiscoveryTimesRefusal } from "./dal";
+import { bookingEntries, fileFrom, noteEntries } from "./form-data";
 import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createBooking, editBookingNote, moveDiscoveryCall, removeBookingNote, updateBooking } from "./service";
 import { parseBooking, parseBookingEventId, parseBookingId, parseBookingNote, parseBookingNoteEdit, parseDiscoveryMove, parseDiscoveryTimes } from "./validation";
 
@@ -36,40 +36,10 @@ export async function saveDiscoveryTimesAction(formData: FormData): Promise<Subm
   return { ok: true };
 }
 
-async function fileFrom(formData: FormData) {
-  const file = formData.get("attachment");
-  const title = formData.get("attachmentName");
-  if (!(file instanceof File) || file.size === 0) return { ok: true as const, file: null };
-  const named = typeof title === "string" ? title : "";
-  const accepted = acceptBookingAttachment(file, named);
-  if (!accepted.ok) return { ok: false as const, message: accepted.message };
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const checked = acceptBookingAttachment({ name: file.name, type: file.type, size: bytes.byteLength }, named);
-  if (!checked.ok) return { ok: false as const, message: checked.message };
-  return { ok: true as const, file: { name: checked.name, type: checked.type, base64: Buffer.from(bytes).toString("base64") } };
-}
-
-function noteEntries(formData: FormData) {
-  const value = formEntries(formData);
-  delete value.attachment;
-  delete value.attachmentName;
-  return value;
-}
-
-function entries(formData: FormData) {
-  const value = formEntries(formData);
-  delete value.attachment;
-  delete value.attachmentName;
-  const ids = (name: string) => formData.getAll(name).filter((item): item is string => typeof item === "string" && item.length > 0);
-  value.clientIds = ids("clientIds");
-  value.staffIds = ids("staffIds");
-  return value;
-}
-
 /** An admin adds a booking. The signed-in admin is recorded as the creator. */
 export async function addBooking(formData: FormData): Promise<SubmitResult<BookingField>> {
   await requireRole(["admin"]);
-  const parsed = parseBooking(entries(formData));
+  const parsed = parseBooking(bookingEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   const file = await fileFrom(formData);
   if (!file.ok) return { ok: false, message: file.message };
@@ -91,7 +61,7 @@ export async function addBooking(formData: FormData): Promise<SubmitResult<Booki
 /** An admin edits a scheduled booking. Notes already added stay in the history. */
 export async function editBooking(formData: FormData): Promise<SubmitResult<BookingField>> {
   await requireRole(["admin"]);
-  const parsed = parseBooking(entries(formData));
+  const parsed = parseBooking(bookingEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   if (!parsed.value.meetingId) return { ok: false, message: "That meeting no longer exists. Refresh the page." };
 

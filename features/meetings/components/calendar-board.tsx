@@ -1,32 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { addDays, wallClockIn, type IsoDate } from "@/components/ui/date-math";
+import { wallClockIn, type IsoDate } from "@/components/ui/date-math";
 import type { ScheduleEvent, ScheduleGesture } from "@/components/ui/schedule-events";
 import { useToast } from "@/components/ui/toast";
 import { DemoCalendar } from "@/features/demos/components/demo-calendar";
 import type { DemoCalendarRow } from "@/features/demos/calendar";
 import { editBooking, rescheduleDiscoveryAction } from "../actions";
+import { draftFrom, draftOf, MANUAL_GESTURE, type BookingDraft } from "../booking-draft";
 import { BOOKING_TIME_ZONE, type Booking, type BookingChoice } from "../contract";
-import { BookingDetail } from "./booking-detail";
-import { BookingForm, type BookingDraft } from "./booking-form";
 import { MeetingsTable } from "./meetings-table";
 
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function draftFrom(day: IsoDate, minute: number): BookingDraft {
-  const endTotal = minute + 60;
-  const endMinute = endTotal % (24 * 60);
-  return {
-    startDate: day,
-    startTime: `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`,
-    endDate: endTotal >= 24 * 60 ? addDays(day, 1) : day,
-    endTime: `${pad(Math.floor(endMinute / 60))}:${pad(endMinute % 60)}`,
-  };
-}
+const AdminBookingForm = lazy(() => import("./admin-booking-form").then((m) => ({ default: m.AdminBookingForm })));
+const AdminBookingDetail = lazy(() => import("./admin-booking-detail").then((m) => ({ default: m.AdminBookingDetail })));
 
 function asEvents(bookings: readonly Booking[]): ScheduleEvent[] {
   return bookings.map((booking) => ({
@@ -89,7 +76,8 @@ export function CalendarBoard({
         today={today}
         nowMinutes={nowMinutes}
         extraEvents={asEvents(bookings)}
-        toolbar={<Button type="button" size="sm" iconLeft="plus" onClick={() => { setSelectedId(null); setEditing(false); setDraft(draftFrom(today, 9 * 60)); }}>New meeting</Button>}
+        viewsInHeader
+        actions={<Button type="button" iconLeft="plus" onClick={() => { setSelectedId(null); setEditing(false); setDraft(draftFrom(today, 9 * 60)); }}>New meeting</Button>}
         onSlotClick={(day, minute) => { setSelectedId(null); setEditing(false); setDraft(draftFrom(day, minute)); }}
         eventGesture={(event) => gestureFor(bookings.find((booking) => booking.id === event.id))}
         onEventMove={(event, next) => {
@@ -106,36 +94,42 @@ export function CalendarBoard({
       <MeetingsTable bookings={bookings} onOpen={open} />
 
       {draft && (
-        <BookingForm
-          mode="create"
-          draft={draft}
-          clients={clients}
-          staff={staff}
-          creatorName={creatorName}
-          onClose={() => setDraft(null)}
-          onDone={() => done("Meeting added.")}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingForm
+            mode="create"
+            draft={draft}
+            clients={clients}
+            staff={staff}
+            creatorName={creatorName}
+            onClose={() => setDraft(null)}
+            onDone={() => done("Meeting added.")}
+          />
+        </Suspense>
       )}
       {selected && !editing && (
-        <BookingDetail
-          booking={selected}
-          canManage
-          onClose={() => setSelectedId(null)}
-          onEdit={() => setEditing(true)}
-          onDone={done}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingDetail
+            booking={selected}
+            canManage
+            onClose={() => setSelectedId(null)}
+            onEdit={() => setEditing(true)}
+            onDone={done}
+          />
+        </Suspense>
       )}
       {selected && editing && (
-        <BookingForm
-          mode="edit"
-          booking={selected}
-          draft={draftOf(selected)}
-          clients={clients}
-          staff={staff}
-          creatorName={creatorName}
-          onClose={() => setEditing(false)}
-          onDone={() => done("Meeting saved.")}
-        />
+        <Suspense fallback={null}>
+          <AdminBookingForm
+            mode="edit"
+            booking={selected}
+            draft={draftOf(selected)}
+            clients={clients}
+            staff={staff}
+            creatorName={creatorName}
+            onClose={() => setEditing(false)}
+            onDone={() => done("Meeting saved.")}
+          />
+        </Suspense>
       )}
     </div>
   );
@@ -147,7 +141,6 @@ function invited(booking: Booking) {
   return booking.staffName ?? booking.clientName ?? undefined;
 }
 
-const MANUAL_GESTURE: ScheduleGesture = { move: true, resize: true, snap: 15, minLength: 15, maxLength: 8 * 60 };
 const DISCOVERY_GESTURE: ScheduleGesture = { move: true, resize: false, snap: 30, minLength: 30, maxLength: 30 };
 
 /** A scheduled meeting can move and stretch. A discovery call only moves, and stays 30 minutes. */
@@ -179,10 +172,4 @@ async function placeBooking(booking: Booking, next: { start: string; end: string
   const result = await editBooking(form);
   tell(result.ok ? "Meeting updated." : (result.fieldErrors?.endTime ?? result.fieldErrors?.startTime ?? result.message), result.ok ? "success" : "danger");
   return result.ok;
-}
-
-function draftOf(booking: Booking): BookingDraft {
-  const start = wallClockIn(booking.startsAt, BOOKING_TIME_ZONE);
-  const end = wallClockIn(booking.endsAt, BOOKING_TIME_ZONE);
-  return { startDate: start.slice(0, 10), startTime: start.slice(11, 16), endDate: end.slice(0, 10), endTime: end.slice(11, 16) };
 }

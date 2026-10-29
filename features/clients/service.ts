@@ -4,6 +4,7 @@ import { inviteClient, rollbackInvite } from "@/features/users/service";
 import type { ClientBusiness } from "./contract";
 import { applyOpenSections, openClientSections } from "./registration";
 import { acceptClientReviewPaid, getPublicOnboarding, getPublicPaymentProof, issueClientOnboardingLink, recordClientInvite, saveClientReview, submitClientPacket } from "./onboarding-dal";
+import { listActiveAssignments } from "./assignment-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
 import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
@@ -136,4 +137,13 @@ export async function sendClientActivation(clientId: string, invitedBy: string, 
 export async function findOwnClient(userId: string) {
   const clientId = await getOwnClientId(userId);
   return clientId ? getClient(clientId) : null;
+}
+
+/** The signed-in client's active VAs whose name contains the term, for the header search. */
+export async function findOwnVas(userId: string, term: string, limit: number) {
+  const clientId = await getOwnClientId(userId);
+  if (!clientId) return [];
+  const needle = term.toLocaleLowerCase();
+  const assignments = await listActiveAssignments(clientId);
+  return assignments.filter((assignment) => assignment.vaName.toLocaleLowerCase().includes(needle)).slice(0, limit);
 }

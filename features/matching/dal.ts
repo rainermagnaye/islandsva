@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import type { ShortlistEntry, ShortlistStatus, WorkingWindow } from "./contract";
+import { toProfile, type OfferedProfile } from "./profile";
 
 export type MatchWrite = { ok: true } | { ok: false; form: "offer" | "decided" | "hours" | "missing" };
 
@@ -41,6 +42,17 @@ export async function listShortlist(clientId: string): Promise<ShortlistEntry[]>
   const { data, error } = await supabase.from("va_shortlists").select(ENTRY).eq("client_id", clientId).order("created_at", { ascending: true });
   if (error) throw new UpstreamError("supabase", `Reading the shortlist for ${clientId} failed (${error.code})`);
   return data.map(toEntry);
+}
+
+/**
+ * The work profiles of the VAs offered to the signed-in client. offered_va_profiles returns rows only for a
+ * signed-in client and only for their own shortlist, and no personal details (see its migration).
+ */
+export async function listOfferedProfiles(): Promise<OfferedProfile[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("offered_va_profiles");
+  if (error) throw new UpstreamError("supabase", `Reading offered VA profiles failed (${error.code})`);
+  return (data ?? []).map(toProfile);
 }
 
 export async function offerVa(clientId: string, vaId: string, offeredBy: string): Promise<MatchWrite> {

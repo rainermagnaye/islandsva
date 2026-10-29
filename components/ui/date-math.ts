@@ -140,3 +140,6 @@ export function wallClockIn(iso: string, timeZone: string): IsoLocalDateTime {
   const { date, time } = convertWallClock(new Date(iso).toISOString().slice(0, 16), "UTC", timeZone);
   return `${date}T${time}`;
 }
+
+/** A zone's city for a label: "America/New_York" → "New York", "America/Argentina/Buenos_Aires" → "Buenos Aires". */
+export const zoneCity = (timeZone: string) => (timeZone.split("/").at(-1) ?? timeZone).replaceAll("_", " ");
