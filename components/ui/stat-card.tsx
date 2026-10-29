@@ -10,7 +10,8 @@ const count = new Intl.NumberFormat("en-US");
 
 type StatCardProps = {
   label: string;
-  value: number;
+  /** Null shows an em dash: nothing to count yet (never a misleading 0 or 0%). */
+  value: number | null;
   unit?: string;
   icon?: IconName;
   /** A line under the number, e.g. "vs last month". */
@@ -32,6 +33,7 @@ type StatCardProps = {
  */
 export function StatCard({ label, value, unit, icon, caption, href, delta, help, trend, trendLabels }: StatCardProps) {
   const good = delta ? (delta.good ?? delta.direction === "up") : false;
+  const shown = value === null ? "—" : count.format(value);
   const body = (
     <>
       <div className="flex items-center gap-2">
@@ -43,8 +45,8 @@ export function StatCard({ label, value, unit, icon, caption, href, delta, help,
         <p className="m-0 flex-1 type-label text-ink-muted">{label}</p>
       </div>
       <p className="m-0 type-stat text-ink">
-        {count.format(value)}
-        {unit && <span className="type-menu text-ink-muted"> {unit}</span>}
+        {shown}
+        {unit && value !== null && <span className="type-menu text-ink-muted"> {unit}</span>}
       </p>
       {(delta || trend) && (
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -65,7 +67,7 @@ export function StatCard({ label, value, unit, icon, caption, href, delta, help,
   const card = cx(cardSurface, "grid min-w-0 content-start gap-2 p-5 transition-colors");
 
   return href ? (
-    <Link href={href} aria-label={`${label}: ${count.format(value)}`} className={cx(card, "text-ink no-underline hover:border-border-strong hover:elevation-sm")}>
+    <Link href={href} aria-label={`${label}: ${value === null ? "none yet" : shown}`} className={cx(card, "text-ink no-underline hover:border-border-strong hover:elevation-sm")}>
       {body}
     </Link>
   ) : (

@@ -12,7 +12,7 @@ export function VaDemoList({ demos }: { demos: readonly VaDemo[] }) {
   return (
     <ul className="m-0 grid list-none gap-3 p-0">
       {demos.map((demo) => (
-        <li key={demo.id} className="grid gap-2 rounded-md border border-border p-3">
+        <li key={demo.id} className="grid gap-2 rounded-md border border-border bg-surface-sunken p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="type-label">{demo.companyName}</span>
             <DemoStatusBadge state={demo.status} />

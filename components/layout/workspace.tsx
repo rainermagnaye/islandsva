@@ -6,6 +6,7 @@ import { cx } from "@/lib/cx";
 /** A portal page: optional breadcrumbs, its h1, an optional supporting line and actions, then the content. */
 export function Workspace({
   title,
+  eyebrow,
   lead,
   actions,
   breadcrumbs,
@@ -13,6 +14,8 @@ export function Workspace({
   compact = false,
 }: {
   title?: string;
+  /** A short line above the title, e.g. today's date on a dashboard. */
+  eyebrow?: ReactNode;
   lead?: ReactNode;
   /** Buttons for the whole page, beside the title (they wrap under it on narrow screens). */
   actions?: ReactNode;
@@ -31,6 +34,7 @@ export function Workspace({
           {breadcrumbs}
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="grid min-w-0 gap-2">
+              {eyebrow && <p className="m-0 type-eyebrow text-ink-accent">{eyebrow}</p>}
               <h1 className="m-0 type-h1">{title}</h1>
               {lead && <p className="m-0 max-w-[60ch] text-ink-muted">{lead}</p>}
             </div>

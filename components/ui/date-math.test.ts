@@ -15,6 +15,7 @@ import {
   startOfWeek,
   todayIn,
   wallClockIn,
+  zoneCity,
 } from "./date-math";
 
 describe("calendar dates", () => {
@@ -96,5 +97,13 @@ describe("layoutDay", () => {
     const by = Object.fromEntries(placed.map((p) => [p.event.id, p.lane]));
     expect(by).toEqual({ a: 0, b: 1, c: 1 });
     expect(new Set(placed.map((p) => p.lanes))).toEqual(new Set([2]));
+  });
+});
+
+describe("zoneCity", () => {
+  it("names the city of a zone for a label", () => {
+    expect(zoneCity("America/New_York")).toBe("New York");
+    expect(zoneCity("America/Argentina/Buenos_Aires")).toBe("Buenos Aires");
+    expect(zoneCity("UTC")).toBe("UTC");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agenda, clientAgendaSources, type AgendaSource } from "./agenda";
+import { agenda, clientAgendaSources, vaAgendaSources, type AgendaSource } from "./agenda";
 import type { Booking } from "./contract";
 
 // Wed Oct 28, 2026, 4:34 pm in Manila.
@@ -79,3 +79,28 @@ describe("clientAgendaSources", () => {
   });
 });
 
+
+describe("vaAgendaSources", () => {
+  const meeting = (id: string, status: Booking["status"]) =>
+    ({ id, title: id, status, startsAt: "2026-10-28T09:00:00.000Z", endsAt: "2026-10-28T09:30:00.000Z", clientName: "Harbor Legal", guests: [], staffName: "Lia" }) as unknown as Booking;
+
+  it("keeps meetings still on and confirmed demo calls, but not requests waiting for an answer", () => {
+    const sources = vaAgendaSources({
+      bookings: [meeting("on", "scheduled"), meeting("asked", "requested"), meeting("off", "cancelled")],
+      demos: [
+        { id: "d1", status: "confirmed", companyName: "Kalye Coffee", startsAt: "2026-10-28T10:00:00.000Z", endsAt: "2026-10-28T10:30:00.000Z" },
+        { id: "d2", status: "pending", companyName: "Coral Bay", startsAt: "2026-10-28T11:00:00.000Z", endsAt: "2026-10-28T11:30:00.000Z" },
+      ],
+    });
+    expect(sources.map((source) => [source.key, source.badge?.label ?? null])).toEqual([
+      ["meeting:on", null],
+      ["meeting:asked", "Requested"],
+      ["demo:d1", null],
+    ]);
+    expect(agenda(sources, ZONE, NOW, 1).map((item) => [item.title, item.group, item.when])).toEqual([
+      ["asked", "Today", "5 pm–5:30 pm"],
+      ["on", "Today", "5 pm–5:30 pm"],
+      ["Demo call with Kalye Coffee", "Today", "6 pm–6:30 pm"],
+    ]);
+  });
+});

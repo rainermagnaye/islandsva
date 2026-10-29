@@ -108,3 +108,46 @@ export function clientAgendaSources({ bookings, tasks, demos }: { bookings: read
       })),
   ];
 }
+
+/**
+ * The VA's calls for the dashboard's schedule: meetings still on and confirmed demo calls. Demo requests still
+ * waiting for an answer are left out — the dashboard lists them separately, with their buttons.
+ */
+export function vaAgendaSources({
+  bookings,
+  demos,
+}: {
+  bookings: readonly Booking[];
+  demos: readonly { id: string; status: string; companyName: string; startsAt: string; endsAt: string }[];
+}): AgendaSource[] {
+  return [
+    ...bookings
+      .filter((booking) => booking.status === "requested" || booking.status === "scheduled")
+      .map((booking): AgendaSource => ({
+        key: `meeting:${booking.id}`,
+        kind: "meeting",
+        title: booking.title,
+        at: booking.startsAt,
+        end: booking.endsAt,
+        who: booking.clientName,
+        overdue: false,
+        badge: booking.status === "requested" ? { label: "Requested", tone: "warning" } : null,
+        href: null,
+        bookingId: booking.id,
+      })),
+    ...demos
+      .filter((demo) => demo.status === "confirmed")
+      .map((demo): AgendaSource => ({
+        key: `demo:${demo.id}`,
+        kind: "demo",
+        title: `Demo call with ${demo.companyName}`,
+        at: demo.startsAt,
+        end: demo.endsAt,
+        who: demo.companyName,
+        overdue: false,
+        badge: null,
+        href: null,
+        bookingId: null,
+      })),
+  ];
+}

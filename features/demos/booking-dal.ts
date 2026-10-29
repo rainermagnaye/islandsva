@@ -117,7 +117,7 @@ export const decideDemo = (bookingId: string, actor: string, decision: "confirme
 
 export const cancelDemo = (bookingId: string, actor: string) => call<CancelledDemo>("cancel_demo", { booking_id: bookingId, actor }, "Cancelling a demo");
 
-export type VaDemo = { id: string; status: DemoStatus; startsAt: string; companyName: string; clientTimezone: string | null; note: string | null };
+export type VaDemo = { id: string; status: DemoStatus; startsAt: string; endsAt: string; companyName: string; clientTimezone: string | null; note: string | null };
 
 /**
  * The VA's open demos still ahead: pending requests to answer and confirmed calls, soonest first. RLS returns
@@ -138,6 +138,7 @@ export async function listVaDemos(vaId: string): Promise<VaDemo[]> {
     id: row.id,
     status: row.status,
     startsAt: row.starts_at,
+    endsAt: row.ends_at,
     companyName: row.company_name,
     clientTimezone: row.client_timezone,
     note: row.client_note,
