@@ -22,7 +22,7 @@ Rules for people and AI agents; change them by PR. Each fact lives in one place 
   - **Roles:** Client, VA, Lead Gen (`closer` in code), Admin; Super Admin across tenants. A user can hold several. **Employee** = VA, Lead Gen or Admin.
   - **Tenant** = an agency; one today ("Islands VA"); every user and record belongs to exactly one.
   - **Lead** = a contact-form enquiry. From M8 it carries a discovery call and is owned by the Lead Gen who confirms it.
-  - **Client** = a company record, `pending` until activated, with a login only once invited; one stable link (no sign-in) opens its registration, consent and payment proof.
+  - **Client** = a company record, `pending` until activated, with a login only once invited; one stable link (no sign-in) opens its details, agreement and payment proof.
   - **Meeting** (from M8–M9) = any call — discovery, intro, client↔VA — as a Google Calendar event with Meet.
 
 ## 2. Commands

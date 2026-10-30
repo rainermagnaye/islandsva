@@ -4,14 +4,13 @@ import { packages } from "@/content/packages";
 import { timezoneForCountry } from "@/content/timezones";
 import { inviteClient, rollbackInvite } from "@/features/users/service";
 import type { ClientBusiness } from "./contract";
-import { applyOpenSections, openClientSections } from "./registration";
-import { acceptClientReviewPaid, getPublicOnboarding, getPublicPaymentProof, issueClientOnboardingLink, recordClientInvite, saveClientReview, submitClientPacket } from "./onboarding-dal";
+import { acceptClientReviewPaid, issueClientOnboardingLink, recordClientInvite, saveClientReview } from "./onboarding-dal";
 import { listActiveAssignments } from "./assignment-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
 import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
 import { recordClientNote } from "./notes-dal";
-import type { ClientDetailsInput, ClientNoteInput, CreateClientInput, OnboardingInput } from "./validation";
+import type { ClientDetailsInput, ClientNoteInput, CreateClientInput } from "./validation";
 import type { ClientReviewInput, NewClientInput, PaymentReceivedInput } from "./review-validation";
 import { agreementMissingTerms, renderAgreement, type AgreementTerms } from "./agreement";
 import { agreementHash } from "./agreement-hash";
@@ -59,25 +58,6 @@ export async function openOnboardingLink(clientId: string) {
   const stored = await issueClientOnboardingLink(clientId, token, onboardingTokenHash(token));
   if (!stored.ok) return stored;
   return { ok: true as const, url: onboardingUrl(token, await registrationOrigin()) };
-}
-
-const PROOF_REQUIRED = "Upload proof of payment to submit.";
-
-/** Saves the public packet. The token in the input is the access. A return keeps every section that was not sent back. */
-export async function submitOnboarding(input: OnboardingInput, proof: { name: string; type: string; base64: string } | null) {
-  const current = await getPublicOnboarding(input.token);
-  if (!current) return { ok: false as const, reason: "not_found" as const };
-  const open = openClientSections(current);
-  const merged = applyOpenSections(input, current, open);
-  const file = open.includes("payment") ? proof : (await storedProof(input.token)) ?? proof;
-  if (!file) return { ok: false as const, message: PROOF_REQUIRED };
-  return submitClientPacket(merged, file);
-}
-
-async function storedProof(token: string) {
-  const stored = await getPublicPaymentProof(token);
-  if (!stored) return null;
-  return { name: stored.name, type: stored.type, base64: Buffer.from(stored.bytes).toString("base64") };
 }
 
 export async function updateClientDetails(input: ClientDetailsInput) {

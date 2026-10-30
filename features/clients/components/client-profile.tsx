@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,10 +13,13 @@ import { OnboardingLinkCard } from "./onboarding-link";
 import { SendActivation } from "./client-activation";
 import { ClientReviewActions } from "./client-review-actions";
 import { ClientActions } from "./client-actions";
-import { ClientCompanyForm } from "./client-company-form";
 import { ClientNotes } from "./client-notes";
 import { ClientConsents, ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
 import { ShortlistAdmin } from "@/features/matching/components/shortlist-admin";
+
+// The editor opens only after "Edit": loaded then, so the profile page doesn't ship it (or its package and time-zone
+// data) up front.
+const ClientCompanyForm = lazy(() => import("./client-company-form").then((m) => ({ default: m.ClientCompanyForm })));
 import type { ShortlistEntry } from "@/features/matching/contract";
 
 /** The client profile: registration progress, then overview, notes, consents, or invoices. */
@@ -86,7 +90,9 @@ export function ClientProfile({
       <ShortlistAdmin clientId={client.id} assignments={assignments} offers={offers} vas={vas} />
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
-        <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />
+        <Suspense fallback={null}>
+          <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />
+        </Suspense>
       ) : tab === "notes" ? (
         <ClientNotes clientId={client.id} notes={notes} />
       ) : tab === "consents" ? (

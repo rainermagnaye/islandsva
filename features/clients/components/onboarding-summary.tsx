@@ -8,7 +8,7 @@ import type { PublicOnboarding } from "../contract";
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
 /** The package agreed at conversion. The amount cannot be changed from this link. */
-export function OnboardingSummary({ packet }: { packet: PublicOnboarding }) {
+export function OnboardingSummary({ packet }: { packet: Pick<PublicOnboarding, "packageCode" | "termMonths" | "monthlyCents" | "startsOn" | "business"> }) {
   const pkg = packages.find((item) => item.slug === packet.packageCode);
   const term = terms.find((item) => item.months === packet.termMonths);
   const zone = timezoneForCountry(packet.business.country)?.label ?? "";

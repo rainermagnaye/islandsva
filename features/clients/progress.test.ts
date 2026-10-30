@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { clientBadge, clientProfileTab, emptyClientBusiness, onboardingAccess, type ClientBusiness } from "./contract";
-import { applyOpenSections, clientRegistrationSteps, clientReviewSections, openClientSections, revisionMessage } from "./registration";
-
-const complete: ClientBusiness = {
-  ...emptyClientBusiness(),
-  industry: "Legal",
-  country: "United States",
-  city: "Austin",
-  about: "Inbox and calendar.",
-};
+import { clientBadge, clientProfileTab, onboardingAccess } from "./contract";
+import { clientRegistrationSteps, clientReviewSections, stepRevisionMessage } from "./registration";
 
 describe("client registration progress", () => {
   const base = { onboardingStatus: "pending_customer" as const, accountStatus: "pending" as const };
@@ -69,43 +61,14 @@ describe("client status badge", () => {
 });
 
 describe("registration sent back", () => {
-  const stored = {
-    companyName: "Cruz Co",
-    contactName: "Ana",
-    contactPhone: null,
-    business: complete,
-    consentName: "Ana",
-    paymentProofName: "receipt.pdf",
-    reviewIssues: ["address"] as const,
-  };
-
   it("names the sections and keeps the note", () => {
     expect(clientReviewSections("{basic,address}")).toEqual(["basic", "address"]);
-    expect(revisionMessage(["basic", "address"], " City is wrong ")).toBe("Please update Basic info and Address. City is wrong");
-    expect(revisionMessage(["payment"], null)).toBe("Please update Payment.");
-  });
-
-  it("opens every section the first time, and only the returned ones after", () => {
-    expect(openClientSections({ ...stored, reviewIssues: [] })).toEqual(["basic", "address", "contacts", "package", "consent", "payment"]);
-    expect(openClientSections(stored)).toEqual(["address"]);
-    expect(openClientSections({ ...stored, reviewIssues: ["basic"], paymentProofName: null })).toEqual(["basic", "payment"]);
-  });
-
-  it("keeps the sections that were not sent back", () => {
-    const submitted = {
-      token: "t",
-      companyName: "Changed",
-      contactName: "Changed",
-      contactPhone: "1",
-      consentName: "Changed",
-      business: { ...complete, city: "Dallas", about: "Changed" },
-    };
-    const kept = applyOpenSections(submitted, stored, ["address"]);
-    expect(kept.companyName).toBe("Cruz Co");
-    expect(kept.contactName).toBe("Ana");
-    expect(kept.consentName).toBe("Ana");
-    expect(kept.business.city).toBe("Dallas");
-    expect(kept.business.about).toBe(complete.about);
+    // Old and new section names, as the step they belong to, in step order.
+    expect(stepRevisionMessage(["payment", "address", "basic"], " City is wrong ")).toBe("Please update your details and payment proof. City is wrong");
+    expect(stepRevisionMessage(["consent", "package", "agreement", "contacts"], null)).toBe("Please update your details and agreement.");
+    expect(stepRevisionMessage(["payment", "agreement", "basic"], null)).toBe("Please update your details, agreement and payment proof.");
+    expect(stepRevisionMessage([], " Call us. ")).toBe("Call us.");
+    expect(stepRevisionMessage(["unknown"], null)).toBe("");
   });
 });
 

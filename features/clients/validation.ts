@@ -12,7 +12,6 @@ import {
   type ClientDetailField,
   type ClientNoteField,
   type CreateClientField,
-  type OnboardingField,
   type VaMessageField,
 } from "./contract";
 import { TOKEN_SHAPE } from "./token";
@@ -130,7 +129,7 @@ const requiredLine = (limit: number, name: string, empty: string) =>
 /** The registration link's token: a bad one is a tampered form, never a field to fix. */
 export const registrationToken = z.string().regex(TOKEN_SHAPE, FORM_ERROR);
 
-/** The company details the registration link asks for (the old one-page form and the new details step). */
+/** The company details the registration link's details step asks for. */
 export const registrationDetailsShape = {
   token: registrationToken,
   companyName: requiredLine(CLIENT_LIMITS.companyName, "the company name", "Enter the company name."),
@@ -152,28 +151,6 @@ export const registrationDetailsShape = {
     .max(CLIENT_BUSINESS_LIMITS.about, tooLong("the description", CLIENT_BUSINESS_LIMITS.about))
     .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the description", CLIENT_BUSINESS_LIMITS.about)),
 };
-
-const packetSchema = z
-  .strictObject({
-    ...registrationDetailsShape,
-    signature: requiredLine(CLIENT_LIMITS.contactName, "the signature", "Type your name to sign."),
-    consent: z.literal("yes", { error: "Confirm the consent to continue." }),
-  })
-  .transform(({ token, contactPhone, companyName, contactName, signature, consent, ...business }) => ({
-    token,
-    companyName,
-    contactName,
-    contactPhone: contactPhone || null,
-    consentName: consent === "yes" ? signature : "",
-    business: business satisfies ClientBusiness,
-  }));
-
-export type OnboardingInput = z.output<typeof packetSchema>;
-
-const PACKET_FIELDS = [...CLIENT_DETAIL_FIELDS, "signature", "consent"] as const satisfies readonly OnboardingField[];
-
-/** The public registration packet. A bad token is not a field the customer can fix. */
-export const parseOnboarding = (input: unknown) => parseWith(packetSchema, input, PACKET_FIELDS);
 
 const idSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }) });
 

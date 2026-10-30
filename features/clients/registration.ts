@@ -3,8 +3,6 @@ import { CLIENT_REVIEW_SECTIONS, type ClientBusiness, type ClientOnboardingStatu
 // The registration packet's steps and review sections: pure rules shared by the admin pages, the registration
 // link and the server. No Zod: components import this file.
 
-const filled = (value: string) => value.trim().length > 0;
-
 export const CLIENT_REGISTRATION_STEPS = [
   { id: "converted", label: "Converted" },
   { id: "registration", label: "Registration" },
@@ -54,6 +52,16 @@ const STEP_OF_SECTION: Record<string, RegistrationStep> = {
 /** Stored review sections, keeping only names the database allows. */
 export const registrationIssues = (value: unknown) => textItems(value).filter((item) => Object.hasOwn(STEP_OF_SECTION, item));
 
+export const REGISTRATION_STEP_LABELS: Record<RegistrationStep, string> = { details: "Details", agreement: "Agreement", payment: "Payment proof" };
+
+/** What the customer sees after a return: the steps sent back, in order, then the team's note. */
+export function stepRevisionMessage(issues: readonly string[], note: string | null) {
+  const steps = REGISTRATION_STEPS.filter((step) => issues.some((issue) => Object.hasOwn(STEP_OF_SECTION, issue) && STEP_OF_SECTION[issue] === step));
+  const names = steps.map((step) => REGISTRATION_STEP_LABELS[step].toLowerCase());
+  const list = names.length === 0 ? "" : names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return [list ? `Please update your ${list}.` : "", note?.trim() ?? ""].filter(Boolean).join(" ");
+}
+
 const within = (value: string | undefined, max: number) => {
   const length = (value ?? "").trim().length;
   return length >= 1 && length <= max;
@@ -89,68 +97,6 @@ export function openRegistrationSteps(state: {
   return REGISTRATION_STEPS.filter((step) => open.has(step));
 }
 
-/** What the customer sees after a registration is sent back. */
-export function revisionMessage(issues: readonly ClientReviewSection[], note: string | null) {
-  const names = issues.map((id) => CLIENT_REVIEW_SECTION_LABELS[id]);
-  const list = names.length === 0 ? "" : names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  return [list ? `Please update ${list}.` : "", note?.trim() ?? ""].filter(Boolean).join(" ");
-}
-
-/** The packet values a return is allowed to change. Package is shown, never edited. */
-export type ClientSectionDraft = {
-  companyName: string;
-  contactName: string;
-  contactPhone: string | null;
-  business: ClientBusiness;
-  consentName: string | null;
-  paymentProofName: string | null;
-  reviewIssues: readonly ClientReviewSection[];
-};
-
-/**
- * First visit shows every section. A return shows the flagged ones, plus any that are still empty.
- * Package stays with them when it was flagged, and on the first visit so the amount is visible.
- */
-export function openClientSections(draft: ClientSectionDraft): ClientReviewSection[] {
-  const missing: ClientReviewSection[] = [];
-  if (!filled(draft.companyName) || !filled(draft.business.industry) || !filled(draft.business.about)) missing.push("basic");
-  if (!filled(draft.business.city) || !filled(draft.business.country)) missing.push("address");
-  if (!filled(draft.contactName)) missing.push("contacts");
-  if (!draft.consentName?.trim()) missing.push("consent");
-  if (!draft.paymentProofName?.trim()) missing.push("payment");
-  if (draft.reviewIssues.length === 0) return [...CLIENT_REVIEW_SECTIONS];
-  return CLIENT_REVIEW_SECTIONS.filter((section) => draft.reviewIssues.includes(section) || missing.includes(section));
-}
-
-/** Keeps stored values for every section the customer was not asked to change. */
-export function applyOpenSections<T extends { companyName: string; contactName: string; contactPhone: string | null; consentName: string; business: ClientBusiness }>(
-  submitted: T,
-  stored: ClientSectionDraft,
-  open: readonly ClientReviewSection[],
-): T {
-  const closed = (section: ClientReviewSection) => !open.includes(section);
-  return {
-    ...submitted,
-    companyName: closed("basic") ? stored.companyName : submitted.companyName,
-    contactName: closed("contacts") ? stored.contactName : submitted.contactName,
-    contactPhone: closed("contacts") ? stored.contactPhone : submitted.contactPhone,
-    consentName: closed("consent") ? stored.consentName?.trim() || submitted.consentName : submitted.consentName,
-    business: {
-      ...submitted.business,
-      industry: closed("basic") ? stored.business.industry : submitted.business.industry,
-      website: closed("basic") ? stored.business.website : submitted.business.website,
-      staffCount: closed("basic") ? stored.business.staffCount : submitted.business.staffCount,
-      about: closed("basic") ? stored.business.about : submitted.business.about,
-      jobTitle: closed("contacts") ? stored.business.jobTitle : submitted.business.jobTitle,
-      street: closed("address") ? stored.business.street : submitted.business.street,
-      city: closed("address") ? stored.business.city : submitted.business.city,
-      state: closed("address") ? stored.business.state : submitted.business.state,
-      zip: closed("address") ? stored.business.zip : submitted.business.zip,
-      country: closed("address") ? stored.business.country : submitted.business.country,
-    },
-  };
-}
-
 export type ClientRegistrationStep = {
   id: (typeof CLIENT_REGISTRATION_STEPS)[number]["id"];
   label: string;
@@ -179,4 +125,23 @@ export function clientRegistrationSteps(progress: {
     done: flags[index],
     current: index === current,
   }));
+}
+
+export type RegistrationView = "closed" | "steps" | "receipt" | "complete" | "processing";
+
+/**
+ * What the registration link shows. The customer's details appear (read-only) only while the team reviews them;
+ * once approved, invited or active the link holds no client data and points to sign-in instead.
+ */
+export function registrationView(state: {
+  accountStatus: ClientStatus;
+  onboardingStatus: ClientOnboardingStatus;
+  disabledAt: string | null;
+  openSteps: number;
+}): RegistrationView {
+  if (state.disabledAt || state.accountStatus === "inactive") return "closed";
+  if (state.accountStatus === "active" || state.onboardingStatus === "approved" || state.onboardingStatus === "invite_sent") return "complete";
+  if (state.onboardingStatus === "pending_review") return "receipt";
+  // With the customer: the next open step. None open is the moment between the last save and the move to review.
+  return state.openSteps > 0 ? "steps" : "processing";
 }

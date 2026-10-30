@@ -26,8 +26,8 @@ export function OnboardingReceipt({ packet }: { packet: PublicOnboarding }) {
         </dl>
       </Card>
       <Card as="section" padding="md" className="grid gap-2">
-        <h2 className="m-0 type-label">Consent</h2>
-        <p className="m-0 type-body-sm">Signed by {packet.consentName ?? "the contact"}.</p>
+        <h2 className="m-0 type-label">Agreement</h2>
+        <p className="m-0 type-body-sm">Accepted by {packet.consentName ?? "the contact"}.</p>
       </Card>
       <Card as="section" padding="md" className="grid gap-2">
         <h2 className="m-0 type-label">Payment proof</h2>
