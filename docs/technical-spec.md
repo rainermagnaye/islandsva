@@ -15,7 +15,7 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | google_connections | An employee's encrypted refresh token, calendar id, push channel | New (M9) |
 | va_working_hours | A VA's weekly hours (PHT), one half-hour window per weekday. Read when intro calls exist | Built (M10); unused until meetings and Google |
 | clients · client_packets · client_notes | Company and package; registration; notes | Built |
-| client_agreements | Agreement acceptance evidence: version, text shown, terms snapshot (from the client row), typed name, contact email on file, hashed IP, time. Append-only, server-only | Schema and packet steps written (registration agreement slice 1a, not yet applied); app in later slices |
+| client_agreements | Agreement acceptance evidence: version, text shown, terms snapshot (from the client row), typed name, contact email on file, hashed IP, time. Append-only, server-only | Built: schema (slice 1a) and the registration link's agreement step (slice 2b); admin evidence view in slice 3 |
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined). Accept creates the assignment | Built (M10) |
 | client_va_assignments | Client ↔ VA, several active VAs, one active row per pair | Built |
 | tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments) |
@@ -23,14 +23,22 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
 | client_onboarding_links · payments | Replaced by the registration packet | Drop |
 
+## Registration link (three steps)
+
+- Built (slice 2b): `/register/[token]` shows a stepper (Details · Agreement · Payment proof) and only the first open step, chosen on the server by `openRegistrationSteps` (the same rule as `private.packet_open_sections`). Each step saves on its own through `features/clients/registration-actions.ts`; the token is the access check. After a return, a note names the steps sent back (old section names map to their step). Once nothing is open the database moves the packet to review, and the link shows the read-only receipt.
+- The agreement text is rendered on the server (`currentAgreement`), with its version and fingerprint in hidden fields; the box is never pre-ticked. The wording is a sample until legal review (`content/agreement.ts`, `TODO(legal)`).
+
 ## Registration payment verification (app slice, planned)
 
 - The database side is written (`approve_client_payment`, 20261029175327_payment_verification; rules in `supabase/CLAUDE.md`); the app still calls `accept_client_review_paid` until its slice swaps the call.
 - The app's bank-reference parser normalises the text to NFKC and strips format and control characters (Unicode `Cf`, `Cc`) before calling `approve_client_payment`, so look-alike or invisible characters can't slip a duplicate past the database's comparison (whitespace removed, case ignored).
 - Agreement rules are built (slice 2a): `content/agreement.ts`, `features/clients/agreement.ts`, `registration-dal.ts`, `registration-validation.ts`, `acceptAgreement` / `agreementEvidenceFor` in `service.ts`. A stale page is reason `changed` from both the service and the database's `IVA43`; map it to `AGREEMENT_CHANGED`.
-- **Slice 2b must:**
+- The Privacy Policy covers the acceptance record (slice 2b): what is kept, why, retention (`TODO(legal)` for the period) and that erasure is refused while it's needed for a contract or legal claim.
+- After the review, the link shows no client data: the read-only receipt only while the packet is in review; once approved, invited or active, "Registration complete" and a sign-in link (`registrationView`).
+- **Slice 3 must:**
   - Gate the agreement-evidence view with `requireRole(["admin"])` before `agreementEvidenceFor`, with a test that a Lead Gen (closer), a VA and a client are refused.
-  - Before the three-step page goes live, update the Privacy Policy (`app/(marketing)/privacy/page.tsx`) "Security data" and "Client registration" bullets to cover the agreement text, the terms snapshot, the contact email on file and the IP hash stored with an acceptance: purpose (evidence of the contract), how long they're kept, and that erasure requests are refused for them on a contract or legal-claims basis.
+  - Switch `confirmClientReviewPaid` from `accept_client_review_paid` to `approve_client_payment` and map `IVA41` (reference already used), `IVA42` (reference missing) and `IVA43` (no acceptance of the current terms) to messages; make the reference required in the confirm form, and normalise it (NFKC, strip format and control characters) before the call.
+  - **Slice 2b must not be deployed before slice 3:** until then admins approve through `accept_client_review_paid`, which doesn't check the agreement.
 
 ## Meetings
 

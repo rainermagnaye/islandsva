@@ -7,16 +7,15 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, OnboardingField, PaymentReceivedField, VaMessageField } from "./contract";
+import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, PaymentReceivedField, VaMessageField } from "./contract";
 import { acceptClientAttachment } from "./attachment";
-import { acceptPaymentProof } from "./payment-proof";
 import { registrationOrigin } from "./link";
-import { addClientNote, confirmClientReviewPaid, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, submitOnboarding, updateClientDetails } from "./service";
+import { addClientNote, confirmClientReviewPaid, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, updateClientDetails } from "./service";
 import { listActiveAssignments } from "./assignment-dal";
 import { getOwnClientId } from "./dal";
 import { insertVaMessage } from "./message-dal";
 import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
-import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseOnboarding, parseVaMessage } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseVaMessage } from "./validation";
 
 /** A Closer adds a pending client with the agreed package, then lands on its profile. */
 export async function addClientProfile(formData: FormData): Promise<SubmitResult<NewClientField>> {
@@ -222,51 +221,6 @@ export async function sendClientActivation(formData: FormData): Promise<SubmitRe
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Client activation failed", { service: error.service, error });
     return { ok: false, message: "We couldn't send the activation link just now. Please try again in a moment." };
-  }
-
-  refresh();
-  return { ok: true };
-}
-
-const PACKET_REFUSED = {
-  not_found: "This registration link is not valid.",
-  submitted: "This registration has already been submitted.",
-  closed: "This registration is closed.",
-  exists: "This registration link is not valid.",
-} as const;
-
-/**
- * The customer has no account. The token in the form is the access, checked again by the database.
- * A filled honeypot reports success and stores nothing.
- */
-export async function saveOnboarding(formData: FormData): Promise<SubmitResult<OnboardingField>> {
-  const fax = formData.get("fax");
-  if (typeof fax === "string" && fax.trim() !== "") return { ok: true };
-
-  const file = formData.get("proof");
-  const entries = formEntries(formData);
-  delete entries.proof;
-  delete entries.fax;
-  const parsed = parseOnboarding(entries);
-  if (!parsed.ok) return toSubmitResult(parsed);
-
-  let proof: { name: string; type: string; base64: string } | null = null;
-  if (file instanceof File && file.size > 0) {
-    const accepted = acceptPaymentProof(file);
-    if (!accepted.ok) return { ok: false, message: accepted.message };
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const checked = acceptPaymentProof({ name: file.name, type: file.type, size: bytes.byteLength });
-    if (!checked.ok) return { ok: false, message: checked.message };
-    proof = { name: checked.name, type: checked.type, base64: Buffer.from(bytes).toString("base64") };
-  }
-
-  try {
-    const result = await submitOnboarding(parsed.value, proof);
-    if (!result.ok) return { ok: false, message: "message" in result ? result.message : PACKET_REFUSED[result.reason] };
-  } catch (error) {
-    if (!(error instanceof UpstreamError)) throw error;
-    console.error("Registration packet failed", { service: error.service, error });
-    return { ok: false, message: "We couldn't save this registration just now. Please try again in a moment." };
   }
 
   refresh();

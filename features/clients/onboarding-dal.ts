@@ -4,11 +4,9 @@ import { decodeBytea } from "@/lib/bytea";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
-import { timezoneForCountry } from "@/content/timezones";
-import { clientBusinessFrom, clientBusinessToJson, onboardingAccess, type PublicOnboarding } from "./contract";
+import { clientBusinessFrom, onboardingAccess, type PublicOnboarding } from "./contract";
 import { clientReviewSections } from "./registration";
 import { TOKEN_SHAPE, onboardingTokenHash } from "./token";
-import type { OnboardingInput } from "./validation";
 
 // Registration packets (the customer's onboarding). The token and payment proof are server-only, so the reads and the
 // customer's submit use the secret key; each caller has already checked access (see each function).
@@ -136,47 +134,6 @@ export async function getPublicOnboarding(token: string): Promise<PublicOnboardi
     reviewIssues,
     reviewNote,
   };
-}
-
-/**
- * The proof already stored for this link. A return that did not include payment sends the same file again.
- * Secret key: the customer has no account, and the file is not granted to anon.
- */
-export async function getPublicPaymentProof(token: string) {
-  await connection();
-  if (!TOKEN_SHAPE.test(token)) return null;
-  const { data, error } = await createAdminClient()
-    .from("client_packets")
-    .select("payment_proof_name, payment_proof_type, payment_proof")
-    .eq("token_hash", onboardingTokenHash(token))
-    .maybeSingle();
-  if (error) throw new UpstreamError("supabase", "Reading a registration link failed", { cause: error });
-  if (!data?.payment_proof_name || !data.payment_proof_type || !data.payment_proof) return null;
-  return { name: data.payment_proof_name, type: data.payment_proof_type, bytes: decodeBytea(data.payment_proof) };
-}
-
-/** Writes the packet. Secret key: the customer has no account, and the packet table is server-only. */
-export async function submitClientPacket(input: OnboardingInput, proof: { name: string; type: string; base64: string }) {
-  const zone = timezoneForCountry(input.business.country);
-  const details = clientBusinessToJson(input.business);
-  if (zone) details.timezone = zone.value;
-  const { data, error } = await createAdminClient().rpc("submit_client_packet", {
-    token_hash: onboardingTokenHash(input.token),
-    company_name: input.companyName,
-    contact_name: input.contactName,
-    contact_phone: input.contactPhone,
-    details,
-    consent_name: input.consentName,
-    proof_name: proof.name,
-    proof_type: proof.type,
-    proof_base64: proof.base64,
-  });
-  if (error) {
-    const refusal = packetRefusal(error.code);
-    if (refusal) return { ok: false as const, reason: refusal };
-    throw new UpstreamError("supabase", "Saving a registration packet failed", { cause: error });
-  }
-  return { ok: true as const, clientId: data };
 }
 
 async function callReview(run: () => PromiseLike<{ error: { code?: string; message: string } | null }>, failure: string) {

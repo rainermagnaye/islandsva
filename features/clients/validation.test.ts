@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClientDetails, parseClientFlag, parseClientNote, parseCreateClient, parseOnboarding } from "./validation";
+import { parseClientDetails, parseClientFlag, parseClientNote, parseCreateClient } from "./validation";
 import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
@@ -133,42 +133,6 @@ describe("parseNewClient", () => {
       ok: false,
       fieldErrors: { companyName: expect.any(String), contactName: expect.any(String) },
     });
-  });
-});
-
-describe("parseOnboarding", () => {
-  const packet = {
-    token: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456",
-    companyName: " Cruz Co ",
-    contactName: " Ana Cruz ",
-    contactPhone: "",
-    industry: "Legal",
-    country: "United States",
-    website: "",
-    jobTitle: "",
-    street: "",
-    city: " Austin ",
-    state: "",
-    zip: "",
-    staffCount: "",
-    about: " Inbox help. ",
-    signature: " Ana Cruz ",
-    consent: "yes",
-  };
-
-  it("keeps the signature and requires the company, the city and the consent", () => {
-    expect(parseOnboarding(packet)).toMatchObject({
-      ok: true,
-      value: { companyName: "Cruz Co", business: { city: "Austin" }, consentName: "Ana Cruz", contactPhone: null },
-    });
-    expect(parseOnboarding({ ...packet, city: " ", consent: "no" })).toMatchObject({
-      ok: false,
-      fieldErrors: { city: "Enter the city.", consent: "Confirm the consent to continue." },
-    });
-  });
-
-  it("treats a bad token as a tampered form", () => {
-    expect(parseOnboarding({ ...packet, token: "short" })).toMatchObject({ ok: false, formError: expect.any(String) });
   });
 });
 

@@ -86,8 +86,6 @@ export const CLIENT_BUSINESS_LIMITS = {
   about: 2000,
 } as const;
 
-export type OnboardingField = ClientDetailField | "signature" | "consent";
-
 /** What an admin types to add a client straight onto the list. */
 export const CREATE_CLIENT_LIMITS = { companyName: 160, contactName: 120, contactEmail: 254, contactPhone: 40 } as const;
 

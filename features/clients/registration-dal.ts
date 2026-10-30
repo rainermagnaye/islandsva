@@ -75,6 +75,8 @@ export async function getRegistrationState(token: string) {
   const access = onboardingAccess({ status: client.status, onboardingStatus: client.onboarding_status, disabledAt: client.disabled_at });
   return {
     ...access,
+    accountStatus: client.status,
+    disabledAt: client.disabled_at,
     onboardingStatus: client.onboarding_status,
     companyName: client.company_name,
     contactName: client.contact_name,

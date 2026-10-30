@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openRegistrationSteps, registrationIssues } from "./registration";
+import { openRegistrationSteps, registrationIssues, registrationView } from "./registration";
 
 const complete = {
   companyName: "Acme",
@@ -58,5 +58,37 @@ describe("registrationIssues", () => {
     expect(registrationIssues(["basic", "agreement", "x"])).toEqual(["basic", "agreement"]);
     expect(registrationIssues('{address,"payment",constructor}')).toEqual(["address", "payment"]);
     expect(registrationIssues(null)).toEqual([]);
+  });
+});
+
+describe("registrationView", () => {
+  const view = (accountStatus: "pending" | "active" | "inactive", onboardingStatus: Parameters<typeof registrationView>[0]["onboardingStatus"], openSteps = 1, disabledAt: string | null = null) =>
+    registrationView({ accountStatus, onboardingStatus, disabledAt, openSteps });
+
+  it("shows the steps while the packet is with the customer", () => {
+    expect(view("pending", "pending_customer")).toBe("steps");
+    expect(view("pending", "changes_requested")).toBe("steps");
+    expect(view("pending", "ready")).toBe("steps");
+  });
+
+  it("shows the read-only receipt only while the team reviews it", () => {
+    expect(view("pending", "pending_review", 0)).toBe("receipt");
+  });
+
+  it("holds no client data once approved, invited or active", () => {
+    expect(view("pending", "approved", 0)).toBe("complete");
+    expect(view("pending", "invite_sent", 0)).toBe("complete");
+    expect(view("active", "invite_sent", 0)).toBe("complete");
+    expect(view("active", "pending_review", 0)).toBe("complete");
+  });
+
+  it("is closed for a disabled or inactive client, whatever the packet", () => {
+    expect(view("pending", "pending_customer", 1, "2026-10-30T00:00:00Z")).toBe("closed");
+    expect(view("pending", "pending_review", 0, "2026-10-30T00:00:00Z")).toBe("closed");
+    expect(view("inactive", "invite_sent", 0)).toBe("closed");
+  });
+
+  it("with the customer but nothing open, says it's on its way without showing data", () => {
+    expect(view("pending", "pending_customer", 0)).toBe("processing");
   });
 });

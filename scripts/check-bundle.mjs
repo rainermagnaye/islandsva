@@ -21,7 +21,6 @@ const OVER_BUDGET_CAPS_KB = {
   "/admin/users/[id]": 167.1,
   "/admin/users": 161.6,
   "/admin/leads": 161.6,
-  "/register/[token]": 161.2,
 };
 
 if (!existsSync(APP_DIR)) {

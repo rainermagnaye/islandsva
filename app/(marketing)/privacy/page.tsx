@@ -34,13 +34,18 @@ export default function PrivacyPage() {
               interested in and your message.
             </li>
             <li>
-              <strong>Security data:</strong> for enquiries, a one-way hash of your IP address and your browser&apos;s user agent,
-              used only to prevent spam and abuse. We do not store your raw IP address.
+              <strong>Security data:</strong> when you send an enquiry, we keep a one-way hash of your IP address and your
+              browser&apos;s user agent, and use them only to prevent spam and abuse. When you accept our client agreement, we
+              keep a one-way hash of your IP address with that acceptance, as evidence of who accepted it. We never store your
+              raw IP address.
             </li>
             <li>
               <strong>Client registration:</strong> when we send you a registration link: your company and contact details,
               phone number, business details (industry, country, website, job title, address, team size and what you&apos;d like
-              help with), the name you type to accept our terms and when you did so, and the proof of payment file you upload.
+              help with), and the proof of payment file you upload. When you accept our client agreement, we keep a record of
+              it as evidence of the contract: the agreement text and the terms you accepted (company, country, package, hours,
+              term, price and start date), the name you typed, the contact email we had on file, a one-way hash of your IP
+              address and the time.
             </li>
             <li>
               <strong>Payments:</strong> the amount we received, any bank or transfer fee, the date and the payment reference,
@@ -104,10 +109,17 @@ export default function PrivacyPage() {
           <h2>How long we keep it</h2>
           {/* TODO(legal): decide retention periods. Today nothing is deleted automatically; accounts are deactivated, not deleted. */}
           <p>We keep your information while you&apos;re a client or team member, and as long as we need it for our records.</p>
+          {/* TODO(legal): the period the law requires us to keep contract records after the relationship ends. */}
+          <p>
+            We keep the record of your agreement acceptance for as long as you&apos;re a client, and after that for the period
+            the law requires us to keep contract records.
+          </p>
 
           <h2>Your rights</h2>
           <p>
             You can ask to see, correct or delete the personal information we hold about you, or object to how we use it.
+            We can&apos;t delete the record of your agreement acceptance while we need it to establish or defend a contract or a
+            legal claim.
             {site.email ? ` Email us at ${site.email}.` : " Contact us through the contact page."}
           </p>
 
