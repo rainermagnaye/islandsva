@@ -1,5 +1,7 @@
 import "server-only";
+import { CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
 import { packages } from "@/content/packages";
+import { timezoneForCountry } from "@/content/timezones";
 import { inviteClient, rollbackInvite } from "@/features/users/service";
 import type { ClientBusiness } from "./contract";
 import { applyOpenSections, openClientSections } from "./registration";
@@ -11,6 +13,10 @@ import { getClient, getOwnClientId, insertClient, insertPendingClient, listClien
 import { recordClientNote } from "./notes-dal";
 import type { ClientDetailsInput, ClientNoteInput, CreateClientInput, OnboardingInput } from "./validation";
 import type { ClientReviewInput, NewClientInput, PaymentReceivedInput } from "./review-validation";
+import { agreementMissingTerms, renderAgreement, type AgreementTerms } from "./agreement";
+import { agreementHash } from "./agreement-hash";
+import { acceptClientAgreementRow, getAgreementEvidence, getRegistrationState, saveRegistrationDetailsRow } from "./registration-dal";
+import type { AgreementAcceptanceInput, RegistrationDetailsInput } from "./registration-validation";
 
 /** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
 export async function createClientProfile(input: NewClientInput, createdBy: string) {
@@ -146,4 +152,39 @@ export async function findOwnVas(userId: string, term: string, limit: number) {
   const needle = term.toLocaleLowerCase();
   const assignments = await listActiveAssignments(clientId);
   return assignments.filter((assignment) => assignment.vaName.toLocaleLowerCase().includes(needle)).slice(0, limit);
+}
+
+/** The current agreement for these terms: the text the page shows, and the fingerprint it posts back with the acceptance. */
+export function currentAgreement(terms: AgreementTerms) {
+  const text = renderAgreement(CURRENT_AGREEMENT_VERSION, terms);
+  return { version: CURRENT_AGREEMENT_VERSION, text, fingerprint: agreementHash(text) };
+}
+
+/** Registration step 1. The token is the access; the database checks the step is open. */
+export async function saveRegistrationDetails(input: RegistrationDetailsInput) {
+  return saveRegistrationDetailsRow({ ...input, timezone: timezoneForCountry(input.business.country)?.value ?? null });
+}
+
+/**
+ * Registration step 2. The terms are built from the stored client, never from the form, and the text stored is the
+ * server's own render. If the page showed another version or other text (the terms changed since it loaded), nothing
+ * is stored and the customer reads the agreement again.
+ */
+export async function acceptAgreement(input: AgreementAcceptanceInput, ipHash: string | null) {
+  const state = await getRegistrationState(input.token);
+  if (!state) return { ok: false as const, reason: "not_found" as const };
+  if (agreementMissingTerms(state.terms)) return { ok: false as const, reason: "terms_missing" as const };
+  const current = currentAgreement(state.terms);
+  if (input.version !== current.version || input.fingerprint !== current.fingerprint) {
+    // The same reason as the database's IVA43 (acceptClientAgreementRow), so the page maps one reason to one message.
+    return { ok: false as const, reason: "changed" as const };
+  }
+  return acceptClientAgreementRow({ token: input.token, version: current.version, body: current.text, termsSeen: state.terms, signerName: input.signerName, ipHash });
+}
+
+/** A client's agreement acceptances for an admin: the client is read under RLS first, so one they can't see is null. */
+export async function agreementEvidenceFor(clientId: string) {
+  const client = await getClient(clientId);
+  if (!client) return null;
+  return getAgreementEvidence(client.id);
 }

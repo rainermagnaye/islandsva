@@ -24,12 +24,69 @@ export const CLIENT_REVIEW_SECTION_LABELS: Record<ClientReviewSection, string> =
 
 export const CLIENT_REVIEW_NOTE_LIMIT = 500;
 
-/** Accepts a text array, or the `{basic,address}` text Postgres can return for one. */
-export function clientReviewSections(value: unknown): ClientReviewSection[] {
+/** A text array, or the `{basic,address}` text Postgres can return for one. */
+function textItems(value: unknown) {
   const items = Array.isArray(value) ? value : typeof value === "string" ? value.replace(/^\{|\}$/g, "").split(",") : [];
-  return items
-    .map((item) => String(item).trim().replace(/^"|"$/g, ""))
-    .filter((item): item is ClientReviewSection => (CLIENT_REVIEW_SECTIONS as readonly string[]).includes(item));
+  return items.map((item) => String(item).trim().replace(/^"|"$/g, ""));
+}
+
+/** The old form's sections (`agreement` is skipped: that form has no such section). */
+export function clientReviewSections(value: unknown): ClientReviewSection[] {
+  return textItems(value).filter((item): item is ClientReviewSection => (CLIENT_REVIEW_SECTIONS as readonly string[]).includes(item));
+}
+
+/** The registration link's three steps, in order. */
+export const REGISTRATION_STEPS = ["details", "agreement", "payment"] as const;
+
+export type RegistrationStep = (typeof REGISTRATION_STEPS)[number];
+
+/** Every stored review section (old names and the new `agreement`) as the step it belongs to. */
+const STEP_OF_SECTION: Record<string, RegistrationStep> = {
+  basic: "details",
+  address: "details",
+  contacts: "details",
+  package: "agreement",
+  consent: "agreement",
+  agreement: "agreement",
+  payment: "payment",
+};
+
+/** Stored review sections, keeping only names the database allows. */
+export const registrationIssues = (value: unknown) => textItems(value).filter((item) => Object.hasOwn(STEP_OF_SECTION, item));
+
+const within = (value: string | undefined, max: number) => {
+  const length = (value ?? "").trim().length;
+  return length >= 1 && length <= max;
+};
+
+/**
+ * The steps still to do, in order — the same rule as private.packet_open_sections (20261029172015): every sent-back
+ * section's step, plus any step that isn't complete. Details: company, contact, industry, country, city and about,
+ * within the database's limits. Agreement: an acceptance of the current terms, which needs the terms set. Payment:
+ * a proof on file. Empty means the packet is ready for review.
+ */
+export function openRegistrationSteps(state: {
+  companyName: string;
+  contactName: string;
+  business: Pick<ClientBusiness, "industry" | "country" | "city" | "about">;
+  reviewIssues: readonly string[];
+  agreementCurrent: boolean;
+  termsMissing: boolean;
+  hasProof: boolean;
+}): RegistrationStep[] {
+  const open = new Set(state.reviewIssues.filter((issue) => Object.hasOwn(STEP_OF_SECTION, issue)).map((issue) => STEP_OF_SECTION[issue]));
+  const { business } = state;
+  const detailsDone =
+    within(state.companyName, 160) &&
+    within(state.contactName, 120) &&
+    within(business.industry, 80) &&
+    within(business.country, 80) &&
+    within(business.city, 80) &&
+    within(business.about, 2000);
+  if (!detailsDone) open.add("details");
+  if (state.termsMissing || !state.agreementCurrent) open.add("agreement");
+  if (!state.hasProof) open.add("payment");
+  return REGISTRATION_STEPS.filter((step) => open.has(step));
 }
 
 /** What the customer sees after a registration is sent back. */

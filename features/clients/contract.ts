@@ -177,6 +177,11 @@ export function businessFromEnquiry(source: {
   };
 }
 
+/** The registration link's agreement step: the typed name, like client_agreements.signer_name. */
+export const SIGNER_NAME_LIMIT = 120;
+export type AgreementAcceptanceField = "signerName" | "accept";
+export type PaymentProofStepField = "proof";
+
 /** Sections an admin can mark while the packet is in review. */
 export const CLIENT_REVIEW_SECTIONS = ["basic", "address", "contacts", "package", "consent", "payment"] as const;
 

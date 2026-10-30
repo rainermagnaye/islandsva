@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
+import { agreementTerms } from "@/features/clients/agreement";
 
 // Runs every migration on PGlite (real Postgres in WASM, no Docker) against stand-ins for Supabase's roles
 // and auth schema, then checks grants, RLS (allowed and denied per role), triggers, constraints and the
@@ -1895,6 +1896,36 @@ describe("registration agreement", () => {
         const insert = "insert into public.client_agreements (tenant_id, client_id, version, body, terms, signer_name, contact_email_on_file, ip_hash) values ($1, $2, 'v1', 'x', '{}', 'N', 'n@x.co', 'not-a-hash')";
         await expect(direct({}, insert, [tenant, client], "service_role")).rejects.toThrow(/client_agreements_ip_hash_check/);
       });
+    });
+
+    it("the app's agreementTerms builds exactly the database's snapshot (keys and value types)", async () => {
+      // A client with every term, and one with no country (no business key at all) and no package.
+      const [{ id: bare }] = await asServer<{ id: string }>(
+        "insert into public.clients (company_name, contact_name, contact_email, created_by) values ('Agree Bare', 'Nia', 'bare@agree.co', $1) returning id",
+        [CLOSER],
+      );
+      for (const id of [client, bare]) {
+        const [row] = await asServer<{ sql: unknown; company_name: string; country: string | null; package_code: string | null; hours_per_week: number | null; term_months: number | null; monthly_cents: number | null; starts_on: string | null }>(
+          "select private.client_agreement_terms(c) as sql, c.company_name, c.business ->> 'country' as country, c.package_code, c.hours_per_week, c.term_months, c.monthly_cents, c.starts_on::text from public.clients c where c.id = $1",
+          [id],
+        );
+        const app = agreementTerms({
+          companyName: row.company_name,
+          countryOnFile: row.country,
+          packageCode: row.package_code,
+          hoursPerWeek: row.hours_per_week,
+          termMonths: row.term_months,
+          monthlyCents: row.monthly_cents,
+          startsOn: row.starts_on,
+        });
+        expect(row.sql).toEqual(app);
+        expect(Object.keys(row.sql as object).sort()).toEqual(Object.keys(app).sort());
+        // The database's own jsonb equality holds for what the app would send as terms_seen.
+        const [{ same }] = await asServer<{ same: boolean }>("select private.client_agreement_terms(c) = $2::jsonb as same from public.clients c where c.id = $1", [id, JSON.stringify(app)]);
+        expect(same).toBe(true);
+      }
+      const [{ sql: bareTerms }] = await asServer<{ sql: Record<string, unknown> }>("select private.client_agreement_terms(c) as sql from public.clients c where c.id = $1", [bare]);
+      expect(bareTerms).toEqual({ company_name: "Agree Bare", country: null, package_code: null, hours_per_week: null, term_months: null, monthly_cents: null, starts_on: null });
     });
 
     it("stores the evidence: the database's terms, trimmed name, the email on file, the hashed IP and the client's tenant", async () => {

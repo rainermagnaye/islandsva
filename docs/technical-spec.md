@@ -27,6 +27,10 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 
 - The database side is written (`approve_client_payment`, 20261029175327_payment_verification; rules in `supabase/CLAUDE.md`); the app still calls `accept_client_review_paid` until its slice swaps the call.
 - The app's bank-reference parser normalises the text to NFKC and strips format and control characters (Unicode `Cf`, `Cc`) before calling `approve_client_payment`, so look-alike or invisible characters can't slip a duplicate past the database's comparison (whitespace removed, case ignored).
+- Agreement rules are built (slice 2a): `content/agreement.ts`, `features/clients/agreement.ts`, `registration-dal.ts`, `registration-validation.ts`, `acceptAgreement` / `agreementEvidenceFor` in `service.ts`. A stale page is reason `changed` from both the service and the database's `IVA43`; map it to `AGREEMENT_CHANGED`.
+- **Slice 2b must:**
+  - Gate the agreement-evidence view with `requireRole(["admin"])` before `agreementEvidenceFor`, with a test that a Lead Gen (closer), a VA and a client are refused.
+  - Before the three-step page goes live, update the Privacy Policy (`app/(marketing)/privacy/page.tsx`) "Security data" and "Client registration" bullets to cover the agreement text, the terms snapshot, the contact email on file and the IP hash stored with an acceptance: purpose (evidence of the contract), how long they're kept, and that erasure requests are refused for them on a contract or legal-claims basis.
 
 ## Meetings
 
