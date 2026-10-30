@@ -9,13 +9,13 @@ import { Modal } from "@/components/ui/modal";
 import { TextField } from "@/components/ui/text-field";
 import type { SubmitResult } from "@/types/form";
 import { returnClientRegistration } from "../actions";
-import { CLIENT_REVIEW_SECTIONS, type ClientDetail, type ClientPacketSummary } from "../contract";
-import { CLIENT_REVIEW_NOTE_LIMIT, CLIENT_REVIEW_SECTION_LABELS } from "../registration";
-import { ClientConsents, ClientInvoices, ClientProfileView } from "./client-profile-view";
+import type { ClientDetail, ClientPacketSummary, ClientReviewParts } from "../contract";
+import { CLIENT_REVIEW_NOTE_LIMIT, REGISTRATION_STEPS, REGISTRATION_STEP_LABELS } from "../registration";
+import { ClientInvoices, ClientProfileView } from "./client-profile-view";
 import { ConfirmPaymentForm } from "./confirm-payment-form";
 
 /** Review opens the packet. Confirm and return stay inside it, so they are not offered before the details have been read. */
-export function ClientReviewActions({ client, packet, menu }: { client: ClientDetail; packet: ClientPacketSummary; menu: ReactNode }) {
+export function ClientReviewActions({ client, packet, review, menu }: { client: ClientDetail; packet: ClientPacketSummary; review: ClientReviewParts; menu: ReactNode }) {
   const [reviewing, setReviewing] = useState(false);
   const [open, setOpen] = useState(false);
   async function sendBack(formData: FormData): Promise<SubmitResult<"note" | "sections">> {
@@ -46,13 +46,15 @@ export function ClientReviewActions({ client, packet, menu }: { client: ClientDe
       <Modal open={reviewing} onClose={() => setReviewing(false)} title="Review registration" size="lg">
         <div className="grid gap-4">
           <ClientProfileView client={client} />
-          {packet.consentName && <ClientConsents consent={{ name: packet.consentName, signedAt: packet.consentSignedAt }} />}
+          {review.evidence}
           {packet.paymentProofName && (
             <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} country={client.business.country} />
           )}
           <ConfirmPaymentForm
             clientId={client.id}
             monthlyCents={client.monthlyCents}
+            checklist={review.checklist}
+            approvable={review.approvable}
             onDone={() => setReviewing(false)}
             secondary={
               <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
@@ -81,8 +83,8 @@ export function ClientReviewActions({ client, packet, menu }: { client: ClientDe
         <Form id="return-registration" aria-label="Sections to send back" onSubmit={sendBack}>
           {({ pending: sending, fieldErrors }) => (
             <div className="grid gap-3">
-              {CLIENT_REVIEW_SECTIONS.map((section) => (
-                <Checkbox key={section} name="section" value={section} label={CLIENT_REVIEW_SECTION_LABELS[section]} />
+              {REGISTRATION_STEPS.map((step) => (
+                <Checkbox key={step} name="section" value={step} label={REGISTRATION_STEP_LABELS[step]} />
               ))}
               {fieldErrors.sections && <Alert tone="danger" title={fieldErrors.sections} />}
               <TextField label="Note" name="note" optional multiline maxLength={CLIENT_REVIEW_NOTE_LIMIT} placeholder="What should they change?" error={fieldErrors.note} />

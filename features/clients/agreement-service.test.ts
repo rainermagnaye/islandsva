@@ -8,7 +8,7 @@ import { agreementHash } from "./agreement-hash";
 const registration = vi.hoisted(() => ({
   getRegistrationState: vi.fn(),
   acceptClientAgreementRow: vi.fn(),
-  getAgreementEvidence: vi.fn(),
+  getAgreementReview: vi.fn(),
   saveRegistrationDetailsRow: vi.fn(),
   saveRegistrationProofRow: vi.fn(),
 }));
@@ -19,7 +19,24 @@ vi.mock("./onboarding-dal", () => ({}));
 vi.mock("./link", () => ({}));
 vi.mock("@/features/users/service", () => ({}));
 
-const { acceptAgreement, agreementEvidenceFor } = await import("./service");
+// The real requireRole, on a session whose verified claims each test sets. notFound and redirect throw as Next's do.
+const session = vi.hoisted(() => ({ claims: null as Record<string, unknown> | null }));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({ auth: { getClaims: async () => ({ data: session.claims ? { claims: session.claims } : null, error: null }) } }),
+}));
+vi.mock("next/navigation", () => ({
+  notFound: () => {
+    throw new Error("NEXT_HTTP_ERROR_FALLBACK;404");
+  },
+  redirect: (to: string) => {
+    throw new Error(`NEXT_REDIRECT;${to}`);
+  },
+}));
+const signedIn = (roles: string[], aal = "aal2") => {
+  session.claims = { sub: "u1", email: "u@x.co", aal, app_metadata: { roles } };
+};
+
+const { acceptAgreement, agreementReviewFor } = await import("./service");
 
 const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456";
 const terms = agreementTerms({ companyName: "Acme", countryOnFile: "United States", packageCode: "essentials", hoursPerWeek: 20, termMonths: 6, monthlyCents: 85500, startsOn: "2026-11-01" });
@@ -58,14 +75,42 @@ describe("acceptAgreement", () => {
   });
 });
 
-describe("agreementEvidenceFor", () => {
-  it("reads the evidence only for a client the caller can read under RLS", async () => {
-    registration.getAgreementEvidence.mockReset().mockResolvedValue([]);
+describe("agreementReviewFor", () => {
+  const accepted = { id: "a1", version: "v1", body: "text", terms, signerName: "Ana", contactEmailOnFile: "ana@x.co", ipRecorded: true, acceptedAt: "2026-10-30T00:00:00Z" };
+
+  beforeEach(() => {
+    dal.getClient.mockReset().mockResolvedValue({ id: "c1" });
+    registration.getAgreementReview.mockReset().mockResolvedValue({ legacyConsent: false, currentTerms: terms, accepted });
+  });
+
+  it.each([["closer"], ["va"], ["client"]])("refuses a %s before reading anything", async (role) => {
+    signedIn([role]);
+    await expect(agreementReviewFor("c1")).rejects.toThrow("404");
+    expect(dal.getClient).not.toHaveBeenCalled();
+    expect(registration.getAgreementReview).not.toHaveBeenCalled();
+  });
+
+  it("sends an admin without two-factor to /mfa, and a visitor to sign-in, before reading anything", async () => {
+    signedIn(["admin"], "aal1");
+    await expect(agreementReviewFor("c1")).rejects.toThrow("NEXT_REDIRECT;/mfa");
+    session.claims = null;
+    await expect(agreementReviewFor("c1")).rejects.toThrow("NEXT_REDIRECT;/login");
+    expect(registration.getAgreementReview).not.toHaveBeenCalled();
+  });
+
+  it("reads the evidence only for a client the admin can read under RLS", async () => {
+    signedIn(["admin"]);
     dal.getClient.mockResolvedValueOnce(null);
-    expect(await agreementEvidenceFor("c1")).toBeNull();
-    expect(registration.getAgreementEvidence).not.toHaveBeenCalled();
-    dal.getClient.mockResolvedValueOnce({ id: "c1" });
-    expect(await agreementEvidenceFor("c1")).toEqual([]);
-    expect(registration.getAgreementEvidence).toHaveBeenCalledWith("c1");
+    expect(await agreementReviewFor("c1")).toBeNull();
+    expect(registration.getAgreementReview).not.toHaveBeenCalled();
+  });
+
+  it("returns the packet's acceptance and whether it can be approved", async () => {
+    signedIn(["admin"]);
+    expect(await agreementReviewFor("c1")).toEqual({ state: "current", accepted });
+    registration.getAgreementReview.mockResolvedValue({ legacyConsent: false, currentTerms: { ...terms, monthly_cents: 1 }, accepted });
+    expect(await agreementReviewFor("c1")).toEqual({ state: "stale", accepted });
+    registration.getAgreementReview.mockResolvedValue({ legacyConsent: true, currentTerms: terms, accepted: null });
+    expect(await agreementReviewFor("c1")).toEqual({ state: "legacy", accepted: null });
   });
 });

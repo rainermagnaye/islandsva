@@ -28,17 +28,17 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 - Built (slice 2b): `/register/[token]` shows a stepper (Details · Agreement · Payment proof) and only the first open step, chosen on the server by `openRegistrationSteps` (the same rule as `private.packet_open_sections`). Each step saves on its own through `features/clients/registration-actions.ts`; the token is the access check. After a return, a note names the steps sent back (old section names map to their step). Once nothing is open the database moves the packet to review, and the link shows the read-only receipt.
 - The agreement text is rendered on the server (`currentAgreement`), with its version and fingerprint in hidden fields; the box is never pre-ticked. The wording is a sample until legal review (`content/agreement.ts`, `TODO(legal)`).
 
-## Registration payment verification (app slice, planned)
+## Registration payment verification
 
-- The database side is written (`approve_client_payment`, 20261029175327_payment_verification; rules in `supabase/CLAUDE.md`); the app still calls `accept_client_review_paid` until its slice swaps the call.
-- The app's bank-reference parser normalises the text to NFKC and strips format and control characters (Unicode `Cf`, `Cc`) before calling `approve_client_payment`, so look-alike or invisible characters can't slip a duplicate past the database's comparison (whitespace removed, case ignored).
-- Agreement rules are built (slice 2a): `content/agreement.ts`, `features/clients/agreement.ts`, `registration-dal.ts`, `registration-validation.ts`, `acceptAgreement` / `agreementEvidenceFor` in `service.ts`. A stale page is reason `changed` from both the service and the database's `IVA43`; map it to `AGREEMENT_CHANGED`.
+- Built (slice 3): an admin approves through `approve_client_payment` (`approveClientPayment` in `onboarding-dal.ts`), with the signed-in admin as the actor. "Approve and send invite" approves the packet and records the payment in one transaction, then sends the password invite; if the invite fails the client stays approved, and the profile shows a warning and Send activation. Refusals: `IVA41` and `IVA42` on the reference field, `IVA43` as "The client must accept the current agreement before you approve".
+- The reference is required and normalised before the call (`normaliseReference`: NFKC, Unicode format and control characters removed, trimmed), so look-alike or invisible characters can't slip a duplicate past the database's comparison (whitespace removed, case ignored).
+- The review shows the agreement evidence, admins only (`agreementReviewFor` checks `requireRole(["admin"])` before any read): version, time, signer, contact email on file, whether an IP was recorded, and the full text; or "Signed with the earlier consent form". A stale or missing acceptance shows a warning and disables Approve. Six required checkboxes (proof, identifiable, amount, funds received, not credited elsewhere, reference) gate the form in the browser; nothing about them is stored.
+- Sending back offers the three steps (Details, Agreement, Payment proof), stored as `basic`, `consent` and `payment` (`REVIEW_SECTION_FOR_STEP`), because the live `save_client_review` accepts only the original names; every admin screen labels stored sections by step. The contract migration may store Agreement as `agreement` instead.
+- Agreement rules are built (slice 2a): `content/agreement.ts`, `features/clients/agreement.ts`, `registration-dal.ts`, `registration-validation.ts`, `acceptAgreement` / `agreementReviewFor` in `service.ts`. A stale page is reason `changed` from both the service and the database's `IVA43`; map it to `AGREEMENT_CHANGED`.
 - The Privacy Policy covers the acceptance record (slice 2b): what is kept, why, retention (`TODO(legal)` for the period) and that erasure is refused while it's needed for a contract or legal claim.
 - After the review, the link shows no client data: the read-only receipt only while the packet is in review; once approved, invited or active, "Registration complete" and a sign-in link (`registrationView`).
-- **Slice 3 must:**
-  - Gate the agreement-evidence view with `requireRole(["admin"])` before `agreementEvidenceFor`, with a test that a Lead Gen (closer), a VA and a client are refused.
-  - Switch `confirmClientReviewPaid` from `accept_client_review_paid` to `approve_client_payment` and map `IVA41` (reference already used), `IVA42` (reference missing) and `IVA43` (no acceptance of the current terms) to messages; make the reference required in the confirm form, and normalise it (NFKC, strip format and control characters) before the call.
-  - **Slice 2b must not be deployed before slice 3:** until then admins approve through `accept_client_review_paid`, which doesn't check the agreement.
+- Slices 2b and 3 deploy together: 2b alone would leave admins approving through `accept_client_review_paid`, which doesn't check the agreement.
+- **Slice 4 (planned):** the payments queue and the send-back email.
 
 ## Meetings
 

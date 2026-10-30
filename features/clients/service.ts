@@ -1,10 +1,11 @@
 import "server-only";
 import { CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
 import { packages } from "@/content/packages";
+import { requireRole } from "@/lib/auth/session";
 import { timezoneForCountry } from "@/content/timezones";
 import { inviteClient, rollbackInvite } from "@/features/users/service";
 import type { ClientBusiness } from "./contract";
-import { acceptClientReviewPaid, issueClientOnboardingLink, recordClientInvite, saveClientReview } from "./onboarding-dal";
+import { approveClientPayment, issueClientOnboardingLink, recordClientInvite, saveClientReview } from "./onboarding-dal";
 import { listActiveAssignments } from "./assignment-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
@@ -12,9 +13,9 @@ import { getClient, getOwnClientId, insertClient, insertPendingClient, listClien
 import { recordClientNote } from "./notes-dal";
 import type { ClientDetailsInput, ClientNoteInput, CreateClientInput } from "./validation";
 import type { ClientReviewInput, NewClientInput, PaymentReceivedInput } from "./review-validation";
-import { agreementMissingTerms, renderAgreement, type AgreementTerms } from "./agreement";
+import { agreementMissingTerms, agreementReviewState, renderAgreement, type AgreementTerms } from "./agreement";
 import { agreementHash } from "./agreement-hash";
-import { acceptClientAgreementRow, getAgreementEvidence, getRegistrationState, saveRegistrationDetailsRow } from "./registration-dal";
+import { acceptClientAgreementRow, getAgreementReview, getRegistrationState, saveRegistrationDetailsRow } from "./registration-dal";
 import type { AgreementAcceptanceInput, RegistrationDetailsInput } from "./registration-validation";
 
 /** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
@@ -74,13 +75,13 @@ export async function pauseClient(clientId: string, disabled: boolean) {
   return setClientDisabled(clientId, disabled);
 }
 
-/** Accepts a clear packet and records the payment received. The caller is an admin; this still checks they can see the client. */
+/** Approves a packet in review and records the payment received. The caller is an admin; this still checks they can see the client. */
 export async function confirmClientReviewPaid(input: PaymentReceivedInput, actor: string) {
   const client = await getClient(input.clientId);
   if (!client || client.disabledAt || client.status !== "pending" || client.onboardingStatus !== "pending_review") {
     return { ok: false as const, reason: "not_found" as const };
   }
-  return acceptClientReviewPaid({ clientId: input.clientId, actor, amountCents: input.amount, feeCents: input.fee, paidOn: input.paidOn, reference: input.reference });
+  return approveClientPayment({ clientId: input.clientId, actor, amountCents: input.amount, feeCents: input.fee, paidOn: input.paidOn, reference: input.reference });
 }
 
 /** Sends the registration back to the sections that need a change. */
@@ -162,9 +163,22 @@ export async function acceptAgreement(input: AgreementAcceptanceInput, ipHash: s
   return acceptClientAgreementRow({ token: input.token, version: current.version, body: current.text, termsSeen: state.terms, signerName: input.signerName, ipHash });
 }
 
-/** A client's agreement acceptances for an admin: the client is read under RLS first, so one they can't see is null. */
-export async function agreementEvidenceFor(clientId: string) {
+/**
+ * The agreement part of an admin's review: whether the packet can be approved (current, stale, earlier consent or
+ * missing) and the acceptance it holds. Admins only: the role is checked here, before any read,
+ * because the evidence (text, signer, contact email) is read with the secret key. Then the client is read under RLS,
+ * so one this admin can't see is null.
+ */
+export async function agreementReviewFor(clientId: string) {
+  await requireRole(["admin"]);
   const client = await getClient(clientId);
   if (!client) return null;
-  return getAgreementEvidence(client.id);
+  const review = await getAgreementReview(client.id);
+  if (!review) return null;
+  return {
+    state: agreementReviewState({ legacyConsent: review.legacyConsent, acceptedTerms: review.accepted?.terms ?? null, currentTerms: review.currentTerms }),
+    accepted: review.accepted,
+  };
 }
+
+export type AgreementReview = NonNullable<Awaited<ReturnType<typeof agreementReviewFor>>>;

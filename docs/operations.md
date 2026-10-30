@@ -76,6 +76,12 @@ group by 1, 2
 having count(*) > 1;
 ```
 
+Also list paid references with anything outside printable ASCII (look-alike dashes, invisible or full-width characters), which the app now normalises before storing but older rows may still hold. Fix any by hand (with the admin who recorded it) before deploying the payment-verification app slice, so an old and a new spelling of one reference can't both stand:
+
+```sql
+select id from public.payments where status = 'paid' and provider_ref ~ '[^ -~]';
+```
+
 **If the audit log starts refusing writes** (the `*_audit` triggers sit on every write to leads, meetings, clients, assignments, roles and account status, so a fault there stops the contact form or sign-in): a person disables the failing trigger — `alter table public.<table> disable trigger <table>_audit;` — and fixes forward with a new migration that re-enables it. Writes made meanwhile aren't audited; note the window.
 
 ### Creating an admin

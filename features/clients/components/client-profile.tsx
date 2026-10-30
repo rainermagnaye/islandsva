@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { adminClientHref } from "@/content/routes";
-import { CLIENT_PROFILE_TABS, clientBadge, type ClientDetail, type ClientNote, type ClientPacketSummary, type ClientProfileTab } from "../contract";
-import { CLIENT_REVIEW_SECTION_LABELS, clientRegistrationSteps } from "../registration";
+import { CLIENT_PROFILE_TABS, clientBadge, type ClientDetail, type ClientNote, type ClientPacketSummary, type ClientProfileTab, type ClientReviewParts } from "../contract";
+import { clientRegistrationSteps, reviewIssueLabels } from "../registration";
 import { OnboardingLinkCard } from "./onboarding-link";
 import { SendActivation } from "./client-activation";
 import { ClientReviewActions } from "./client-review-actions";
 import { ClientActions } from "./client-actions";
 import { ClientNotes } from "./client-notes";
-import { ClientConsents, ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
+import { ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
 import { ShortlistAdmin } from "@/features/matching/components/shortlist-admin";
 
 // The editor opens only after "Edit": loaded then, so the profile page doesn't ship it (or its package and time-zone
@@ -27,6 +27,7 @@ export function ClientProfile({
   client,
   notes,
   packet,
+  review,
   assignments,
   offers,
   vas,
@@ -36,6 +37,7 @@ export function ClientProfile({
   client: ClientDetail;
   notes: readonly ClientNote[];
   packet: ClientPacketSummary;
+  review: ClientReviewParts;
   assignments: readonly { id: string; vaId: string; vaName: string; startedAt: string }[];
   offers: readonly ShortlistEntry[];
   vas: readonly { id: string; fullName: string }[];
@@ -52,7 +54,7 @@ export function ClientProfile({
   const canActivate = client.status === "pending" && !client.disabledAt && client.onboardingStatus === "approved";
   const inReview = client.status === "pending" && !client.disabledAt && client.onboardingStatus === "pending_review";
   const sentBack = client.onboardingStatus === "changes_requested";
-  const sentBackText = packet.reviewNote || packet.reviewIssues.map((id) => CLIENT_REVIEW_SECTION_LABELS[id]).join(", ");
+  const sentBackText = packet.reviewNote || reviewIssueLabels(packet.reviewIssues).join(", ");
 
   return (
     <div className="grid gap-4">
@@ -70,6 +72,7 @@ export function ClientProfile({
           <ClientReviewActions
             client={client}
             packet={packet}
+            review={review}
             menu={<ClientActions clientId={client.id} editing={showEditor} disabledAt={client.disabledAt} />}
           />
         ) : (
@@ -81,6 +84,11 @@ export function ClientProfile({
       </Card>
 
       {client.status === "pending" && !client.disabledAt && <OnboardingLinkCard clientId={client.id} url={packet.url} />}
+      {canActivate && (
+        <Alert tone="warning" title="Payment verified — invite not sent">
+          Use Send activation to email {client.contactEmail} a link to set a password.
+        </Alert>
+      )}
       {sentBack && sentBackText && (
         <Alert tone="warning" title="Sent back for a change">
           {sentBackText}
@@ -96,7 +104,7 @@ export function ClientProfile({
       ) : tab === "notes" ? (
         <ClientNotes clientId={client.id} notes={notes} />
       ) : tab === "consents" ? (
-        <ClientConsents consent={packet.consentName ? { name: packet.consentName, signedAt: packet.consentSignedAt } : null} />
+        review.record
       ) : tab === "invoices" ? (
         <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} country={client.business.country} />
       ) : (

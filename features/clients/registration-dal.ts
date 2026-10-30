@@ -31,6 +31,30 @@ function stepResult<Refusals extends Record<string, string>>(
   throw new UpstreamError("supabase", `${failure} (${error?.code ?? "no status"})`);
 }
 
+type TermsRow = {
+  company_name: string;
+  business: unknown;
+  package_code: string | null;
+  hours_per_week: number | null;
+  term_months: number | null;
+  monthly_cents: number | null;
+  starts_on: string | null;
+};
+
+/** A client row's agreement terms, with the raw stored country, as private.client_agreement_terms reads it. */
+function termsOfClientRow(client: TermsRow): AgreementTerms {
+  const raw = client.business && typeof client.business === "object" && !Array.isArray(client.business) ? (client.business as Record<string, unknown>) : {};
+  return agreementTerms({
+    companyName: client.company_name,
+    countryOnFile: typeof raw.country === "string" ? raw.country : null,
+    packageCode: client.package_code,
+    hoursPerWeek: client.hours_per_week,
+    termMonths: client.term_months,
+    monthlyCents: client.monthly_cents,
+    startsOn: client.starts_on,
+  });
+}
+
 /** What the three-step page and the step services need for one link, or null for an unknown token. */
 export async function getRegistrationState(token: string) {
   await connection();
@@ -52,17 +76,7 @@ export async function getRegistrationState(token: string) {
   if (clientError) throw new UpstreamError("supabase", "Reading a registration link failed", { cause: clientError });
   if (!client) return null;
 
-  // The raw stored country, as private.client_agreement_terms reads it (business ->> 'country').
-  const raw = client.business && typeof client.business === "object" && !Array.isArray(client.business) ? (client.business as Record<string, unknown>) : {};
-  const terms: AgreementTerms = agreementTerms({
-    companyName: client.company_name,
-    countryOnFile: typeof raw.country === "string" ? raw.country : null,
-    packageCode: client.package_code,
-    hoursPerWeek: client.hours_per_week,
-    termMonths: client.term_months,
-    monthlyCents: client.monthly_cents,
-    startsOn: client.starts_on,
-  });
+  const terms = termsOfClientRow(client);
 
   let agreementCurrent = false;
   if (packet.agreement_id) {
@@ -140,26 +154,45 @@ export async function saveRegistrationProofRow(token: string, proof: { name: str
 }
 
 /**
- * A client's agreement acceptances, newest first. Secret key: client_agreements has no policy for signed-in users.
- * Only after the caller has read the client under RLS (agreementEvidenceFor), so an admin reaches here only for a
- * client they may see.
+ * What the admin review needs about the agreement: the packet's acceptance (only the one the packet points at) and
+ * its earlier-consent mark, and the client's terms now. Secret key: the packet and client_agreements are server-only.
+ * Only after the caller has checked the admin role and read the client under RLS (agreementReviewFor), so an admin
+ * reaches here only for a client they may see.
  */
-export async function getAgreementEvidence(clientId: string) {
-  if (!isUuid(clientId)) return [];
-  const { data, error } = await createAdminClient()
-    .from("client_agreements")
-    .select("id, version, body, terms, signer_name, contact_email_on_file, ip_hash, accepted_at")
-    .eq("client_id", clientId)
-    .order("accepted_at", { ascending: false });
-  if (error) throw new UpstreamError("supabase", `Reading agreement evidence for ${clientId} failed (${error.code})`);
-  return data.map((row) => ({
-    id: row.id,
-    version: row.version,
-    body: row.body,
-    terms: agreementTermsFrom(row.terms),
-    signerName: row.signer_name,
-    contactEmailOnFile: row.contact_email_on_file,
-    ipRecorded: row.ip_hash !== null,
-    acceptedAt: row.accepted_at,
-  }));
+export async function getAgreementReview(clientId: string) {
+  if (!isUuid(clientId)) return null;
+  const admin = createAdminClient();
+  const [packet, client] = await Promise.all([
+    admin.from("client_packets").select("agreement_id, legacy_consent").eq("client_id", clientId).maybeSingle(),
+    admin.from("clients").select("company_name, business, package_code, hours_per_week, term_months, monthly_cents, starts_on").eq("id", clientId).maybeSingle(),
+  ]);
+  const error = packet.error ?? client.error;
+  if (error) throw new UpstreamError("supabase", `Reading the agreement review for ${clientId} failed (${error.code})`);
+  if (!client.data) return null;
+
+  const agreementId = packet.data?.agreement_id ?? null;
+  let accepted = null;
+  if (agreementId) {
+    const { data: row, error: rowError } = await admin
+      .from("client_agreements")
+      .select("id, version, body, terms, signer_name, contact_email_on_file, ip_hash, accepted_at")
+      .eq("id", agreementId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (rowError) throw new UpstreamError("supabase", `Reading the agreement review for ${clientId} failed (${rowError.code})`);
+    if (row) {
+      accepted = {
+        id: row.id,
+        version: row.version,
+        body: row.body,
+        terms: agreementTermsFrom(row.terms),
+        signerName: row.signer_name,
+        contactEmailOnFile: row.contact_email_on_file,
+        // Whether one was recorded, never the hash itself.
+        ipRecorded: row.ip_hash !== null,
+        acceptedAt: row.accepted_at,
+      };
+    }
+  }
+  return { legacyConsent: packet.data?.legacy_consent ?? false, currentTerms: termsOfClientRow(client.data), accepted };
 }

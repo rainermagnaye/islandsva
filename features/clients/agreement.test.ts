@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGREEMENTS, CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
-import { agreementMissingTerms, agreementTerms, agreementTermsFrom, renderAgreement, sameAgreementTerms, type AgreementTerms } from "./agreement";
+import { agreementApprovable, agreementMissingTerms, agreementReviewState, agreementTerms, agreementTermsFrom, renderAgreement, sameAgreementTerms, type AgreementTerms } from "./agreement";
 import { agreementHash } from "./agreement-hash";
 
 const client = {
@@ -88,5 +88,30 @@ describe("renderAgreement", () => {
   // A published version never changes: the acceptance stores the text and its version. Edit wording as a new version.
   it("pins each published version's text", () => {
     expect(agreementHash(renderAgreement("v1", terms))).toBe("e80bddca83f1a90a522422afaea237782c24a58a5db92e47c490e802dcd56ca5");
+  });
+});
+
+describe("agreementReviewState (approve_client_payment's IVA43 rule)", () => {
+  it("is current when the packet's acceptance covers the terms now, stale when they changed since", () => {
+    expect(agreementReviewState({ legacyConsent: false, acceptedTerms: terms, currentTerms: { ...terms } })).toBe("current");
+    expect(agreementReviewState({ legacyConsent: false, acceptedTerms: terms, currentTerms: { ...terms, monthly_cents: 90000 } })).toBe("stale");
+    expect(agreementReviewState({ legacyConsent: false, acceptedTerms: terms, currentTerms: { ...terms, company_name: "Acme Law" } })).toBe("stale");
+  });
+
+  it("counts the earlier consent only while there's no acceptance", () => {
+    expect(agreementReviewState({ legacyConsent: true, acceptedTerms: null, currentTerms: terms })).toBe("legacy");
+    expect(agreementReviewState({ legacyConsent: true, acceptedTerms: terms, currentTerms: { ...terms, term_months: 12 } })).toBe("stale");
+    expect(agreementReviewState({ legacyConsent: false, acceptedTerms: null, currentTerms: terms })).toBe("missing");
+  });
+});
+
+describe("agreementApprovable", () => {
+  it("opens approval only for a current acceptance or the earlier consent", () => {
+    expect(agreementApprovable("current")).toBe(true);
+    expect(agreementApprovable("legacy")).toBe(true);
+    expect(agreementApprovable("stale")).toBe(false);
+    expect(agreementApprovable("missing")).toBe(false);
+    expect(agreementApprovable(null)).toBe(false);
+    expect(agreementApprovable(undefined)).toBe(false);
   });
 });

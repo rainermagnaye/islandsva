@@ -7,7 +7,7 @@ const supabase = vi.hoisted(() => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => supabase);
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
-const { acceptClientAgreementRow, getAgreementEvidence, getRegistrationState } = await import("./registration-dal");
+const { acceptClientAgreementRow, getAgreementReview, getRegistrationState } = await import("./registration-dal");
 
 const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456";
 const terms = { company_name: "Acme", country: null, package_code: "essentials", hours_per_week: 20, term_months: 6, monthly_cents: 85500, starts_on: "2026-11-01" };
@@ -42,22 +42,54 @@ describe("acceptClientAgreementRow", () => {
   });
 });
 
-describe("getAgreementEvidence", () => {
-  it("says whether an IP was recorded, never the hash", async () => {
-    const rows = [
-      { id: "a2", version: "v1", body: "text", terms, signer_name: "Ana", contact_email_on_file: "ana@x.co", ip_hash: "f".repeat(64), accepted_at: "2026-10-30T00:00:00Z" },
-      { id: "a1", version: "v1", body: "text", terms, signer_name: "Ana", contact_email_on_file: "ana@x.co", ip_hash: null, accepted_at: "2026-10-29T00:00:00Z" },
-    ];
-    const order = vi.fn().mockResolvedValue({ data: rows, error: null });
-    supabase.createAdminClient.mockReturnValue({ from: () => ({ select: () => ({ eq: () => ({ order }) }) }) });
-    const evidence = await getAgreementEvidence("0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60");
-    expect(evidence.map((row) => row.ipRecorded)).toEqual([true, false]);
-    expect(evidence[0]).toEqual({ id: "a2", version: "v1", body: "text", terms, signerName: "Ana", contactEmailOnFile: "ana@x.co", ipRecorded: true, acceptedAt: "2026-10-30T00:00:00Z" });
-    expect(JSON.stringify(evidence)).not.toContain("f".repeat(64));
+describe("getAgreementReview", () => {
+  const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
+  const clientRow = { company_name: "Acme", business: { country: "United States" }, package_code: "essentials", hours_per_week: 20, term_months: 6, monthly_cents: 85500, starts_on: "2026-11-01" };
+  const agreementRow = { id: "a1", version: "v1", body: "text", terms, signer_name: "Ana", contact_email_on_file: "ana@x.co", ip_hash: "f".repeat(64), accepted_at: "2026-10-30T00:00:00Z" };
+
+  /** A fake secret-key client: each table answers one row, and every filter is recorded. */
+  function fake(rows: Record<string, unknown>) {
+    const filters: Record<string, [string, unknown][]> = {};
+    supabase.createAdminClient.mockReturnValue({
+      from: (table: string) => {
+        filters[table] = [];
+        const chain = {
+          select: () => chain,
+          eq: (column: string, value: unknown) => {
+            filters[table].push([column, value]);
+            return chain;
+          },
+          maybeSingle: async () => ({ data: rows[table] ?? null, error: null }),
+        };
+        return chain;
+      },
+    });
+    return filters;
+  }
+
+  it("reads only the acceptance the packet points at, for this client, and says whether an IP was recorded, never the hash", async () => {
+    const filters = fake({ client_packets: { agreement_id: "a1", legacy_consent: false }, clients: clientRow, client_agreements: agreementRow });
+    const review = await getAgreementReview(clientId);
+    expect(filters.client_agreements).toEqual([
+      ["id", "a1"],
+      ["client_id", clientId],
+    ]);
+    expect(review).toEqual({
+      legacyConsent: false,
+      currentTerms: { ...terms, country: "United States" },
+      accepted: { id: "a1", version: "v1", body: "text", terms, signerName: "Ana", contactEmailOnFile: "ana@x.co", ipRecorded: true, acceptedAt: "2026-10-30T00:00:00Z" },
+    });
+    expect(JSON.stringify(review)).not.toContain("f".repeat(64));
+  });
+
+  it("doesn't read client_agreements when the packet has no acceptance", async () => {
+    const filters = fake({ client_packets: { agreement_id: null, legacy_consent: true }, clients: clientRow });
+    expect(await getAgreementReview(clientId)).toMatchObject({ legacyConsent: true, accepted: null });
+    expect(filters.client_agreements).toBeUndefined();
   });
 
   it("returns nothing for a malformed id without a database call", async () => {
-    expect(await getAgreementEvidence("42")).toEqual([]);
+    expect(await getAgreementReview("42")).toBeNull();
     expect(supabase.createAdminClient).not.toHaveBeenCalled();
   });
 });
