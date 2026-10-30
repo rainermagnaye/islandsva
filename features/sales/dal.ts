@@ -5,7 +5,7 @@ import type { SalesPayment } from "./contract";
 
 // Sales reads, as the signed-in admin: RLS returns payments and clients of their own agency only, and only with
 // a two-factor session (the page has also called requireRole). Payments are recorded by
-// accept_client_review_paid (features/clients); this feature only reads them. Backed by payments (tenant_id,
+// approve_client_payment (features/clients); this feature only reads them. Backed by payments (tenant_id,
 // paid_on) where status = 'paid'.
 
 /** Paid (not voided) payments on or after `since` ("2025-11-01"), newest first, with the client's company. */

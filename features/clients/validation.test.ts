@@ -162,15 +162,22 @@ describe("parseClientReview", () => {
       ok: false,
       fieldErrors: { sections: "Choose a section to send back." },
     });
-    expect(parseClientReview({ clientId, sections: ["basic"], note: " City is wrong " })).toMatchObject({
+    expect(parseClientReview({ clientId, sections: ["details"], note: " City is wrong " })).toMatchObject({
       ok: true,
       value: { sections: ["basic"], note: "City is wrong" },
     });
-    expect(parseClientReview({ clientId, sections: ["address"], note: "" })).toMatchObject({ ok: true, value: { note: "" } });
   });
 
-  it("rejects a section that is not part of the review", () => {
-    expect(parseClientReview({ clientId, sections: ["notes"], note: "" }).ok).toBe(false);
+  it("stores the three steps under names save_client_review accepts — never `agreement`", () => {
+    const parsed = parseClientReview({ clientId, sections: ["details", "agreement", "payment", "agreement"], note: "" });
+    expect(parsed).toEqual({ ok: true, value: { clientId, sections: ["basic", "consent", "payment"], note: "" } });
+    expect(parsed.ok && parsed.value.sections).not.toContain("agreement");
+  });
+
+  it("rejects anything but the three steps, the old section names included", () => {
+    for (const section of ["notes", "basic", "address", "consent", "package"]) {
+      expect(parseClientReview({ clientId, sections: [section], note: "" }).ok).toBe(false);
+    }
   });
 });
 
@@ -180,7 +187,7 @@ describe("parsePaymentReceived", () => {
 
   it("turns the amount and fee into cents and trims the reference", () => {
     expect(parsePaymentReceived(base, today)).toEqual({ ok: true, value: { clientId, amount: 85500, fee: 0, paidOn: "2026-10-20", reference: "TRX-1" } });
-    expect(parsePaymentReceived({ ...base, fee: "15.5", reference: "" }, today)).toMatchObject({ ok: true, value: { fee: 1550, reference: null } });
+    expect(parsePaymentReceived({ ...base, fee: "15.5" }, today)).toMatchObject({ ok: true, value: { fee: 1550 } });
     expect(parsePaymentReceived({ ...base, amount: "0.1" }, today)).toMatchObject({ ok: true, value: { amount: 10 } });
   });
 
@@ -190,6 +197,29 @@ describe("parsePaymentReceived", () => {
     expect(parsePaymentReceived({ ...base, amount: "12.345" }, today)).toMatchObject({ fieldErrors: { amount: expect.any(String) } });
     expect(parsePaymentReceived({ ...base, amount: "10", fee: "10.01" }, today)).toMatchObject({ fieldErrors: { fee: "The fee can't be more than the amount." } });
     expect(parsePaymentReceived({ ...base, fee: "-1" }, today)).toMatchObject({ fieldErrors: { fee: expect.any(String) } });
+  });
+
+  it("requires the reference", () => {
+    const noReference = { clientId, amount: base.amount, fee: base.fee, paidOn: base.paidOn };
+    for (const input of [noReference, { ...base, reference: "" }, { ...base, reference: "   " }]) {
+      expect(parsePaymentReceived(input, today)).toMatchObject({ ok: false, fieldErrors: { reference: "Enter the payment reference." } });
+    }
+  });
+
+  it("normalises the reference: NFKC, no invisible or control characters, trimmed", () => {
+    const reference = (value: string) => {
+      const parsed = parsePaymentReceived({ ...base, reference: value }, today);
+      return parsed.ok ? parsed.value.reference : parsed;
+    };
+    expect(reference("\u00a0TRX\u00a077\u200b-A\u200d ")).toBe("TRX 77-A"); // no-break spaces, zero-width space and joiner
+    expect(reference("\uff34\uff32\uff38\uff11")).toBe("TRX1"); // full-width letters and digit
+    expect(reference("TRX\u202e1\u0007")).toBe("TRX1"); // a direction override and a control character
+    // Dash look-alikes: hyphen, non-breaking hyphen, figure, en and em dashes, horizontal bar, minus, small and
+    // full-width hyphen-minus all become "-".
+    for (const dash of ["\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212", "\ufe58", "\ufe63", "\uff0d"]) {
+      expect(reference(`TRX${dash}77`)).toBe("TRX-77");
+    }
+    expect(reference("\u200b\u2060\ufeff\u00ad")).toMatchObject({ ok: false, fieldErrors: { reference: "Enter the payment reference." } });
   });
 
   it("refuses a future date, a long reference and a tampered form", () => {

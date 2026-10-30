@@ -107,3 +107,19 @@ export function renderAgreement(version: AgreementVersion, terms: AgreementTerms
   const sections = template.sections.map((section, index) => [`${index + 1}. ${section.heading}`, ...section.paragraphs.map(fill)].join("\n"));
   return [template.title, ...sections].join("\n\n").normalize("NFC");
 }
+
+/** Where a packet in review stands on the agreement, by the rule approve_client_payment applies (IVA43). */
+export type AgreementReviewState = "current" | "stale" | "legacy" | "missing";
+
+/**
+ * `current`: the packet's acceptance covers the client's terms now. `stale`: it was accepted, but the company,
+ * country or package has changed since. `legacy`: signed with the earlier consent form and never accepted since (the
+ * earlier consent counts only while there's no acceptance). `missing`: neither. Only `current` and `legacy` approve.
+ */
+/** Only an acceptance of the current terms, or the earlier consent with no acceptance since, can be approved. */
+export const agreementApprovable = (state: AgreementReviewState | null | undefined) => state === "current" || state === "legacy";
+
+export function agreementReviewState(input: { legacyConsent: boolean; acceptedTerms: AgreementTerms | null; currentTerms: AgreementTerms }): AgreementReviewState {
+  if (input.acceptedTerms) return sameAgreementTerms(input.acceptedTerms, input.currentTerms) ? "current" : "stale";
+  return input.legacyConsent ? "legacy" : "missing";
+}

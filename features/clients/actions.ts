@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { closerClientHref } from "@/content/routes";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
-import { formEntries, toSubmitResult } from "@/lib/validation";
+import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, PaymentReceivedField, VaMessageField } from "./contract";
 import { acceptClientAttachment } from "./attachment";
@@ -153,7 +153,21 @@ export async function generateOnboardingLink(formData: FormData): Promise<Submit
   return { ok: true };
 }
 
-/** Accepts the registration and records the payment received (the proof is in the packet). */
+const APPROVAL_REFUSED = {
+  not_allowed: { message: "Only an admin of this agency can confirm registrations." },
+  invalid: { message: "That amount, fee or date can't be recorded. Check them and try again." },
+  reference_used: { field: "This reference is already recorded for another payment." },
+  reference_missing: { field: "Enter the payment reference." },
+  agreement_missing: { message: "The client must accept the current agreement before you approve. Send the Agreement back to them." },
+} as const;
+
+const INVITE_NOT_SENT = "Payment verified, but the invite wasn't sent. Use Send activation to try again.";
+
+/**
+ * "Approve and send invite": approves the packet and records the payment (one database transaction), then sends the
+ * password invite. The actor is the signed-in admin, never a form field. If the invite fails the client stays
+ * approved: the profile shows Send activation, and this returns a message saying so.
+ */
 export async function confirmClientRegistration(formData: FormData): Promise<SubmitResult<PaymentReceivedField>> {
   const user = await requireRole(["admin"]);
   const parsed = parsePaymentReceived(formEntries(formData));
@@ -162,13 +176,9 @@ export async function confirmClientRegistration(formData: FormData): Promise<Sub
   try {
     const result = await confirmClientReviewPaid(parsed.value, user.id);
     if (!result.ok) {
-      const message =
-        result.reason === "not_allowed"
-          ? "Only an admin of this agency can confirm registrations."
-          : result.reason === "invalid"
-            ? "That amount, fee or date can't be recorded. Check them and try again."
-            : "This registration is not in review. Refresh the page.";
-      return { ok: false, message };
+      const refused = Object.hasOwn(APPROVAL_REFUSED, result.reason) ? APPROVAL_REFUSED[result.reason as keyof typeof APPROVAL_REFUSED] : null;
+      if (refused && "field" in refused) return { ok: false, message: FIELD_ERRORS, fieldErrors: { reference: refused.field } };
+      return { ok: false, message: refused?.message ?? "This registration is not in review. Refresh the page." };
     }
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
@@ -176,8 +186,16 @@ export async function confirmClientRegistration(formData: FormData): Promise<Sub
     return { ok: false, message: "We couldn't confirm this registration just now. Please try again in a moment." };
   }
 
+  let invited = false;
+  try {
+    invited = (await sendActivation(parsed.value.clientId, user.id, await registrationOrigin())).ok;
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Client invite after approval failed", { service: error.service, error: error.message });
+  }
+
   refresh();
-  return { ok: true };
+  return invited ? { ok: true } : { ok: false, message: INVITE_NOT_SENT };
 }
 
 /** Sends the registration back to the sections that need a change. */

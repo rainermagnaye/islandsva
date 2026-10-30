@@ -10,24 +10,41 @@ import { PAYMENT_RECEIVED_LIMITS, type PaymentReceivedField } from "../contract"
 const today = () => new Date().toISOString().slice(0, 10);
 
 /**
- * Confirming a registration records the payment the client's proof shows: the amount received, any bank or
- * transfer fee, the date it arrived and a reference. The sales summary totals these. The amount starts at the
- * client's agreed monthly price.
+ * Approving a registration records the payment the client's proof shows (the amount received, any bank or transfer
+ * fee, the date it arrived and its reference), then sends the password invite. The sales summary totals these. The
+ * amount starts at the client's agreed monthly price. The checklist (server-rendered) must be fully ticked: until the
+ * form is valid the button looks disabled (CSS only) and the browser won't submit it. `approvable` is false while the
+ * agreement doesn't cover the current terms; the database refuses then anyway.
  */
-export function ConfirmPaymentForm({ clientId, monthlyCents, onDone, secondary }: { clientId: string; monthlyCents: number | null; onDone: () => void; secondary: ReactNode }) {
+export function ConfirmPaymentForm({
+  clientId,
+  monthlyCents,
+  checklist,
+  approvable,
+  onDone,
+  secondary,
+}: {
+  clientId: string;
+  monthlyCents: number | null;
+  checklist: ReactNode;
+  approvable: boolean;
+  onDone: () => void;
+  secondary: ReactNode;
+}) {
   return (
     <Form<PaymentReceivedField>
-      aria-label="Confirm registration and record the payment"
+      aria-label="Approve the registration and record the payment"
       onSubmit={async (formData) => {
         const result = await confirmClientRegistration(formData);
         if (result.ok) onDone();
         return result;
       }}
-      className="gap-4 border-t border-border pt-4"
+      className="group gap-4 border-t border-border pt-4"
     >
       {({ pending, fieldErrors }) => (
         <>
           <input type="hidden" name="clientId" value={clientId} />
+          {checklist}
           <div className="grid gap-3 sm:grid-cols-2">
             <TextField
               compact
@@ -40,12 +57,17 @@ export function ConfirmPaymentForm({ clientId, monthlyCents, onDone, secondary }
             />
             <TextField compact label="Fee (USD)" name="fee" inputMode="decimal" optional hint="Bank or transfer fee taken out." error={fieldErrors.fee} />
             <TextField compact label="Date received" name="paidOn" type="date" required max={today()} defaultValue={today()} error={fieldErrors.paidOn} />
-            <TextField compact label="Reference" name="reference" optional maxLength={PAYMENT_RECEIVED_LIMITS.reference} hint="Bank or transfer reference." error={fieldErrors.reference} />
+            <TextField compact label="Reference" name="reference" required maxLength={PAYMENT_RECEIVED_LIMITS.reference} hint="Bank or transfer reference." error={fieldErrors.reference} />
           </div>
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             {secondary}
-            <Button type="submit" loading={pending}>
-              {pending ? "Saving" : "Confirm and record payment"}
+            <Button
+              type="submit"
+              loading={pending}
+              disabled={!approvable}
+              className="group-invalid:border-transparent group-invalid:bg-disabled-fill group-invalid:text-disabled-ink"
+            >
+              {pending ? "Approving" : "Approve and send invite"}
             </Button>
           </div>
         </>

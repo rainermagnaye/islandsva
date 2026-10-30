@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Enums } from "@/types/database";
 
 // Shared by the admin pages and the server. No Zod: components import this file.
@@ -251,6 +252,9 @@ export type PublicOnboarding = {
   reviewIssues: ClientReviewSection[];
   reviewNote: string | null;
 };
+
+/** The admin review's server-rendered parts: the agreement evidence, the payment checklist, and whether approval is open. */
+export type ClientReviewParts = { evidence: ReactNode; record: ReactNode; checklist: ReactNode; approvable: boolean };
 
 /** The link and the files already on the packet, for the admin profile. */
 export type ClientPacketSummary = {

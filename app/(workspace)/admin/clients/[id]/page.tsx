@@ -5,6 +5,8 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { appRoutes } from "@/content/routes";
 import { clientProfileTab } from "@/features/clients/contract";
+import { agreementApprovable } from "@/features/clients/agreement";
+import { AgreementEvidence, PaymentChecklist } from "@/features/clients/components/agreement-evidence";
 import { ClientProfile } from "@/features/clients/components/client-profile";
 import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
 import { getClient } from "@/features/clients/dal";
@@ -12,6 +14,7 @@ import { listClientNotes } from "@/features/clients/notes-dal";
 import { listActiveAssignments } from "@/features/clients/assignment-dal";
 import { listShortlist } from "@/features/matching/dal";
 import { getClientPacket } from "@/features/clients/onboarding-dal";
+import { agreementReviewFor } from "@/features/clients/service";
 import { listAssignableVas } from "@/features/users/service";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
@@ -33,8 +36,15 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
   // Independent reads, in parallel; each runs as the signed-in admin, so RLS applies too.
   const [client, notes, assignments, offers, vas] = await Promise.all([getClient(id), listClientNotes(id), listActiveAssignments(id), listShortlist(id), listAssignableVas()]);
   if (!client) notFound();
-  // The packet table is server-only. Read it only after this admin can see the client.
-  const stored = await getClientPacket(id);
+  // The packet and agreement tables are server-only. Read them only after this admin can see the client;
+  // agreementReviewFor checks the admin role again itself.
+  const [stored, agreement] = await Promise.all([getClientPacket(id), agreementReviewFor(id)]);
+  const review = {
+    evidence: <AgreementEvidence review={agreement} forApproval />,
+    record: <AgreementEvidence review={agreement} forApproval={false} />,
+    checklist: <PaymentChecklist />,
+    approvable: agreementApprovable(agreement?.state),
+  };
   const packet = {
     url: stored?.token ? onboardingUrl(stored.token, await registrationOrigin()) : null,
     consentName: stored?.consentName ?? null,
@@ -58,7 +68,7 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
         />
       }
     >
-      <ClientProfile client={client} notes={notes} packet={packet} assignments={assignments} offers={offers} vas={vas} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
+      <ClientProfile client={client} notes={notes} packet={packet} review={review} assignments={assignments} offers={offers} vas={vas} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
     </Workspace>
   );
 }

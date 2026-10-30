@@ -152,13 +152,23 @@ export function saveClientReview(clientId: string, issues: string[], note: strin
   );
 }
 
+/** approve_client_payment's refusals beyond the packet's own (IVA06, IVA08, IVA09). */
+const APPROVAL_REFUSALS = {
+  IVA14: "not_allowed",
+  IVA21: "invalid",
+  IVA41: "reference_used",
+  IVA42: "reference_missing",
+  IVA43: "agreement_missing",
+} as const;
+
 /**
- * Accepts a clear packet and records the payment received, in one transaction (accept_client_review_paid), so a
- * packet is never approved without its payment. Secret key: the function is server-only and checks the actor is an
- * admin of the client's agency; the caller has already checked the session and read the client under RLS.
+ * Approves a packet in review and records the payment received, in one transaction (approve_client_payment): a
+ * unique bank reference, and an acceptance of the client's current terms (or the earlier consent) are required.
+ * Secret key: the function is server-only and checks the actor is an admin of the client's agency itself; the caller
+ * has already checked the session and read the client under RLS, and passes the signed-in admin as the actor.
  */
-export async function acceptClientReviewPaid(input: { clientId: string; actor: string; amountCents: number; feeCents: number; paidOn: string; reference: string | null }) {
-  const { error } = await createAdminClient().rpc("accept_client_review_paid", {
+export async function approveClientPayment(input: { clientId: string; actor: string; amountCents: number; feeCents: number; paidOn: string; reference: string }) {
+  const { error } = await createAdminClient().rpc("approve_client_payment", {
     client_id: input.clientId,
     actor: input.actor,
     amount_cents: input.amountCents,
@@ -167,11 +177,11 @@ export async function acceptClientReviewPaid(input: { clientId: string; actor: s
     reference: input.reference,
   });
   if (!error) return { ok: true as const };
-  if (error.code === "IVA14") return { ok: false as const, reason: "not_allowed" as const };
-  if (error.code === "IVA21") return { ok: false as const, reason: "invalid" as const };
-  const refusal = packetRefusal(error.code ?? "");
+  const code = error.code ?? "";
+  if (Object.hasOwn(APPROVAL_REFUSALS, code)) return { ok: false as const, reason: APPROVAL_REFUSALS[code as keyof typeof APPROVAL_REFUSALS] };
+  const refusal = packetRefusal(code);
   if (refusal) return { ok: false as const, reason: refusal };
-  throw new UpstreamError("supabase", `Confirming the registration for ${input.clientId} failed (${error.code})`);
+  throw new UpstreamError("supabase", `Approving the payment for ${input.clientId} failed (${error.code})`);
 }
 
 /** Links the new login after the invite email. Same access rule as saveClientReview. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openRegistrationSteps, registrationIssues, registrationView } from "./registration";
+import { REGISTRATION_STEPS, REVIEW_SECTION_FOR_STEP, openRegistrationSteps, registrationIssues, registrationView, reviewIssueLabels, reviewIssueSteps } from "./registration";
 
 const complete = {
   companyName: "Acme",
@@ -90,5 +90,23 @@ describe("registrationView", () => {
 
   it("with the customer but nothing open, says it's on its way without showing data", () => {
     expect(view("pending", "pending_customer", 0)).toBe("processing");
+  });
+});
+
+describe("review sections: the admin's three steps and what is stored", () => {
+  it("stores each step under a name save_client_review accepts, never `agreement`", () => {
+    expect(REVIEW_SECTION_FOR_STEP).toEqual({ details: "basic", agreement: "consent", payment: "payment" });
+    expect(Object.values(REVIEW_SECTION_FOR_STEP)).not.toContain("agreement");
+  });
+
+  it("reads every stored name back as its step, so the round trip is the identity", () => {
+    for (const step of REGISTRATION_STEPS) expect(reviewIssueSteps([REVIEW_SECTION_FOR_STEP[step]])).toEqual([step]);
+    expect(reviewIssueSteps(["address", "contacts", "package", "agreement"])).toEqual(["details", "agreement"]);
+  });
+
+  it("labels stored sections, old names included, under the new step names, once each and in order", () => {
+    expect(reviewIssueLabels(["payment", "consent", "basic"])).toEqual(["Details", "Agreement", "Payment proof"]);
+    expect(reviewIssueLabels(["address", "contacts", "package"])).toEqual(["Details", "Agreement"]);
+    expect(reviewIssueLabels(["unknown"])).toEqual([]);
   });
 });

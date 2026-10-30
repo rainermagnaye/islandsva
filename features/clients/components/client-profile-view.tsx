@@ -105,19 +105,6 @@ export function ClientProfileView({ client }: { client: ClientDetail }) {
   );
 }
 
-const signed = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
-
-/** The consent signed on the registration link. */
-export function ClientConsents({ consent }: { consent: { name: string; signedAt: string | null } | null }) {
-  if (!consent) return <EmptyState compact title="No consents yet" description="A signed consent appears here once the customer submits their registration." />;
-  return (
-    <Card as="section" padding="md" className="grid gap-2">
-      <h2 className="m-0 type-label">Registration consent</h2>
-      <p className="m-0 type-body-sm">Signed by {consent.name}{consent.signedAt ? ` on ${signed.format(new Date(consent.signedAt))}` : ""}.</p>
-    </Card>
-  );
-}
-
 /** Payment proof uploaded with the registration. Invoices themselves come later. */
 export function ClientInvoices({
   clientId,

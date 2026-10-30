@@ -15,7 +15,7 @@ const APP_DIR = ".next/server/app";
 const OVER_BUDGET_CAPS_KB = {
   "/admin/demos": 176.8,
   "/admin/leads/[id]": 176.3,
-  "/admin/clients/[id]": 172.5,
+  "/admin/clients/[id]": 170.2,
   "/va/calendar": 169.0,
   "/client/calendar": 168.0,
   "/admin/users/[id]": 167.1,

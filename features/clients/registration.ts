@@ -11,15 +11,6 @@ export const CLIENT_REGISTRATION_STEPS = [
   { id: "completed", label: "Completed" },
 ] as const;
 
-export const CLIENT_REVIEW_SECTION_LABELS: Record<ClientReviewSection, string> = {
-  basic: "Basic info",
-  address: "Address",
-  contacts: "Contacts",
-  package: "Package",
-  consent: "Consent",
-  payment: "Payment",
-};
-
 export const CLIENT_REVIEW_NOTE_LIMIT = 500;
 
 /** A text array, or the `{basic,address}` text Postgres can return for one. */
@@ -54,9 +45,25 @@ export const registrationIssues = (value: unknown) => textItems(value).filter((i
 
 export const REGISTRATION_STEP_LABELS: Record<RegistrationStep, string> = { details: "Details", agreement: "Agreement", payment: "Payment proof" };
 
+/**
+ * The admin's send-back, by step, and the review section each is stored under. The live save_client_review accepts
+ * only the original section names, so Agreement is stored as `consent`, which every reader (the database's
+ * packet_open_sections and this file) maps back to the agreement step. A later contract migration may store it as
+ * `agreement` instead.
+ */
+export const REVIEW_SECTION_FOR_STEP = { details: "basic", agreement: "consent", payment: "payment" } as const satisfies Record<RegistrationStep, ClientReviewSection>;
+
+/** The steps behind stored review sections (old names included), once each, in step order. */
+export function reviewIssueSteps(issues: readonly string[]): RegistrationStep[] {
+  return REGISTRATION_STEPS.filter((step) => issues.some((issue) => Object.hasOwn(STEP_OF_SECTION, issue) && STEP_OF_SECTION[issue] === step));
+}
+
+/** Stored review sections as the labels every admin screen shows: Details, Agreement, Payment proof. */
+export const reviewIssueLabels = (issues: readonly string[]) => reviewIssueSteps(issues).map((step) => REGISTRATION_STEP_LABELS[step]);
+
 /** What the customer sees after a return: the steps sent back, in order, then the team's note. */
 export function stepRevisionMessage(issues: readonly string[], note: string | null) {
-  const steps = REGISTRATION_STEPS.filter((step) => issues.some((issue) => Object.hasOwn(STEP_OF_SECTION, issue) && STEP_OF_SECTION[issue] === step));
+  const steps = reviewIssueSteps(issues);
   const names = steps.map((step) => REGISTRATION_STEP_LABELS[step].toLowerCase());
   const list = names.length === 0 ? "" : names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
   return [list ? `Please update your ${list}.` : "", note?.trim() ?? ""].filter(Boolean).join(" ");

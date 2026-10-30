@@ -3,8 +3,8 @@ import { z } from "zod";
 import { packages } from "@/content/packages";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong, utcDay } from "@/lib/validation";
 import { PACKAGE_TIMEZONES } from "@/features/leads/contract";
-import { CLIENT_REVIEW_SECTIONS, NEW_CLIENT_LIMITS, PAYMENT_RECEIVED_LIMITS, type NewClientField, type PaymentReceivedField } from "./contract";
-import { CLIENT_REVIEW_NOTE_LIMIT } from "./registration";
+import { NEW_CLIENT_LIMITS, PAYMENT_RECEIVED_LIMITS, type NewClientField, type PaymentReceivedField } from "./contract";
+import { CLIENT_REVIEW_NOTE_LIMIT, REGISTRATION_STEPS, REVIEW_SECTION_FOR_STEP } from "./registration";
 import { optionalLine } from "./validation";
 
 // A client a Closer adds by hand, an admin's review of a registration packet, and the payment recorded when
@@ -73,7 +73,11 @@ export function parseNewClient(input: unknown, now = new Date()) {
 
 const reviewSchema = z.strictObject({
   clientId: z.uuid({ error: FORM_ERROR }),
-  sections: z.array(z.enum(CLIENT_REVIEW_SECTIONS)).min(1, "Choose a section to send back."),
+  // The form sends steps (details, agreement, payment); they're stored as the section names the database accepts.
+  sections: z
+    .array(z.enum(REGISTRATION_STEPS))
+    .min(1, "Choose a section to send back.")
+    .transform((steps) => [...new Set(steps.map((step) => REVIEW_SECTION_FOR_STEP[step]))]),
   note: z
     .string()
     .trim()
@@ -83,7 +87,7 @@ const reviewSchema = z.strictObject({
 
 export type ClientReviewInput = z.output<typeof reviewSchema>;
 
-/** Sections to send back. At least one is required; the note is optional. */
+/** Steps to send back, as stored review sections (never `agreement`: see REVIEW_SECTION_FOR_STEP). The note is optional. */
 export const parseClientReview = (input: unknown) => parseWith(reviewSchema, input, ["note", "sections"] as const);
 
 const MONEY = /^\d{1,7}(\.\d{1,2})?$/;
@@ -92,10 +96,22 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 const cents = (value: string) => Math.round(Number(value) * 100);
 
+const REFERENCE_REQUIRED = "Enter the payment reference.";
+
+/** Dash look-alikes NFKC leaves alone (hyphen, non-breaking hyphen, figure and en/em dashes, minus, small and full-width hyphen-minus). */
+const DASHES = /[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g;
+
+/**
+ * A bank reference as it's compared for duplicates: NFKC (full-width and look-alike forms become plain ones, a
+ * no-break space a space), format characters (zero-width and direction marks) and control characters removed, every
+ * dash look-alike made "-", then trimmed. The database compares it with all whitespace removed and case ignored.
+ */
+export const normaliseReference = (value: string) => value.normalize("NFKC").replace(/[\p{Cf}\p{Cc}]/gu, "").replace(DASHES, "-").trim();
+
 /**
  * "Confirm registration": the payment received, which the sales summary totals. Amount and fee are USD with up to
  * two decimals; the fee (bank or transfer) defaults to 0 and can't exceed the amount; the date is today or earlier
- * (UTC, as the database checks). `today` is a parameter so the rule is testable.
+ * (UTC, as the database checks); the reference is required and normalised (normaliseReference). `today` is a parameter so the rule is testable.
  */
 export function parsePaymentReceived(input: unknown, today = new Date().toISOString().slice(0, 10)) {
   const schema = z
@@ -114,12 +130,9 @@ export function parsePaymentReceived(input: unknown, today = new Date().toISOStr
         .regex(ISO_DAY, "Enter the date the payment arrived.")
         .refine((day) => !Number.isNaN(Date.parse(`${day}T00:00:00Z`)) && day <= today, "The date can't be in the future."),
       reference: z
-        .string()
-        .trim()
-        .max(PAYMENT_RECEIVED_LIMITS.reference, tooLong("the reference", PAYMENT_RECEIVED_LIMITS.reference))
-        .regex(NO_CONTROL_CHARS, "Remove any unusual characters from the reference.")
-        .optional()
-        .transform((value) => value || null),
+        .string({ error: REFERENCE_REQUIRED })
+        .transform(normaliseReference)
+        .pipe(z.string().min(1, REFERENCE_REQUIRED).max(PAYMENT_RECEIVED_LIMITS.reference, tooLong("the reference", PAYMENT_RECEIVED_LIMITS.reference))),
     })
     .superRefine((value, ctx) => {
       if (value.amount < 1 || value.amount > PAYMENT_RECEIVED_LIMITS.maxAmountCents) ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter an amount above 0." });
