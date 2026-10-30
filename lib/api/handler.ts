@@ -2,6 +2,7 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import { site } from "@/content/site";
 import { UpstreamError } from "@/lib/upstream-error";
+import { clientIp } from "./client-ip";
 import { ApiError } from "./errors";
 import { fail } from "./response";
 
@@ -23,11 +24,6 @@ type ReadOptions = {
 
 function allowedOrigins(req: NextRequest) {
   return new Set([req.nextUrl.origin, new URL(site.url).origin]);
-}
-
-/** Client IP as reported by the platform proxy (Vercel sets x-forwarded-for). */
-function clientIp(req: NextRequest) {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || null;
 }
 
 function isPrerenderInterrupt(error: unknown): boolean {
@@ -91,7 +87,7 @@ export function createHandler(options: HandlerOptions, handler: (ctx: HandlerCon
       } catch {
         throw new ApiError(400, "malformed_json", "The request couldn't be read.");
       }
-      return await handler({ req, body, ip: clientIp(req) });
+      return await handler({ req, body, ip: clientIp(req.headers) });
     } catch (error) {
       return respondTo(error, req, options.unavailableMessage);
     }
@@ -105,7 +101,7 @@ export function createGetHandler(options: ReadOptions, handler: (ctx: ReadContex
   return async function route(req: NextRequest) {
     try {
       samePageRead(req);
-      return await handler({ req, ip: clientIp(req) });
+      return await handler({ req, ip: clientIp(req.headers) });
     } catch (error) {
       return respondTo(error, req, options.unavailableMessage);
     }

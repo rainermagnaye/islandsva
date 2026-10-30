@@ -15,6 +15,7 @@ import {
   type OnboardingField,
   type VaMessageField,
 } from "./contract";
+import { TOKEN_SHAPE } from "./token";
 
 const CLIENT_LIMITS = { companyName: 160, contactName: 120, contactPhone: 40 } as const;
 
@@ -126,27 +127,35 @@ const requiredLine = (limit: number, name: string, empty: string) =>
     .max(limit, tooLong(name, limit))
     .regex(NO_CONTROL_CHARS, tooLong(name, limit));
 
+/** The registration link's token: a bad one is a tampered form, never a field to fix. */
+export const registrationToken = z.string().regex(TOKEN_SHAPE, FORM_ERROR);
+
+/** The company details the registration link asks for (the old one-page form and the new details step). */
+export const registrationDetailsShape = {
+  token: registrationToken,
+  companyName: requiredLine(CLIENT_LIMITS.companyName, "the company name", "Enter the company name."),
+  contactName: requiredLine(CLIENT_LIMITS.contactName, "the name", "Enter the contact's name."),
+  contactPhone: optionalLine(CLIENT_LIMITS.contactPhone, "the phone number"),
+  industry: requiredChoice(INDUSTRIES, "Choose an industry."),
+  country: requiredChoice(COUNTRIES, "Choose a country."),
+  website: optionalLine(CLIENT_BUSINESS_LIMITS.website, "the website"),
+  jobTitle: optionalLine(CLIENT_BUSINESS_LIMITS.jobTitle, "the job title"),
+  street: optionalLine(CLIENT_BUSINESS_LIMITS.street, "the street"),
+  city: requiredLine(CLIENT_BUSINESS_LIMITS.city, "the city", "Enter the city."),
+  state: optionalLine(CLIENT_BUSINESS_LIMITS.state, "the state"),
+  zip: optionalLine(CLIENT_BUSINESS_LIMITS.zip, "the zip code"),
+  staffCount: choice(STAFF_COUNTS, "Choose a team size."),
+  about: z
+    .string({ error: "Describe the business." })
+    .trim()
+    .min(1, "Describe the business.")
+    .max(CLIENT_BUSINESS_LIMITS.about, tooLong("the description", CLIENT_BUSINESS_LIMITS.about))
+    .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the description", CLIENT_BUSINESS_LIMITS.about)),
+};
+
 const packetSchema = z
   .strictObject({
-    token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, FORM_ERROR),
-    companyName: requiredLine(CLIENT_LIMITS.companyName, "the company name", "Enter the company name."),
-    contactName: requiredLine(CLIENT_LIMITS.contactName, "the name", "Enter the contact's name."),
-    contactPhone: optionalLine(CLIENT_LIMITS.contactPhone, "the phone number"),
-    industry: requiredChoice(INDUSTRIES, "Choose an industry."),
-    country: requiredChoice(COUNTRIES, "Choose a country."),
-    website: optionalLine(CLIENT_BUSINESS_LIMITS.website, "the website"),
-    jobTitle: optionalLine(CLIENT_BUSINESS_LIMITS.jobTitle, "the job title"),
-    street: optionalLine(CLIENT_BUSINESS_LIMITS.street, "the street"),
-    city: requiredLine(CLIENT_BUSINESS_LIMITS.city, "the city", "Enter the city."),
-    state: optionalLine(CLIENT_BUSINESS_LIMITS.state, "the state"),
-    zip: optionalLine(CLIENT_BUSINESS_LIMITS.zip, "the zip code"),
-    staffCount: choice(STAFF_COUNTS, "Choose a team size."),
-    about: z
-      .string({ error: "Describe the business." })
-      .trim()
-      .min(1, "Describe the business.")
-      .max(CLIENT_BUSINESS_LIMITS.about, tooLong("the description", CLIENT_BUSINESS_LIMITS.about))
-      .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the description", CLIENT_BUSINESS_LIMITS.about)),
+    ...registrationDetailsShape,
     signature: requiredLine(CLIENT_LIMITS.contactName, "the signature", "Type your name to sign."),
     consent: z.literal("yes", { error: "Confirm the consent to continue." }),
   })

@@ -8,6 +8,9 @@ export function createOnboardingToken() {
   return randomBytes(TOKEN_BYTES).toString("base64url");
 }
 
+/** A well-formed registration token. Checked before any lookup, so a malformed one never reaches the database. */
+export const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
 /** SHA-256 hex. The public page looks the packet up by this, not by the token. */
 export function onboardingTokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
