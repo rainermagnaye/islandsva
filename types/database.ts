@@ -184,8 +184,6 @@ type TaskRow = {
   va_first_name: string;
   description: string | null;
   severity: "low" | "medium" | "high";
-  /** 5–600. Defaults from the severity when an insert leaves it out. */
-  duration_minutes: number;
   status: Enum<"task_status">;
   done_at: string | null;
   started_at: string | null;
@@ -206,17 +204,6 @@ type TaskEventRow = {
   note: string | null;
   actor_id: string | null;
   actor_first_name: string | null;
-  tenant_id: string;
-  created_at: string;
-};
-
-/** The VA's time on a task. Written only by start_task_timer, pause_task_timer and guard_task; signed-in users read it. */
-type TaskWorkSessionRow = {
-  id: string;
-  task_id: string;
-  va_id: string;
-  started_at: string;
-  ended_at: string | null;
   tenant_id: string;
   created_at: string;
 };
@@ -562,12 +549,6 @@ export type Database = {
         Update: Optional<TaskEventRow>;
         Relationships: [];
       };
-      task_work_sessions: {
-        Row: TaskWorkSessionRow;
-        Insert: never;
-        Update: never;
-        Relationships: [];
-      };
       calendar_blocks: {
         Row: CalendarBlockRow;
         Insert: { task_id?: string | null; title?: string | null; starts_at: string; ends_at: string };
@@ -797,8 +778,6 @@ export type Database = {
       };
       cancel_va_meeting: { Args: { meeting_id: string }; Returns: undefined };
       answer_va_meeting: { Args: { meeting_id: string; accept: boolean }; Returns: undefined };
-      start_task_timer: { Args: { task_id: string }; Returns: string };
-      pause_task_timer: { Args: { task_id: string }; Returns: string };
       add_client_meeting_note: {
         Args: { meeting_id: string; note: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };
         Returns: string;

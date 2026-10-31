@@ -18,7 +18,7 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | client_agreements | Agreement acceptance evidence: version, text shown, terms snapshot (from the client row), typed name, contact email on file, hashed IP, time. Append-only, server-only | Built: schema (slice 1a) and the registration link's agreement step (slice 2b); admin evidence view in slice 3 |
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined). Accept creates the assignment | Built (M10) |
 | client_va_assignments | Client ↔ VA, several active VAs, one active row per pair | Built |
-| tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments). The task timer (`task_work_sessions`, `start_task_timer` / `pause_task_timer`, `tasks.duration_minutes`, migration pending) is removed in M14 by a new migration |
+| tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments). The task timer and duration are gone from the app; `20261031142855_remove_task_timer` (pending) drops them from the database |
 | work_sessions | One stretch of a VA's work for one client: VA, client, start, end (null while running), closed at midnight (flag), corrected by | New (M14) |
 | timesheet_days | One VA × client × Manila day once the month is over: status (pending, approved, disputed), client's note, decided by, decided at; an admin's resolution | New (M14) |
 | audit_log | Append-only who-did-what: actor (user or system; Google sync in M9), action, record type + id, owning Lead Gen / client, changed fields (values only for safe columns), at | Built (M8; rules in `supabase/CLAUDE.md`) |
