@@ -2925,12 +2925,12 @@ describe("discovery calls", () => {
       await expect(asUser(asAdmin, "delete from public.leads where id = $1", [lead])).rejects.toMatchObject({ code: "IVA05" });
     });
 
-    it("organizers and deciders must be an admin or a Lead Gen; a timeline remark may come from a Lead Gen, not a VA", async () => {
+    it("organizers and deciders must be an admin or a Lead Gen; a timeline remark may come from a Lead Gen or a VA", async () => {
       const [{ id, lead_id: lead }] = await asServer<{ id: string; lead_id: string }>(
         "select id, lead_id from public.meetings where status = 'requested' and starts_at > now() limit 1",
       );
       await expect(asServer("update public.meetings set status = 'scheduled', organizer_id = $1, decided_by = $1, decided_at = now() where id = $2", [VA, id])).rejects.toThrow(/closer or admin role/);
-      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2)", [id, VA])).rejects.toThrow(/closer or admin or client role/);
+      await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'note', $2) returning id", [id, VA])).resolves.toHaveLength(1);
       await expect(asServer("insert into public.meeting_events (meeting_id, kind) values ($1, 'note')", [id])).rejects.toThrow(/meeting_events_actor/);
       await expect(asServer("insert into public.meeting_events (meeting_id, kind, actor_id) values ($1, 'rejected', $2)", [id, LG_A])).rejects.toThrow(/meeting_events_body/);
       await expect(asServer("insert into public.lead_events (lead_id, author_id, kind, body) values ($1, $2, 'note', 'hi')", [lead, VA])).rejects.toThrow(/admin or closer role/);
@@ -3239,12 +3239,12 @@ describe("tasks", () => {
     }
   });
 
-  it("lets only the client insert, and only for their own company and active VA", async () => {
+  it("lets the client insert for their own company, and a VA for a client on their assignment", async () => {
     await expect(insertTask(asOwner, otherCo, WORKER2, OWNER)).rejects.toThrow(/row-level security/);
     await expect(insertTask(asOwner, harbor, WORKER2, OWNER)).rejects.toMatchObject({ code: "IVA24" });
-    await expect(insertTask(asWorker, harbor, WORKER, WORKER)).rejects.toThrow(/row-level security|permission denied|not an active user with the client role/);
-    await expect(insertTask(asCloser, harbor, WORKER, CLOSER)).rejects.toThrow(/row-level security|permission denied|not an active user with the client role/);
-    await expect(insertTask(asAdmin, harbor, WORKER, ADMIN)).rejects.toThrow(/row-level security|permission denied|not an active user with the client role/);
+    await expect(insertTask(asWorker, harbor, WORKER, WORKER)).resolves.toMatchObject([{ status: "todo", company_name: "Harbor Co" }]);
+    await expect(insertTask(asCloser, harbor, WORKER, CLOSER)).rejects.toThrow(/row-level security|permission denied|not an active user with the client(?: or va)? role/);
+    await expect(insertTask(asAdmin, harbor, WORKER, ADMIN)).rejects.toThrow(/row-level security|permission denied|not an active user with the client(?: or va)? role/);
     await expect(as("anon", {}, "select id from public.tasks")).rejects.toThrow(/permission denied/);
     await expect(asUser(asOwner, "select private.guard_task()")).rejects.toThrow(/permission denied/);
   });
@@ -4067,13 +4067,17 @@ describe("client meetings", () => {
     });
   });
 
-  it("still allows only admins and clients as a meeting's creator, and adds clients as history actors", async () => {
+  it("allows admins, clients and VAs as a meeting's creator; a Lead Gen still cannot", async () => {
     await rolledBack(async () => {
       await ready();
       await expect(db.query(
         "insert into public.meetings (kind, status, title, starts_at, ends_at, created_by, creator_name, tenant_id) select 'manual', 'scheduled', 'X', $1, $2, $3, 'Vera', tenant_id from public.profiles where id = $3",
         [start, end, VA],
-      )).rejects.toThrow(/is not an active user with the admin or client role/);
+      )).resolves.toMatchObject({ rowCount: 1 });
+      await expect(db.query(
+        "insert into public.meetings (kind, status, title, starts_at, ends_at, created_by, creator_name, tenant_id) select 'manual', 'scheduled', 'Y', $1, $2, $3, 'Pat', tenant_id from public.profiles where id = $3",
+        [start, end, CLOSER],
+      )).rejects.toThrow(/is not an active user with the admin or client or va role/);
     });
   });
 });
@@ -4610,6 +4614,114 @@ describe("audit log: tasks and VA match", () => {
       expect(await seen(asCloser)).toEqual(["client_va_assignments", "clients"]);
       expect(await seen(asAdmin)).toEqual(["client_va_assignments", "clients", "tasks", "va_shortlists"]);
       for (const claims of [asCloser2, asAc, asAv, token(ADMIN, ["admin"], "aal1")]) expect(await seen(claims)).toEqual([]);
+    });
+  });
+});
+
+describe("VA bookings", () => {
+  const ahead = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+  const start = ahead(48);
+  const end = ahead(49);
+  /** Inside rolledBack: Acme active with its login, VA open and actively assigned to it. */
+  const ready = async () => {
+    await db.query("update public.clients set status = 'active', activated_at = now(), disabled_at = null where id = $1", [clientA]);
+    await db.query(`update public.profiles set status = 'active' where id in ('${CLIENT}', '${VA}')`);
+    await db.query("update public.employee_profiles set review_status = 'approved' where user_id = $1", [VA]);
+    const [assigned] = (await db.query<{ n: number }>("select count(*)::int as n from public.client_va_assignments where client_id = $1 and va_id = $2 and status = 'active'", [clientA, VA])).rows;
+    expect(assigned.n).toBe(1);
+  };
+  /** Inside rolledBack: a refusal rolls back to a savepoint, so the transaction carries on. */
+  const call = async <T = Record<string, unknown>>(claims: Claims, sql: string, params: unknown[] = []) => {
+    await db.exec("savepoint call");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+      await db.exec("set local role authenticated");
+      const rows = (await db.query<T>(sql, params)).rows;
+      await db.exec("reset role");
+      await db.exec("release savepoint call");
+      return rows;
+    } catch (error) {
+      await db.exec("rollback to savepoint call");
+      await db.exec("reset role");
+      throw error;
+    }
+  };
+  const meet = (claims: Claims, client: string | null, staff: string[] = [], from = start, to = end) =>
+    call<{ id: string }>(claims, "select public.create_va_meeting('Inbox handover', $1, $2, $3, $4, 'Agenda') as id", [from, to, client, staff]);
+  const status = async (id: string) => (await asServer<{ status: string }>("select status::text as status from public.meetings where id = $1", [id]))[0].status;
+
+  it("a meeting with the VA's client waits for that client; a team meeting is booked right away", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const [request] = await meet(asVa, clientA);
+      expect(await asServer("select status::text as status, created_by, client_names, staff_ids from public.meetings where id = $1", [request.id]))
+        .toEqual([{ status: "requested", created_by: VA, client_names: ["Acme"], staff_ids: [VA] }]);
+      expect(await call(asClient, "select id from public.meetings where id = $1", [request.id])).toEqual([{ id: request.id }]);
+      const [team] = await meet(asVa, null, [ADMIN]);
+      expect(await status(team.id)).toBe("scheduled");
+      // Only the VA's own clients, ahead of now; only an open VA.
+      await expect(meet(asVa, clientB)).rejects.toMatchObject({ code: "IVA46" });
+      await expect(meet(asVa, clientA, [], ahead(-2), ahead(-1))).rejects.toMatchObject({ code: "IVA38" });
+      await expect(meet(asClient, null)).rejects.toMatchObject({ code: "42501" });
+      await expect(meet(asAdmin, null)).rejects.toMatchObject({ code: "42501" });
+      await expect(call(asVa, "update public.meetings set status = 'scheduled' where id = $1", [request.id])).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("only the client answers a request, once; the VA cancels only their own", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const [accepted] = await meet(asVa, clientA);
+      await expect(call(asVa, "select public.answer_va_meeting($1, true)", [accepted.id])).rejects.toMatchObject({ code: "42501" });
+      await call(asClient, "select public.answer_va_meeting($1, true)", [accepted.id]);
+      expect(await status(accepted.id)).toBe("scheduled");
+      await expect(call(asClient, "select public.answer_va_meeting($1, false)", [accepted.id])).rejects.toMatchObject({ code: "IVA01" });
+      const [declined] = await meet(asVa, clientA);
+      await call(asClient, "select public.answer_va_meeting($1, false)", [declined.id]);
+      expect(await status(declined.id)).toBe("cancelled");
+
+      const [mine] = await meet(asVa, null);
+      await expect(call(asVa2, "select public.cancel_va_meeting($1)", [mine.id])).rejects.toMatchObject({ code: expect.stringMatching(/^(IVA01|42501)$/) });
+      await call(asVa, "select public.cancel_va_meeting($1)", [mine.id]);
+      expect(await status(mine.id)).toBe("cancelled");
+      await expect(call(asVa, "select public.cancel_va_meeting($1)", [mine.id])).rejects.toMatchObject({ code: "IVA30" });
+    });
+  });
+
+  it("a VA adds a task for their own client, who still reviews and closes it", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const add = (client: string, va: string, by: string) =>
+        call<{ id: string }>(asVa, "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Newsletter', current_date + 3, $3) returning id", [client, va, by]);
+      const [task] = await add(clientA, VA, VA);
+      await expect(add(clientA, VA, CLIENT)).rejects.toThrow();
+      await expect(add(clientB, VA, VA)).rejects.toThrow();
+      await call(asVa, "update public.tasks set status = 'review' where id = $1", [task.id]);
+      // Creating the task doesn't make the VA its client.
+      await expect(call(asVa, "update public.tasks set status = 'done' where id = $1", [task.id])).rejects.toMatchObject({ code: "IVA25" });
+      await call(asClient, "update public.tasks set status = 'done' where id = $1", [task.id]);
+      expect(await asServer("select status::text as status, closed_by from public.tasks where id = $1", [task.id])).toEqual([{ status: "done", closed_by: CLIENT }]);
+    });
+  });
+
+  it("blocks are the VA's own: on their open task or a titled to-do, read and removed only by them", async () => {
+    await rolledBack(async () => {
+      await ready();
+      const [task] = await call<{ id: string }>(asVa, "insert into public.tasks (client_id, va_id, title, deadline, created_by) values ($1, $2, 'Recall list', current_date + 3, $2) returning id", [clientA, VA]);
+      const block = (claims: Claims, taskId: string | null, title: string | null) =>
+        call<{ id: string }>(claims, "insert into public.calendar_blocks (task_id, title, starts_at, ends_at) values ($1, $2, $3, $4) returning id", [taskId, title, start, end]);
+      const [todo] = await block(asVa, null, "Inbox zero");
+      await block(asVa, task.id, null);
+      expect(await asServer("select va_id, tenant_id is not null as tenant from public.calendar_blocks where id = $1", [todo.id])).toEqual([{ va_id: VA, tenant: true }]);
+      await expect(block(asVa, task.id, "Both")).rejects.toMatchObject({ code: "23514" });
+      await expect(block(asVa, null, " ")).rejects.toMatchObject({ code: "23514" });
+      await expect(block(asVa2, task.id, null)).rejects.toThrow();
+      await expect(block(asClient, null, "Mine")).rejects.toThrow();
+      await expect(call(asVa, "insert into public.calendar_blocks (va_id, title, starts_at, ends_at) values ($1, 'x', $2, $3)", [VA2, start, end])).rejects.toThrow(/permission denied/);
+      for (const claims of [asVa2, asClient]) expect(await call(claims, "select id from public.calendar_blocks")).toEqual([]);
+      expect(await call(asVa2, "delete from public.calendar_blocks where id = $1 returning id", [todo.id])).toEqual([]);
+      await expect(call(asVa, "update public.calendar_blocks set title = 'x' where id = $1", [todo.id])).rejects.toThrow(/permission denied/);
+      expect(await call(asVa, "delete from public.calendar_blocks where id = $1 returning id", [todo.id])).toEqual([{ id: todo.id }]);
     });
   });
 });

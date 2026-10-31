@@ -21,7 +21,6 @@ async function NewClient() {
   return (
     <Workspace
       title="New client"
-      lead="Add the client and the package you've agreed. They stay pending until they've sent the onboarding form and paid."
       breadcrumbs={<Breadcrumbs items={[{ label: "Your clients", href: appRoutes.closer }, { label: "New client" }]} />}
     >
       <div className="max-w-2xl">

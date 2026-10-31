@@ -170,7 +170,7 @@ export function TaskPage({
       <TaskHeader task={task} viewer={viewer} meta={meta} steps={steps} step={progressStep(task.status)} notice={notice} canMove={canMove} waiting={waiting} edit={edit} />
       <div className="flex flex-wrap items-start gap-6">
         <div className="grid min-w-0 flex-[999_1_32rem] gap-6">
-          <TaskTime taskId={task.id} canResume={canMove} durationMinutes={task.durationMinutes} sessions={sessions} status={task.status} vaName={va} viewer={viewer} timeZone={timeZone} now={now} />
+          <TaskTime taskId={task.id} companyName={company} canResume={canMove} durationMinutes={task.durationMinutes} sessions={sessions} status={task.status} vaName={va} viewer={viewer} timeZone={timeZone} now={now} />
           <Card as="section" aria-labelledby="task-description" className="grid gap-3">
             <h2 id="task-description" className="m-0 type-h4">
               Description

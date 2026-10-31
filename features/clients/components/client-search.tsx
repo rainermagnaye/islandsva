@@ -5,8 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { SearchField } from "@/components/ui/search-field";
 import { appRoutes } from "@/content/routes";
 
-/** Writes `?q=` so the client list, status tabs and pages stay shareable. */
-export function ClientSearch() {
+/**
+ * Writes `?q=` so the list, its filter and pages stay shareable. `path` is the list it searches (the admin's
+ * clients by default, or a VA's clients or tasks) and `label` names it.
+ */
+export function ClientSearch({ path = appRoutes.adminClients, label = "Search clients" }: { path?: string; label?: string }) {
   const params = useSearchParams();
   const router = useRouter();
   const urlQuery = params.get("q") ?? "";
@@ -31,10 +34,10 @@ export function ClientSearch() {
       else next.delete("q");
       next.delete("page");
       const search = next.toString();
-      router.replace(search ? `${appRoutes.adminClients}?${search}` : appRoutes.adminClients, { scroll: false });
+      router.replace(search ? `${path}?${search}` : path, { scroll: false });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [value, urlQuery, params, router]);
+  }, [value, urlQuery, params, router, path]);
 
-  return <SearchField label="Search clients" value={value} onChange={(event) => setValue(event.target.value)} className="w-full sm:w-70" />;
+  return <SearchField label={label} value={value} onChange={(event) => setValue(event.target.value)} className="w-full sm:w-70" />;
 }

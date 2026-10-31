@@ -178,7 +178,7 @@ async function FirstWeek({ vaId, firstName, demos }: { vaId: string; firstName: 
   const next = NEXT_STEP[current];
 
   return (
-    <Workspace eyebrow="Your first week" title={`Welcome aboard, ${firstName}`} lead="Three steps and your dashboard starts filling in. Clients can book a demo call once your slots are open.">
+    <Workspace eyebrow="Your first week" title={`Welcome aboard, ${firstName}`}>
       <Grid>
         <GridItem span={4} md={8} lg={8} className="content-start">
           <Panel

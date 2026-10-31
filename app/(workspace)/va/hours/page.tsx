@@ -26,7 +26,7 @@ async function VaHours() {
   const windows = await listWorkingHours(user.id);
 
   return (
-    <Workspace title="Working hours" lead="The weekly hours, in Philippine time, when a client may later request an intro call.">
+    <Workspace title="Working hours">
       <Panel title="Your week">
         <HoursForm windows={windows} />
       </Panel>

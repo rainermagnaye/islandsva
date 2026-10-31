@@ -41,7 +41,6 @@ async function ClientDemo() {
   return (
     <Workspace
       title="Book a demo call"
-      lead="A 30-minute call with one of our VAs, so you can talk through your work before you're matched."
       breadcrumbs={<Breadcrumbs items={[{ label: "Dashboard", href: appRoutes.client }, { label: "Book a demo call" }]} />}
     >
       <Panel title="Available times">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AttachmentField } from "@/components/ui/attachment-field";
 import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Alert } from "@/components/ui/alert";
@@ -36,10 +36,12 @@ export type BookingDetailActions = {
  * A booking's details and notes. The caller passes the Server Actions so admin and client calendars don't
  * ship each other's code. A read-only view (VA calendar) omits them.
  */
-export function BookingDetail({ booking, canManage, actions, onClose, onEdit, onDone }: {
+export function BookingDetail({ booking, canManage, actions, banner, onClose, onEdit, onDone }: {
   booking: Booking;
   canManage: boolean;
   actions?: BookingDetailActions;
+  /** Shown above the details, e.g. a request waiting for an answer. */
+  banner?: ReactNode;
   onClose: () => void;
   onEdit?: () => void;
   onDone: (message: string) => void;
@@ -112,6 +114,7 @@ export function BookingDetail({ booking, canManage, actions, onClose, onEdit, on
           </Form>
         ) : undefined}
       >
+        {banner && <div className="mb-4">{banner}</div>}
         <dl className="m-0 grid gap-x-6 gap-y-3 sm:grid-cols-2">
           <Field label="Starts" value={clocks(booking, booking.startsAt)} />
           <Field label="Ends" value={clocks(booking, booking.endsAt)} />

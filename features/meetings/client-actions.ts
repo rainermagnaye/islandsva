@@ -7,8 +7,8 @@ import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { BookingField, BookingNoteField } from "./contract";
 import { bookingEntries, fileFrom, noteEntries } from "./form-data";
-import { addClientBookingNote, cancelClientBooking, completeClientBooking, createClientBooking, updateClientBooking } from "./service";
-import { parseBooking, parseBookingId, parseBookingNote } from "./validation";
+import { addClientBookingNote, answerVaMeeting, cancelClientBooking, completeClientBooking, createClientBooking, updateClientBooking } from "./service";
+import { parseBooking, parseBookingId, parseBookingNote, parseMeetingAnswer } from "./validation";
 
 // The client calendar's meeting actions. The client check comes first; the database then checks the guests are
 // the client's own assistants and the meeting is one they created.
@@ -104,6 +104,21 @@ export async function saveClientBookingNote(formData: FormData): Promise<SubmitR
     if (!result.ok) return { ok: false, message: result.message };
   } catch (error) {
     return retry(error, "note", "We couldn't save that note just now. Please try again in a moment.");
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Accept or decline a meeting the client's VA asked for. */
+export async function answerVaMeetingAction(formData: FormData): Promise<SubmitResult> {
+  await requireRole(["client"]);
+  const parsed = parseMeetingAnswer(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await answerVaMeeting(parsed.value.meetingId, parsed.value.answer === "accept");
+    if (!result.ok) return { ok: false, message: result.message };
+  } catch (error) {
+    return retry(error, "answer", "We couldn't save your answer just now. Please try again in a moment.");
   }
   refresh();
   return { ok: true };

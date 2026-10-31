@@ -80,6 +80,7 @@ export const clientTaskFileHref = (taskId: string, fileId: string) => `${clientT
 export const clientVaHref = (id: string) => `${appRoutes.clientVas}/${id}`;
 /** One task in the VA portal. The id is a random UUID. */
 export const vaTaskHref = (id: string) => `${appRoutes.vaTasks}/${id}`;
+export const vaClientHref = (id: string) => `${appRoutes.vaClients}/${id}`;
 
 /** One file on a task, for the assigned VA. Both ids are random UUIDs. */
 export const vaTaskFileHref = (taskId: string, fileId: string) => `${vaTaskHref(taskId)}/files/${fileId}`;

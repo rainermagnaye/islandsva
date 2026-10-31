@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, parseWith, tooLong } from "@/lib/validation";
-import { BOOKING_LIMITS, DISCOVERY_LIMITS, discoveryStart, type BookingField, type BookingNoteField, type DiscoveryTimesField } from "./contract";
+import { BOOKING_LIMITS, DISCOVERY_LIMITS, VA_MEETING_LENGTHS, discoveryStart, manilaToIso, type BookingField, type BookingNoteField, type DiscoveryTimesField, type VaMeetingField } from "./contract";
 
 const HALF_HOUR = /^([01]\d|2[0-3]):(00|30)$/;
 
@@ -127,4 +127,38 @@ const discoveryMoveSchema = z.strictObject({
 
 export function parseDiscoveryMove(input: unknown) {
   return parseWith(discoveryMoveSchema, input, ["startDate", "startTime"] as const satisfies readonly BookingField[]);
+}
+
+const vaMeetingSchema = z
+  .strictObject({
+    title: bookingSchema.shape.title,
+    // "" = a team meeting with no client.
+    clientId: z.union([z.literal(""), z.uuid({ error: "Choose one of your clients." })]).default(""),
+    staffIds: idList.default([]),
+    date: when("date"),
+    startTime: z.string({ error: "Choose a start time." }).regex(HALF_HOUR, "Choose a start time."),
+    minutes: z
+      .string({ error: "Choose how long it runs." })
+      .transform(Number)
+      .refine((value) => (VA_MEETING_LENGTHS as readonly number[]).includes(value), "Choose how long it runs."),
+    note: bookingSchema.shape.note,
+  })
+  .transform((value) => {
+    const startsAt = manilaToIso(value.date, value.startTime);
+    const endsAt = new Date(Date.parse(startsAt) + value.minutes * 60_000).toISOString();
+    return { title: value.title, clientId: value.clientId || null, staffIds: value.staffIds, note: value.note, startsAt, endsAt };
+  });
+
+export type VaMeetingInput = z.infer<typeof vaMeetingSchema>;
+
+/**
+ * "Book › Meeting" from the VA calendar: a title, an optional client (empty = the team only), optional staff
+ * guests, a Manila day and half-hour start, a length from the list, and an agenda. Leaves as two UTC instants.
+ */
+export function parseVaMeeting(input: unknown) {
+  return parseWith(vaMeetingSchema, input, ["title", "clientId", "staffIds", "date", "startTime", "minutes", "note"] as const satisfies readonly VaMeetingField[]);
+}
+
+export function parseMeetingAnswer(input: unknown) {
+  return parseWith(z.strictObject({ meetingId: z.uuid({ error: FORM_ERROR }), answer: z.enum(["accept", "decline"], { error: FORM_ERROR }) }), input, ["meetingId"] as const);
 }

@@ -83,3 +83,12 @@ export async function insertClientBookingNote(input: BookingNoteInput, file: Boo
   });
   return settle(error, "Saving a client meeting note");
 }
+
+/** Accept or decline a meeting the client's VA asked for. Only a request still waiting on this client's company. */
+export async function answerVaMeetingRow(meetingId: string, accept: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("answer_va_meeting", { meeting_id: meetingId, accept });
+  if (error?.code === "IVA01") return { ok: false as const, message: "That request was already answered or cancelled. Refresh the page." };
+  if (error?.code === "IVA38") return { ok: false as const, message: "This meeting's time has passed. Ask your VA to book a new one." };
+  return settle(error, "Answering a VA meeting");
+}
