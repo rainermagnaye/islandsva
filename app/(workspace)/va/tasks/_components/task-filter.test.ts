@@ -21,16 +21,14 @@ describe("VA task filter", () => {
   ];
 
   it("reads only known filters from the URL", () => {
-    expect([taskFilterOf("review"), taskFilterOf("delayed"), taskFilterOf("nope"), taskFilterOf(undefined), taskFilterOf(["todo"])]).toEqual(["review", "delayed", undefined, undefined, undefined]);
+    expect([taskFilterOf("review"), taskFilterOf("delayed"), taskFilterOf("nope"), taskFilterOf(undefined), taskFilterOf(["todo"])]).toEqual(["review", undefined, undefined, undefined, undefined]);
   });
 
-  it("filters by status, overdue and delayed, and searches title and company", () => {
-    const delayed = new Set(["b"]);
-    const ids = (q: string, f?: Parameters<typeof filterTasks>[2]) => filterTasks(tasks, q, f, delayed, NOW).map((t) => t.id);
+  it("filters by status and overdue, and searches title and company", () => {
+    const ids = (q: string, f?: Parameters<typeof filterTasks>[2]) => filterTasks(tasks, q, f, NOW).map((t) => t.id);
     expect(ids("")).toEqual(["a", "b", "c"]);
     expect(ids("", "review")).toEqual(["b"]);
     expect(ids("", "overdue")).toEqual(["a"]);
-    expect(ids("", "delayed")).toEqual(["b"]);
     expect(ids(" RECALL ")).toEqual(["a"]);
     expect(ids("harbor")).toEqual(["b"]);
     expect(ids("harbor", "done")).toEqual([]);

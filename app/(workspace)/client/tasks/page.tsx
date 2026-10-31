@@ -6,9 +6,8 @@ import { appRoutes, clientTaskHref } from "@/content/routes";
 import { AddTaskButton } from "@/features/tasks/components/add-task-button";
 import { TaskMetrics } from "@/features/tasks/components/task-metrics";
 import { TaskTable } from "@/features/tasks/components/task-table";
-import { getOwnCompany, listActiveVas, listTasks, listWorkSessions } from "@/features/tasks/dal";
+import { getOwnCompany, listActiveVas, listTasks } from "@/features/tasks/dal";
 import { deadlineWindow, taskTimeZone } from "@/features/tasks/metrics";
-import { delayedIds } from "@/features/tasks/time";
 import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Tasks" };
@@ -33,7 +32,6 @@ async function ClientTasks() {
   }
 
   const [tasks, vas] = await Promise.all([listTasks(), listActiveVas(company.id)]);
-  const sessions = await listWorkSessions(tasks.map((task) => task.id));
   const timeZone = taskTimeZone(company.timezone);
   const window = deadlineWindow(timeZone);
   const canCreate = company.status === "active" && company.disabledAt === null && window !== null && vas.length >= 1;
@@ -47,7 +45,6 @@ async function ClientTasks() {
       <TaskTable
         tasks={tasks}
         hrefFor={clientTaskHref}
-        delayed={delayedIds(tasks, sessions, new Date())}
         empty={
           canCreate ? (
             <EmptyState compact title="No tasks yet" description="Add a task with a deadline for your VA." />

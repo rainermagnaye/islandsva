@@ -4,7 +4,6 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { formatDate } from "@/components/ui/date-math";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import type { Tone } from "@/components/ui/tone";
 import type { AgendaItem, AgendaKind } from "@/features/meetings/agenda";
 import { cx } from "@/lib/cx";
@@ -107,25 +106,18 @@ export function TeamCard({ team, allHref, empty }: { team: readonly TeamMember[]
  * The package week: the VAs' timed work this week (Monday to Sunday, the client's zone) against the hours a week
  * in the package. Without a package (none agreed yet) it shows the time alone.
  */
-export function PackageCard({ usedHours, packageHours, weekOf, tasksHref }: { usedHours: string; packageHours: number | null; weekOf: string; tasksHref: string }) {
-  const used = Number(usedHours);
+// The package's hours only: hours worked and the balance come with timesheets (M14).
+export function PackageCard({ packageHours, tasksHref }: { packageHours: number | null; tasksHref: string }) {
   return (
     <Card as="section" padding="none" aria-labelledby="dashboard-package" className="grid content-start gap-4 p-5">
-      <CardHeading id="dashboard-package" title="Package this week" href={tasksHref} link="Tasks" />
+      <CardHeading id="dashboard-package" title="Your package" href={tasksHref} link="Tasks" />
       {packageHours ? (
-        <ProgressBar
-          label="Hours used"
-          value={used}
-          max={packageHours}
-          valueText={`${usedHours} of ${packageHours} h`}
-          hint={used > packageHours ? "Past this week's package hours." : `${Math.round((packageHours - used) * 10) / 10} h left this week.`}
-        />
-      ) : (
         <p className="m-0 type-body-sm text-ink">
-          <strong className="tabular-nums">{usedHours} h</strong> used this week.
+          <strong className="tabular-nums">{packageHours} h</strong> a week.
         </p>
+      ) : (
+        <p className="m-0 type-body-sm text-ink-muted">No package set yet.</p>
       )}
-      <p className="m-0 type-caption text-ink-muted">Week of {formatDate(weekOf, { month: "short", day: "numeric" })} · from your VAs&apos; task timers</p>
     </Card>
   );
 }

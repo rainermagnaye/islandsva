@@ -17,7 +17,7 @@ Rules for people and AI agents; change them by PR. Each fact lives in one place 
 - **Product:** B2B virtual-assistant staffing platform — public site, Lead Gen, client and VA workspaces, agency back office.
 - **Stack:** Next.js 16 App Router (React 19, TS strict, Tailwind v4, `cacheComponents`, `partialPrefetching`) · Supabase (Singapore) · Vercel (`sin1`) · Resend · Cloudflare Turnstile. Six runtime deps; `zod` and Supabase are server-only.
 - **Priorities:** secure → correct → maintainable → performant.
-- **Phase:** M7 — admin lists and sales summary; then M8, M14 (timesheets), M9–M13 (`docs/mvp.md`). **Build only the current phase.**
+- **Phase:** M14 — timesheets (started while M7 and M8 finish; user decision); then M9–M13 (`docs/mvp.md`). **Build only the current phase.**
 - **Domain:**
   - **Roles:** Client, VA, Lead Gen (`closer` in code), Admin; Super Admin across tenants. A user can hold several. **Employee** = VA, Lead Gen or Admin.
   - **Tenant** = an agency; one today ("Islands VA"); every user and record belongs to exactly one.

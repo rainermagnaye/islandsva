@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssignedClient } from "@/features/clients/contract";
-import type { Task, WorkSession } from "@/features/tasks/contract";
+import type { Task } from "@/features/tasks/contract";
 import { cityOf, clientRows, filterRows, theirTime, viewOf } from "./client-rows";
 
 // Thursday Oct 29, 2026, 1:00 pm in Manila.
@@ -24,7 +24,6 @@ const task = (id: string, clientId: string, over: Partial<Task> = {}): Task => (
   title: id,
   description: null,
   severity: "medium",
-  durationMinutes: 60,
   deadline: "2026-11-05",
   deadlineTime: null,
   deadlineTimezone: "Asia/Manila",
@@ -39,8 +38,6 @@ const task = (id: string, clientId: string, over: Partial<Task> = {}): Task => (
   ...over,
 });
 
-const session = (taskId: string, startedAt: string, endedAt: string | null): WorkSession => ({ id: `${taskId}-${startedAt}`, taskId, startedAt, endedAt });
-
 describe("client rows", () => {
   it("tells the client's time, whether it's day there, and the gap to Manila", () => {
     expect(theirTime("America/New_York", NOW)).toEqual({ clock: "1:00 am", city: "New York", day: false, line: "Night there · 12 h behind you" });
@@ -52,32 +49,27 @@ describe("client rows", () => {
     expect(cityOf("America/Argentina/Buenos_Aires")).toBe("Buenos Aires");
   });
 
-  it("counts this week's hours in the client's week, open work, overdue and delayed", () => {
+  it("counts open work and overdue, and carries the agreed hours", () => {
     const tasks = [
       task("late", "a", { deadline: "2026-10-27" }),
-      task("over", "a", { durationMinutes: 30 }),
+      task("open", "a"),
       task("done", "a", { status: "done", doneAt: "2026-10-28T00:00:00.000Z" }),
       task("b1", "b"),
     ];
-    const sessions = new Map<string, WorkSession[]>([
-      // New York's week began Monday Oct 26, 00:00 EDT (04:00 UTC): the Sunday session doesn't count.
-      ["over", [session("over", "2026-10-25T20:00:00.000Z", "2026-10-25T21:00:00.000Z"), session("over", "2026-10-28T01:00:00.000Z", "2026-10-28T01:45:00.000Z")]],
-      ["done", [session("done", "2026-10-27T01:00:00.000Z", "2026-10-27T02:30:00.000Z")]],
-    ]);
-    const [a, b] = clientRows([client("a"), client("b", { hoursPerWeek: null, timezone: null })], tasks, sessions, NOW);
-    expect(a).toMatchObject({ open: 2, overdue: 1, delayed: 1, hours: { used: 2.3, agreed: 20 }, attention: true, since: "Mar 2026" });
-    expect(b).toMatchObject({ open: 1, overdue: 0, delayed: 0, hours: null, time: null, attention: true });
+    const [a, b] = clientRows([client("a"), client("b", { hoursPerWeek: null, timezone: null })], tasks, NOW);
+    expect(a).toMatchObject({ open: 2, overdue: 1, hoursPerWeek: 20, attention: true, since: "Mar 2026" });
+    expect(b).toMatchObject({ open: 1, overdue: 0, hoursPerWeek: null, time: null, attention: true });
   });
 
-  it("needs attention near the week's limit, and not when all is well", () => {
-    const sessions = new Map<string, WorkSession[]>([["t", [session("t", "2026-10-27T00:00:00.000Z", "2026-10-27T03:30:00.000Z")]]]);
-    const tasks = [task("t", "a", { durationMinutes: 600 })];
-    expect(clientRows([client("a", { hoursPerWeek: 4 })], tasks, sessions, NOW)[0].attention).toBe(true);
-    expect(clientRows([client("a", { hoursPerWeek: 20 })], tasks, sessions, NOW)[0].attention).toBe(false);
+  it("needs attention when something is overdue or missing, and not when all is well", () => {
+    const tasks = [task("t", "a")];
+    expect(clientRows([client("a", { hoursPerWeek: null })], tasks, NOW)[0].attention).toBe(true);
+    expect(clientRows([client("a")], [task("t", "a", { deadline: "2026-10-27" })], NOW)[0].attention).toBe(true);
+    expect(clientRows([client("a")], tasks, NOW)[0].attention).toBe(false);
   });
 
   it("filters by search and view", () => {
-    const rows = clientRows([client("a", { companyName: "Lumen Dental" }), client("b", { companyName: "Harbor Legal", timezone: "Australia/Sydney", contactName: "Mei Chen" })], [], new Map(), NOW);
+    const rows = clientRows([client("a", { companyName: "Lumen Dental" }), client("b", { companyName: "Harbor Legal", timezone: "Australia/Sydney", contactName: "Mei Chen" })], [], NOW);
     expect(filterRows(rows, " mei ", "all").map((row) => row.id)).toEqual(["b"]);
     expect(filterRows(rows, "", "daytime").map((row) => row.id)).toEqual(["b"]);
     expect(filterRows(rows, "", "attention")).toEqual([]);

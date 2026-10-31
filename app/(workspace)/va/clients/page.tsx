@@ -7,7 +7,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { appRoutes } from "@/content/routes";
 import { listAssignedClients } from "@/features/clients/assignment-dal";
 import { ClientSearch } from "@/features/clients/components/client-search";
-import { listTasks, listWorkSessions } from "@/features/tasks/dal";
+import { listTasks } from "@/features/tasks/dal";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
 import { clientRows, filterRows, viewOf } from "./_components/client-rows";
@@ -34,19 +34,16 @@ async function VaClients({ searchParams }: Pick<PageProps<"/va/clients">, "searc
   const query = typeof params.q === "string" ? params.q.slice(0, SEARCH_MAX) : "";
   const view = viewOf(params.view);
 
-  // Both run as the signed-in VA, so RLS keeps them to the VA's own clients, tasks and sessions.
+  // Both run as the signed-in VA, so RLS keeps them to the VA's own clients and tasks.
   const [clients, tasks] = await Promise.all([listAssignedClients(user.id), listTasks()]);
-  const sessions = await listWorkSessions(tasks.map((task) => task.id));
   const now = new Date();
-  const rows = clientRows(clients, tasks, sessions, now);
+  const rows = clientRows(clients, tasks, now);
   const shown = filterRows(rows, query, view);
 
-  const agreed = rows.reduce((sum, row) => sum + (row.hours?.agreed ?? 0), 0);
-  const worked = Math.round(rows.reduce((sum, row) => sum + (row.hours?.used ?? 0), 0) * 10) / 10;
+  const agreed = rows.reduce((sum, row) => sum + (row.hoursPerWeek ?? 0), 0);
   const open = rows.reduce((sum, row) => sum + row.open, 0);
   const overdue = rows.reduce((sum, row) => sum + row.overdue, 0);
-  const delayed = rows.reduce((sum, row) => sum + row.delayed, 0);
-  const settingUp = rows.filter((row) => row.time === null || row.hours === null).length;
+  const settingUp = rows.filter((row) => row.time === null || row.hoursPerWeek === null).length;
 
   return (
     <Workspace
@@ -66,19 +63,14 @@ async function VaClients({ searchParams }: Pick<PageProps<"/va/clients">, "searc
         <>
           <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard label="Active clients" value={rows.length} icon="briefcase" caption={settingUp > 0 ? `${settingUp} still being set up` : "All set up"} />
-            <StatCard
-              label="Worked this week"
-              value={worked}
-              unit={agreed > 0 ? `of ${agreed} h` : "h"}
-              icon="clock"
-              caption="From your task timers, each client's Monday to Sunday"
-            />
+            {/* Agreed hours only: hours worked come with timesheets (M14). */}
+            <StatCard label="Agreed hours" value={agreed > 0 ? agreed : null} unit="h a week" icon="clock" caption="Across your clients" />
             <StatCard
               label="Open tasks"
               value={open}
               icon="check"
               href={appRoutes.vaTasks}
-              caption={overdue + delayed > 0 ? [overdue > 0 ? `${overdue} overdue` : null, delayed > 0 ? `${delayed} delayed` : null].filter(Boolean).join(" · ") : "Nothing overdue"}
+              caption={overdue > 0 ? `${overdue} overdue` : "Nothing overdue"}
             />
           </section>
 

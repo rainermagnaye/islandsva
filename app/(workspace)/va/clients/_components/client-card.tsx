@@ -3,16 +3,15 @@ import { Badge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import type { Tone } from "@/components/ui/tone";
 import { cx } from "@/lib/cx";
-import { NEAR_LIMIT, type ClientRow } from "./client-rows";
+import type { ClientRow } from "./client-rows";
 
 const TONES: readonly Tone[] = ["lagoon", "ocean", "coral", "sand"];
 const label = "type-caption font-semibold text-ink-muted";
 
 /**
- * One client on one line (it wraps on narrow screens): who they are, their time now, this week's hours, open
+ * One client on one line (it wraps on narrow screens): who they are, their time now, agreed hours, open
  * work, and the email action at the right edge so it never adds a line.
  */
 export function ClientCard({ row, index }: { row: ClientRow; index: number }) {
@@ -57,17 +56,15 @@ export function ClientCard({ row, index }: { row: ClientRow; index: number }) {
       </div>
 
       <div className="grid min-w-0 flex-[1_1_11rem] content-start gap-1">
-        {row.hours ? (
-          <ProgressBar label="This week" value={row.hours.used} max={row.hours.agreed} valueText={`${row.hours.used} of ${row.hours.agreed} h`} warnAt={NEAR_LIMIT * 100} />
+        <span className={label}>Agreed</span>
+        {row.hoursPerWeek ? (
+          <span className="type-body text-ink tabular-nums">{row.hoursPerWeek} h a week</span>
         ) : (
-          <>
-            <span className={label}>This week</span>
-            <span className="justify-self-start">
-              <Badge tone="neutral" size="sm">
-                Hours not agreed yet
-              </Badge>
-            </span>
-          </>
+          <span className="justify-self-start">
+            <Badge tone="neutral" size="sm">
+              Hours not agreed yet
+            </Badge>
+          </span>
         )}
       </div>
 
@@ -80,11 +77,6 @@ export function ClientCard({ row, index }: { row: ClientRow; index: number }) {
           {row.overdue > 0 && (
             <Badge tone="danger" size="sm">
               {row.overdue} overdue
-            </Badge>
-          )}
-          {row.delayed > 0 && (
-            <Badge tone="warning" size="sm">
-              {row.delayed} delayed
             </Badge>
           )}
         </div>

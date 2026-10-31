@@ -20,7 +20,6 @@ export type DashboardTask = {
   line: string;
   late: boolean;
   /** Worked past its duration. */
-  delayed: boolean;
   status: { label: string; tone: "neutral" | "info" | "warning" | "success" | "danger" };
   group: TaskTab;
 };
@@ -91,11 +90,6 @@ export function DashboardTasks({ tasks, allHref, emptyOpen }: { tasks: readonly 
                   </span>
                 </span>
                 <span className="flex flex-wrap items-center justify-end gap-1.5">
-                  {task.delayed && (
-                    <Badge tone="warning" size="sm">
-                      Delayed
-                    </Badge>
-                  )}
                   <Badge tone={task.status.tone} size="sm" dot>
                     {task.status.label}
                   </Badge>

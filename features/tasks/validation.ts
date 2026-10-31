@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, parseWith, tooLong } from "@/lib/validation";
-import { TASK_DURATION, TASK_LIMITS, TASK_SEVERITIES, TASK_STATUSES, VA_BLOCK_LENGTHS, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField, type VaTaskField } from "./contract";
+import { TASK_LIMITS, TASK_SEVERITIES, TASK_STATUSES, VA_BLOCK_LENGTHS, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField, type VaTaskField } from "./contract";
 
 // Dates are calendar days (YYYY-MM-DD). The database checks the window in the client's zone; this only
 // checks that the day is real, so a day that is "today" there and "yesterday" in UTC still parses.
@@ -37,78 +37,31 @@ const description = z.union([
 
 const severity = z.enum(TASK_SEVERITIES, { error: "Choose a severity." });
 
-const DURATION_COPY = `Choose a duration from ${TASK_DURATION.min} minutes to ${TASK_DURATION.max / 60} hours.`;
-const wholeNumber = (max: number) =>
-  z
-    .string({ error: DURATION_COPY })
-    .regex(/^\d{1,3}$/, DURATION_COPY)
-    .transform(Number)
-    .refine((value) => value <= max, DURATION_COPY);
+const createSchema = z.strictObject({
+  title,
+  description: description.optional(),
+  severity: severity.optional(),
+  deadline,
+  deadlineTime,
+  vaId: z.uuid({ error: "Choose the VA this task is for." }).optional(),
+});
 
-/**
- * The duration arrives as two selects (hours, minutes) and leaves as one number of minutes. Both or neither:
- * a form without them (an older page) gets the severity's default from the service and the database.
- */
-const durationParts = {
-  durationHours: wholeNumber(TASK_DURATION.max / 60).optional(),
-  durationMinutes: wholeNumber(59).optional(),
-};
-
-/** Hours and minutes as one total, or undefined when neither was sent, or null when the total is out of range. */
-function totalMinutes(hours: number | undefined, minutes: number | undefined): number | undefined | null {
-  if (hours === undefined && minutes === undefined) return undefined;
-  const total = (hours ?? 0) * 60 + (minutes ?? 0);
-  return total < TASK_DURATION.min || total > TASK_DURATION.max ? null : total;
-}
-
-const createSchema = z
-  .strictObject({
-    title,
-    description: description.optional(),
-    severity: severity.optional(),
-    ...durationParts,
-    deadline,
-    deadlineTime,
-    vaId: z.uuid({ error: "Choose the VA this task is for." }).optional(),
-  })
-  .transform(({ durationHours, durationMinutes, ...rest }, ctx) => {
-    const total = totalMinutes(durationHours, durationMinutes);
-    if (total === null) {
-      ctx.addIssue({ code: "custom", path: ["durationMinutes"], message: DURATION_COPY });
-      return z.NEVER;
-    }
-    return { ...rest, durationMinutes: total };
-  });
-
-/**
- * "Add a task": a title, a severity, a duration, a date and a time. The description is optional. Each chosen VA
- * gets a task. `durationMinutes` comes out as the total in minutes.
- */
+/** "Add a task": a title, a severity, a date and a time. The description is optional. Each chosen VA gets a task. */
 export const parseCreate = (input: unknown) =>
-  parseWith<typeof createSchema, TaskField>(createSchema, input, ["title", "description", "severity", "durationHours", "durationMinutes", "deadline", "deadlineTime", "vaId"]);
+  parseWith<typeof createSchema, TaskField>(createSchema, input, ["title", "description", "severity", "deadline", "deadlineTime", "vaId"]);
 
-const updateSchema = z
-  .strictObject({
-    taskId: z.uuid({ error: FORM_ERROR }),
-    title,
-    description: description.optional(),
-    severity: severity.optional(),
-    ...durationParts,
-    deadline,
-    deadlineTime,
-  })
-  .transform(({ durationHours, durationMinutes, ...rest }, ctx) => {
-    const total = totalMinutes(durationHours, durationMinutes);
-    if (total === null) {
-      ctx.addIssue({ code: "custom", path: ["durationMinutes"], message: DURATION_COPY });
-      return z.NEVER;
-    }
-    return { ...rest, durationMinutes: total };
-  });
+const updateSchema = z.strictObject({
+  taskId: z.uuid({ error: FORM_ERROR }),
+  title,
+  description: description.optional(),
+  severity: severity.optional(),
+  deadline,
+  deadlineTime,
+});
 
-/** The client changes the title, severity, duration, date and time until the task is closed. */
+/** The client changes the title, severity, date and time until the task is closed. */
 export const parseUpdate = (input: unknown) =>
-  parseWith<typeof updateSchema, TaskField>(updateSchema, input, ["title", "description", "severity", "durationHours", "durationMinutes", "deadline", "deadlineTime"]);
+  parseWith<typeof updateSchema, TaskField>(updateSchema, input, ["title", "description", "severity", "deadline", "deadlineTime"]);
 
 const statusSchema = z.strictObject({
   taskId: z.uuid({ error: FORM_ERROR }),
@@ -117,14 +70,6 @@ const statusSchema = z.strictObject({
 
 /** A forward status move. A value outside the enum is a tampered form, not a field the user can fix. */
 export const parseStatus = (input: unknown) => parseWith<typeof statusSchema, TaskStatusField>(statusSchema, input, []);
-
-const timerSchema = z.strictObject({
-  taskId: z.uuid({ error: FORM_ERROR }),
-  timer: z.enum(["start", "pause"], { error: FORM_ERROR }),
-});
-
-/** The VA resumes or pauses their clock. Like a status move, a bad value is a tampered form. */
-export const parseTimer = (input: unknown) => parseWith<typeof timerSchema, string>(timerSchema, input, []);
 
 const noteText = (empty: string) =>
   z
