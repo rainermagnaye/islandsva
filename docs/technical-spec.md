@@ -18,7 +18,9 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | client_agreements | Agreement acceptance evidence: version, text shown, terms snapshot (from the client row), typed name, contact email on file, hashed IP, time. Append-only, server-only | Built: schema (slice 1a) and the registration link's agreement step (slice 2b); admin evidence view in slice 3 |
 | va_shortlists | Client ↔ shortlisted VA, status (offered, accepted, declined). Accept creates the assignment | Built (M10) |
 | client_va_assignments | Client ↔ VA, several active VAs, one active row per pair | Built |
-| tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments) |
+| tasks · task_comments | Client, VA, title, deadline, status, comments | Built; audited (ids, status, dates — never the title or comments). The task timer (`task_work_sessions`, `start_task_timer` / `pause_task_timer`, `tasks.duration_minutes`, migration pending) is removed in M14 by a new migration |
+| work_sessions | One stretch of a VA's work for one client: VA, client, start, end (null while running), closed at midnight (flag), corrected by | New (M14) |
+| timesheet_days | One VA × client × Manila day once the month is over: status (pending, approved, disputed), client's note, decided by, decided at; an admin's resolution | New (M14) |
 | audit_log | Append-only who-did-what: actor (user or system; Google sync in M9), action, record type + id, owning Lead Gen / client, changed fields (values only for safe columns), at | Built (M8; rules in `supabase/CLAUDE.md`) |
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
 | client_onboarding_links · payments | Replaced by the registration packet | Drop |
@@ -58,6 +60,20 @@ One model for every call; one Google integration; one history.
 - **Notes:** each attendee can add a short note per meeting; it is a `meeting_events` row, shown in the history.
 - **Meet limits:** on free Google accounts, a Meet with 3 or more participants ends at 60 minutes; one-to-one calls run up to 24 hours.
 
+## Timesheets (M14)
+
+- **Timer:** play opens a `work_sessions` row for one assigned client (active client, active assignment, VA portal open); pause closes it. Start and end come from the database clock, never the browser. One running session per VA (partial unique index). Playing another client while one runs: the app warns in a dialog, then one database function closes the running session and opens the new one in a single transaction.
+- **Days and weeks:** Asia/Manila, midnight to midnight, weeks Monday to Sunday. A session running at midnight is closed at midnight (Supabase `pg_cron`, as for discovery expiry) and flagged for an admin; the VA presses play again to continue.
+- **Targets:** per client per weekday (Monday to Friday) = `hours_per_week` ÷ 5 (Essentials 4 h, Executive 8 h, Day and night 16 h). The VA's day goal = the sum over their active clients. A day is complete when worked ≥ target.
+- **Hours used** per client per weekday = min(worked, target), per weekend day = worked: 8 h 15 min on an 8 h target uses 8 h; 6 h uses 6 h. Weekly balance = `hours_per_week` − used this week; monthly balance = `hours_per_week` × 52 ÷ 12 − used this month (40 h → 173.3 h). Computed from sessions, never stored (pure rules beside the feature, tested).
+- **Live:** the counter ticks in the browser from the session's server start; totals and balances are recomputed on each page load and after every play / pause (Server Action, then `refresh()`). No polling or sockets.
+- **Shown:** the VA sees, per client and in total, today's counter, first start and last stop, progress to target, hours today / this week / this month, balance left this week and month, and every session by day with its validation status. The client sees the same for each of their VAs. Admins see all, plus flagged and disputed days. Pending and validated hours are shown apart.
+- **Validation:** from the 1st, the client reviews last month per VA: approve or dispute each day (a dispute needs a note). An admin resolves a dispute by correcting sessions or upholding them, which approves the day. Days still pending 5 days after month end are approved by `pg_cron` (actor System). An approved day is locked: no further corrections.
+- **Corrections:** admins only (2FA), audited with old and new times. The VA can't edit times; the client can't edit, only dispute.
+- **Audited:** session corrections and day decisions (`audit_log`; times and statuses keep values, the note is recorded by name only).
+- **Weekends:** Saturday and Sunday have no target and no daily cap; every hour worked counts toward that week's and month's hours used.
+- **Every client shows hours and remaining balance.** The package is set at conversion (`clients_package_complete`), so active clients have `hours_per_week`; an older client without it shows hours worked and "No package set" for the balance until an admin sets the package.
+
 ## Status flows
 
 - **Lead:** request (stored as an unowned `new` lead with an open discovery request; shown only in the Lead Gens' inbox, not in leads lists or pipeline counts) → new (call confirmed, owner set) → contacted → qualified → won (client created) · closed (a rejected request closes as junk and never shows as a lead).
@@ -65,6 +81,7 @@ One model for every call; one Google integration; one history.
 - **Client:** pending → active → inactive. **Registration:** ready → pending_customer → pending_review → approved | changes_requested → invite_sent.
 - **Shortlist:** offered → accepted (creates the assignment) | declined.
 - **Task:** todo → in_progress → done; overdue = not done after its deadline (computed, not stored).
+- **Timesheet day:** pending → approved | disputed → approved (an admin resolves); pending → approved automatically 5 days after month end.
 - **Account:** invited → active → inactive.
 
 ## Discovery-call booking
@@ -109,7 +126,7 @@ Plain text through `sendPlainEmail`, sent in `after()`, Reply-To the team inbox.
 
 ## Metrics
 
-Computed from data, never typed in. On-time rate = tasks done by their deadline ÷ tasks done. Contracted revenue = active clients' `monthly_cents`. Lead Gen results = calls confirmed, done, no-show, won. Meetings = held, cancelled, no-show, per client and per VA.
+Computed from data, never typed in. On-time rate = tasks done by their deadline ÷ tasks done. Contracted revenue = active clients' `monthly_cents`. Lead Gen results = calls confirmed, done, no-show, won. Meetings = held, cancelled, no-show, per client and per VA. Hours used and balances: Timesheets above.
 
 ## Access
 
@@ -118,8 +135,8 @@ Roles and `tenant_id` come from the token; pages call `requireRole`, RLS checks 
 | Role | Sees |
 |---|---|
 | Lead Gen | The shared inbox of requested discovery calls (no email until they confirm); leads, meetings and clients they own, with full history; audit entries for those records |
-| Client | Their own tasks, shortlist, VAs, package, and meetings with their VAs |
-| VA | Their own tasks; every meeting they attend (intro calls and client↔VA meetings) with its full history and notes; for intro calls, the prospective client's company name and the shortlist outcome; the clients they are assigned to |
+| Client | Their own tasks, shortlist, VAs, package, meetings with their VAs, and their VAs' sessions and days for their company (decide days only) |
+| VA | Their own tasks and sessions (play / pause only); every meeting they attend (intro calls and client↔VA meetings) with its full history and notes; for intro calls, the prospective client's company name and the shortlist outcome; the clients they are assigned to |
 | Admin | Everything in their tenant, including the full audit log; changes discovery-call times, shortlists, employees and registrations |
 
 ## Planned modules
@@ -129,6 +146,7 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 | Milestone | Feature folder | Routes |
 |---|---|---|
 | M8 | `features/meetings` (started: discovery times in `/admin/settings`; now in the §3 map) · `features/audit` | `api/v1/discovery-slots` (built); Lead Gen inbox, schedule, call history and activity under `closer/` |
+| M14 | `features/timesheets` (removes the task timer from `features/tasks`) | VA timer and hours under `va/`; client hours and month review under `client/`; admin hours, disputes and corrections under `admin/` |
 | M9 | `features/google` | `api/v1/google/calendar-events`; Google connect / callback |
 | M10 | `features/matching` (replaces `features/demos`) | client VA Match; VA working hours |
 | M11 | `features/tasks` | client and VA task pages |
