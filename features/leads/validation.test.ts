@@ -1,19 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { discoveryStart } from "@/features/meetings/contract";
 import { CONVERT_LIMITS, LEAD_LIMITS } from "./contract";
 import { parseAdminLead, parseLead, parseLeadEdit, parseLeadStatus, parseLeadStep } from "./validation";
 import { parseConvert, parseConvertNoted } from "./convert-validation";
 
-function upcoming() {
-  const ahead = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(ahead);
-  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
-  const minute = Number(pick("minute")) < 30 ? "00" : "30";
-  return { meetingDate: `${pick("year")}-${pick("month")}-${pick("day")}`, meetingTime: `${pick("hour").padStart(2, "0")}:${minute}` };
-}
-
-const when = upcoming();
-const booked = discoveryStart(when.meetingDate, when.meetingTime);
+const DAY = 24 * 60 * 60 * 1000;
+const HALF_HOUR = 30 * 60 * 1000;
+// A slot as GET /api/v1/discovery-slots sends it: a UTC instant on a half hour, three days ahead.
+const slot = new Date(Math.floor((Date.now() + 3 * DAY) / HALF_HOUR) * HALF_HOUR).toISOString();
 
 const valid = {
   name: "  Ana Cruz ",
@@ -25,7 +18,7 @@ const valid = {
   message: "Inbox help, please.",
   website: "",
   turnstileToken: "token",
-  ...when,
+  startsAt: slot,
 };
 
 describe("parseLead", () => {
@@ -42,16 +35,26 @@ describe("parseLead", () => {
         packageSlug: "executive",
         message: "Inbox help, please.",
       },
-      startsAt: booked.ok ? booked.startsAt : "",
+      startsAt: slot,
       isBot: false,
       turnstileToken: "token",
     });
   });
 
-  it("reads the meeting time in the country's time zone", () => {
-    const philippines = parseLead(valid);
-    const unitedStates = parseLead({ ...valid, country: "United States" });
-    expect(philippines.ok && unitedStates.ok && philippines.startsAt !== unitedStates.startsAt).toBe(true);
+  it("reads a picked slot with any offset as the same UTC instant", () => {
+    const manila = new Date(Date.parse(slot) + 8 * 60 * 60 * 1000).toISOString().replace(".000Z", "+08:00");
+    expect(parseLead({ ...valid, startsAt: manila })).toMatchObject({ ok: true, startsAt: slot });
+  });
+
+  it("takes no slot as a plain enquiry (the service decides whether one is required)", () => {
+    expect(parseLead({ ...valid, startsAt: "" })).toMatchObject({ ok: true, startsAt: null });
+  });
+
+  it("refuses a slot that isn't an instant inside the next 14 days", () => {
+    for (const startsAt of ["tomorrow", "2026-11-03T09:00", new Date(Date.now() - HALF_HOUR).toISOString(), new Date(Date.now() + 15 * DAY).toISOString()]) {
+      expect(parseLead({ ...valid, startsAt })).toMatchObject({ ok: false, fieldErrors: { startsAt: "Choose a time from the list." } });
+    }
+    expect(parseLead({ ...valid, startsAt: 5 })).toMatchObject({ ok: false, fieldErrors: { startsAt: expect.any(String) } });
   });
 
   it("requires company, industry and country", () => {

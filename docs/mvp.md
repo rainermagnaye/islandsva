@@ -14,7 +14,7 @@ Done means: works for every role it touches, RLS allowed and denied tests, CI gr
 | M5 | Client view | Client dashboard; VA demo booking (replaced by intro calls in M10) | Done |
 | M6 | VA workspace | VA dashboard, client list, slot calendar | Done |
 | M7 | Admin lists | Demo calls list ✅ · sales summary from contracted value (`clients.monthly_cents`) ⏳ | Current |
-| M8 | Discovery calls | `meetings` + history; admin sets daily times (PHT, every day, max 6); slot picker on the contact form; Lead Gen inbox, confirm (takes ownership) / reject, outcomes; Lead Gen schedule, call history and activity log; audit log (database triggers); leads move from admin to Lead Gen | In progress — started before M7 closed (user decision); database slices built: 1 (times, meetings, history, inbox) and 2 (audit log, including tasks and VA shortlists) |
+| M8 | Discovery calls | `meetings` + history; admin sets daily times (PHT, every day, max 6); slot picker on the contact form (built); Lead Gen inbox, confirm (takes ownership) / reject, outcomes; Lead Gen schedule, call history and activity log; audit log (database triggers); leads move from admin to Lead Gen | In progress — started before M7 closed (user decision); database slices built: 1 (times, meetings, history, inbox) and 2 (audit log, including tasks and VA shortlists) |
 | M9 | Google | Employees connect their own Google account; confirm creates a Calendar event + Meet link and invites the attendee; reschedule and cancel sync both ways; start Google's app verification | |
 | M10 | VA Match | Admin shortlist; VA working hours + Google free/busy; client accepts or requests an intro call (the VA confirms); accept assigns the VA; several VAs per client; demo tables retired | |
 | M11 | Tasks + performance | Client tasks with deadlines, status, comments; VA task list; tasks done, on-time rate, overdue | |
@@ -41,7 +41,7 @@ Runbook: `docs/operations.md`.
 - [ ] M7–M13 done
 - [ ] Supabase production settings, Resend SMTP, email templates; remove the temporary invite flow
 - [ ] Google OAuth app (External) verified for sensitive scopes — unverified, employee connections expire every 7 days; every Lead Gen and VA connected
-- [ ] Firewall rate limits on the lead and slot endpoints and the sign-in POSTs
+- [ ] Firewall rate limits on the lead and slot endpoints (`POST /api/v1/leads`, `GET /api/v1/discovery-slots`) and the sign-in POSTs — the contact form books from a small set of daily slots, so these are what stop one visitor holding them all
 - [ ] Turnstile production keys; production env vars marked Sensitive
 - [ ] Privacy policy names Google (Calendar and Meet); legal review; real content
 

@@ -3,13 +3,12 @@ import { z } from "zod";
 import { COUNTRIES } from "@/content/countries";
 import { packages } from "@/content/packages";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
-import { timezoneForCountry } from "@/content/timezones";
-import { discoveryStart } from "@/features/meetings/contract";
+import { discoveryInstant } from "@/features/meetings/contract";
 import { BUDGET_RANGES, CONTACT_METHODS, CONTACT_TIMES, HIRING_TIMELINES, INDUSTRIES, LEAD_EVENT_LIMIT, LEAD_LIMITS, LEAD_PROFILE_LIMITS, LEAD_SOURCES, MARKETING_CONSENT, PRIORITIES, STAFF_COUNTS, TIMELINE_KINDS, TRIAGE_STATUSES, YEARS_IN_SERVICE, type LeadField, type LeadPayload, type LeadProfileDetails, type LeadStatusField } from "./contract";
 
 const LEAD_FIELDS = ["name", "email", "company", "industry", "country", "message", "package"] as const satisfies readonly LeadField[];
 
-const PUBLIC_LEAD_FIELDS = [...LEAD_FIELDS, "meetingDate", "meetingTime"] as const satisfies readonly LeadField[];
+const PUBLIC_LEAD_FIELDS = [...LEAD_FIELDS, "startsAt"] as const satisfies readonly LeadField[];
 
 export const PACKAGE_SLUGS = new Set(packages.map((p) => p.slug));
 
@@ -52,28 +51,23 @@ const leadShape = {
     .min(1, "Tell us a little about what you need.")
     .max(LEAD_LIMITS.message, tooLong("your message", LEAD_LIMITS.message))
     .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("your message", LEAD_LIMITS.message)),
-  meetingDate: z.string({ error: "Choose a date." }).trim(),
-  meetingTime: z.string({ error: "Choose a time." }).trim(),
+  // "" is a plain enquiry, which the service accepts only while no discovery-call time is open.
+  startsAt: z
+    .string({ error: "Choose a time for your call." })
+    .trim()
+    .refine((value) => value === "" || discoveryInstant(value) !== null, "Choose a time from the list."),
   website: z.string().trim().default(""),
   turnstileToken: z.string().trim().max(4096).default(""),
 } satisfies Record<keyof LeadPayload, z.ZodType>;
 
 // Output: the validated lead (the only shape that reaches the database) plus the anti-spam fields the
 // route needs. Empty optional strings become null so the DB stores NULL, not "".
-const leadSchema = z.strictObject(leadShape).superRefine((value, ctx) => {
-  const zone = timezoneForCountry(value.country);
-  const start = discoveryStart(value.meetingDate, value.meetingTime, Date.now(), zone?.value);
-  if (!start.ok) ctx.addIssue({ code: "custom", path: [value.meetingDate ? "meetingTime" : "meetingDate"], message: start.message });
-}).transform(({ website, turnstileToken, package: packageSlug, meetingDate, meetingTime, ...rest }) => {
-  const zone = timezoneForCountry(rest.country);
-  const start = discoveryStart(meetingDate, meetingTime, Date.now(), zone?.value);
-  return {
-    value: { ...rest, packageSlug: packageSlug || null },
-    startsAt: start.ok ? start.startsAt : "",
-    isBot: website !== "",
-    turnstileToken: turnstileToken || null,
-  };
-});
+const leadSchema = z.strictObject(leadShape).transform(({ website, turnstileToken, package: packageSlug, startsAt, ...rest }) => ({
+  value: { ...rest, packageSlug: packageSlug || null },
+  startsAt: startsAt === "" ? null : discoveryInstant(startsAt),
+  isBot: website !== "",
+  turnstileToken: turnstileToken || null,
+}));
 
 /** A validated lead — derived from the schema, so the two can't drift apart. */
 export type LeadInput = z.output<typeof leadSchema>["value"];

@@ -32,21 +32,24 @@ export type LeadPayload = {
   country: string;
   package: string;
   message: string;
-  meetingDate: string;
-  meetingTime: string;
+  /** The picked slot as a UTC instant from GET /api/v1/discovery-slots; "" only when none were open. */
+  startsAt: string;
   /** Honeypot — people leave it empty. */
   website: string;
   turnstileToken: string;
 };
 
 /** Form inputs that can show a field error (matches the input `name`s). */
-export type LeadField = "name" | "email" | "company" | "industry" | "country" | "message" | "package" | "meetingDate" | "meetingTime";
+export type LeadField = "name" | "email" | "company" | "industry" | "country" | "message" | "package" | "startsAt";
 
 /** Fields the profile editor can send back. */
 export type LeadEditField = LeadField | keyof LeadProfileDetails;
 
 /** `data` of a successful POST /api/v1/leads. Nothing about the stored lead is exposed. */
 export type LeadCreated = { ok: true };
+
+/** `data` of GET /api/v1/discovery-slots: the open discovery-call starts, as UTC instants in order. */
+export type DiscoverySlots = { slots: string[] };
 
 // Admin system --------------------------------------------------------------------------------------------
 
