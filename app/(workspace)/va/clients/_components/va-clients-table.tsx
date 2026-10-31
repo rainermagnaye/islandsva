@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
 import { Icon } from "@/components/ui/icon";
 import { vaClientHref } from "@/content/routes";
-import { NEAR_LIMIT, type ClientRow } from "./client-rows";
+import type { ClientRow } from "./client-rows";
 
 const columns: Column<ClientRow>[] = [
   {
@@ -52,20 +52,11 @@ const columns: Column<ClientRow>[] = [
   },
   {
     key: "week",
-    label: "This week",
+    label: "Agreed",
     nowrap: true,
     render: (row) =>
-      row.hours ? (
-        <span className="inline-flex flex-wrap items-center gap-2">
-          <span className="tabular-nums">
-            {row.hours.used} of {row.hours.agreed} h
-          </span>
-          {row.hours.used >= row.hours.agreed * NEAR_LIMIT && (
-            <Badge tone="warning" size="sm">
-              {row.hours.used >= row.hours.agreed ? "At limit" : "Near limit"}
-            </Badge>
-          )}
-        </span>
+      row.hoursPerWeek ? (
+        <span className="tabular-nums">{row.hoursPerWeek} h a week</span>
       ) : (
         <Badge tone="neutral" size="sm">
           Hours not agreed
@@ -86,18 +77,13 @@ const columns: Column<ClientRow>[] = [
             {row.overdue} overdue
           </Badge>
         )}
-        {row.delayed > 0 && (
-          <Badge tone="warning" size="sm">
-            {row.delayed} delayed
-          </Badge>
-        )}
       </span>
     ),
   },
   { key: "since", label: "Since", render: (row) => <span className="whitespace-nowrap text-ink-muted">{row.since}</span> },
 ];
 
-/** The VA's clients in the shared records table: who, how to reach them, their time now, this week, open work. */
+/** The VA's clients in the shared records table: who, how to reach them, their time now, agreed hours, open work. */
 export function VaClientsTable({ rows, empty }: { rows: readonly ClientRow[]; empty: ReactNode }) {
   return <DataTable caption="Your clients" columns={columns} rows={rows} rowKey={(row) => row.id} rowLabel={(row) => row.company} empty={empty} keepHeader />;
 }

@@ -3,15 +3,15 @@
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
+import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { createTask, updateTask } from "../actions";
-import { TASK_LIMITS, type Task, type TaskField } from "../contract";
+import { TASK_LIMITS, TASK_SEVERITIES, TASK_SEVERITY_LABELS, type Task, type TaskField } from "../contract";
 import { DeadlineFields } from "./deadline-fields";
-import { SeverityDurationFields } from "./severity-duration-fields";
 import { VaAssignField } from "./va-assign-field";
 
 /**
- * Add a task, or change its title, severity, duration and deadline. A new task names its VAs: chosen in the form when it opens from
+ * Add a task, or change its title, severity and deadline. A new task names its VAs: chosen in the form when it opens from
  * a general place, or fixed (shown, not editable) when it opens from one VA's card or profile.
  */
 export function TaskForm({
@@ -57,12 +57,13 @@ export function TaskForm({
           {stay && <input type="hidden" name="stay" value="1" />}
           <TextField label="Title" name="title" required maxLength={TASK_LIMITS.title} defaultValue={task?.title} error={fieldErrors.title} />
           <TextField label="Description" name="description" multiline optional maxLength={TASK_LIMITS.description} defaultValue={task?.description ?? ""} error={fieldErrors.description} />
-          <SeverityDurationFields
-            severity={task?.severity}
-            durationMinutes={task?.durationMinutes}
-            severityError={fieldErrors.severity}
-            hoursError={fieldErrors.durationHours}
-            minutesError={fieldErrors.durationMinutes}
+          <Select
+            label="Severity"
+            name="severity"
+            required
+            defaultValue={task?.severity ?? "medium"}
+            options={TASK_SEVERITIES.map((value) => ({ value, label: TASK_SEVERITY_LABELS[value] }))}
+            error={fieldErrors.severity}
           />
           <DeadlineFields
             today={today}

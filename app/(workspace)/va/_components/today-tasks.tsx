@@ -22,19 +22,17 @@ function dueLine(task: Task, now: Date) {
 
 /**
  * The VA's work for today: overdue first, then today's deadlines. Rows link to the task page, where the status
- * moves and the timer live — the dashboard itself changes nothing, so it ships no client code.
+ * moves live — the dashboard itself changes nothing, so it ships no client code.
  */
 export function TodayTasks({
   tasks,
   total,
-  delayed,
   tones,
   now,
 }: {
   tasks: readonly Task[];
   /** All of today's tasks, when `tasks` is cut short. */
   total: number;
-  delayed: ReadonlySet<string>;
   tones: ReadonlyMap<string, Tone>;
   now: Date;
 }) {
@@ -68,11 +66,6 @@ export function TodayTasks({
                   {late && (
                     <Badge tone="danger" size="sm">
                       Overdue
-                    </Badge>
-                  )}
-                  {delayed.has(task.id) && (
-                    <Badge tone="warning" size="sm">
-                      Delayed
                     </Badge>
                   )}
                   <Badge tone={SEVERITY_TONES[task.severity]} size="sm" icon={null}>

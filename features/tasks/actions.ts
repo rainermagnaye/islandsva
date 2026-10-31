@@ -7,9 +7,9 @@ import { requireRole } from "@/lib/auth/session";
 import { FIELD_ERRORS, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import { TASK_LIMITS, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField, type VaTaskField } from "./contract";
-import { addComment, attachFiles, bookVaTask, removeBlock, changeTaskStatus, createTask as saveTask, editComment, editTask, pauseTimer, removeComment, removeTask, sendBack, startTimer, submitForReview, type TaskWrite } from "./service";
+import { addComment, attachFiles, bookVaTask, removeBlock, changeTaskStatus, createTask as saveTask, editComment, editTask, removeComment, removeTask, sendBack, submitForReview, type TaskWrite } from "./service";
 import { readFiles } from "./upload";
-import { parseAttach, parseBlockId, parseComment, parseCommentDelete, parseCommentEdit, parseCreate, parseDelete, parseFeedback, parseStatus, parseSubmit, parseTimer, parseUpdate, parseVaTask } from "./validation";
+import { parseAttach, parseBlockId, parseComment, parseCommentDelete, parseCommentEdit, parseCreate, parseDelete, parseFeedback, parseStatus, parseSubmit, parseUpdate, parseVaTask } from "./validation";
 
 const MISSING = "That task no longer exists. Refresh the page.";
 
@@ -24,11 +24,7 @@ const FORM_COPY = {
   assignment: "That needs an active assignment with your VA.",
   not_allowed: "That change isn't available.",
   attachments: `A task can have up to ${TASK_LIMITS.attachments} files.`,
-  timer_running: "The timer can't start here. You may have a timer running on another task, or this task is in review or closed.",
-  timer_stopped: "The timer isn't running on this task.",
-  has_time: "This task has recorded work time, so it can't be deleted. Close it instead.",
 } as const;
-
 
 function fromWrite<Field extends string>(result: Exclude<TaskWrite, { ok: true }>): SubmitResult<Field> {
   if ("missing" in result) return { ok: false, message: MISSING };
@@ -67,7 +63,7 @@ export async function createTask(formData: FormData): Promise<SubmitResult<TaskF
   redirect(clientTaskHref(id));
 }
 
-/** The client changes the title, severity, duration and deadline until the task is closed. */
+/** The client changes the title, severity and deadline until the task is closed. */
 export async function updateTask(formData: FormData): Promise<SubmitResult<TaskField>> {
   const user = await requireRole(["client"]);
   const parsed = parseUpdate(formEntries(formData));
@@ -106,21 +102,6 @@ export async function setTaskStatus(formData: FormData): Promise<SubmitResult<Ta
     if (!saved.ok) return fromWrite(saved);
   } catch (error) {
     return outageResult(error, "Updating a task");
-  }
-  refresh();
-  return { ok: true };
-}
-
-/** The VA resumes or pauses their clock on a task. The database function checks that it is their task. */
-export async function setTaskTimer(formData: FormData): Promise<SubmitResult<string>> {
-  await requireRole(["va"]);
-  const parsed = parseTimer(formEntries(formData));
-  if (!parsed.ok) return toSubmitResult(parsed);
-  try {
-    const saved = parsed.value.timer === "start" ? await startTimer(parsed.value.taskId) : await pauseTimer(parsed.value.taskId);
-    if (!saved.ok) return fromWrite(saved);
-  } catch (error) {
-    return outageResult(error, parsed.value.timer === "start" ? "Starting a timer" : "Pausing a timer");
   }
   refresh();
   return { ok: true };

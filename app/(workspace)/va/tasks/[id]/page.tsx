@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { appRoutes, vaTaskFileHref } from "@/content/routes";
 import { TaskPage } from "@/features/tasks/components/task-page";
-import { getTask, listActiveVas, listTaskAttachments, listTaskComments, listTaskEvents, listWorkSessions } from "@/features/tasks/dal";
+import { getTask, listActiveVas, listTaskAttachments, listTaskComments, listTaskEvents } from "@/features/tasks/dal";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
 
@@ -29,12 +29,11 @@ async function VaTask({ params }: { params: PageProps<"/va/tasks/[id]">["params"
   const task = await getTask(id);
   if (!task) notFound();
 
-  const [comments, vas, attachments, events, sessions] = await Promise.all([
+  const [comments, vas, attachments, events] = await Promise.all([
     listTaskComments(task.id),
     listActiveVas(task.clientId),
     listTaskAttachments(task.id),
     listTaskEvents(task.id),
-    listWorkSessions([task.id]),
   ]);
   // Still on the assignment: the VA may start, submit and comment. The database checks the same (IVA24).
   const onAssignment = vas.some((va) => va.id === task.vaId);
@@ -46,7 +45,6 @@ async function VaTask({ params }: { params: PageProps<"/va/tasks/[id]">["params"
         viewerId={user.id}
         task={task}
         events={events}
-        sessions={sessions.get(task.id) ?? []}
         comments={comments}
         files={attachments.map((file) => ({ ...file, href: vaTaskFileHref(task.id, file.id) }))}
         timeZone={VA_TIME_ZONE}

@@ -8,19 +8,17 @@ import { performance, type TaskMetric } from "../metrics";
 const linkedCard = cx(cardSurface, "grid min-w-0 content-start gap-2 p-5 text-ink no-underline transition-colors hover:border-border-strong hover:elevation-sm");
 
 /**
- * Tasks done, on-time rate and overdue — and, when `delayed` is given, open tasks worked past their duration.
- * A rate with no completed tasks is an em dash, never 0%.
+ * Tasks done, on-time rate and overdue. A rate with no completed tasks is an em dash, never 0%.
  */
-export function TaskMetrics({ tasks, href, delayed, now = new Date() }: { tasks: readonly TaskMetric[]; href?: string; delayed?: number; now?: Date }) {
+export function TaskMetrics({ tasks, href, now = new Date() }: { tasks: readonly TaskMetric[]; href?: string; now?: Date }) {
   const figures = performance(tasks, now);
   const percent = figures.onTimeRate === null ? null : Math.round(figures.onTimeRate * 100);
 
   return (
-    <section aria-label="Task figures" className={cx("grid gap-4", delayed === undefined ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4")}>
+    <section aria-label="Task figures" className="grid gap-4 sm:grid-cols-3">
       <StatCard label="Tasks done" value={figures.done} icon="check" href={href} />
       <OnTime percent={percent} href={href} />
       <StatCard label="Overdue" value={figures.overdue} icon="alert-triangle" href={href} caption="Past the deadline" />
-      {delayed !== undefined && <StatCard label="Delayed" value={delayed} icon="clock" href={href} caption="Worked past the duration" />}
     </section>
   );
 }

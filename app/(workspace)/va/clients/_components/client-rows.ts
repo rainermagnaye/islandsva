@@ -1,16 +1,12 @@
 import { offsetMinutes } from "@/components/ui/date-math";
 import type { AssignedClient } from "@/features/clients/contract";
-import type { Task, WorkSession } from "@/features/tasks/contract";
+import type { Task } from "@/features/tasks/contract";
 import { isOverdue } from "@/features/tasks/metrics";
-import { isDelayed, msBetween, packageWeek } from "@/features/tasks/time";
 
-// The VA's client list: one row per client with their local time, this week's hours against the package, and
-// open work. Pure, so the page stays a thin read-and-render and the rules are tested here.
+// The VA's client list: one row per client with their local time, the package's weekly hours, and open work. Pure, so the page stays a thin read-and-render and the rules are tested here.
 
 /** VAs work from the Philippines; "ahead" and "behind" are said from there. */
 export const VA_ZONE = "Asia/Manila";
-/** Share of the week's hours at which a client "needs attention" (the progress bar turns amber here too). */
-export const NEAR_LIMIT = 0.85;
 
 export type TheirTime = {
   /** "1:00 am" */
@@ -30,11 +26,10 @@ export type ClientRow = {
   email: string;
   since: string;
   time: TheirTime | null;
-  /** Hours worked this week (their Monday to Sunday) and the hours a week agreed; null when none are agreed. */
-  hours: { used: number; agreed: number } | null;
+  /** The hours a week agreed; null when none are. Hours worked come with timesheets (M14). */
+  hoursPerWeek: number | null;
   open: number;
   overdue: number;
-  delayed: number;
   attention: boolean;
 };
 
@@ -74,20 +69,15 @@ export function theirTime(zone: string | null, now: Date): TheirTime | null {
   return { clock, city: cityOf(known), day, line: `${day ? "Daytime" : "Night"} there · ${gapLabel(gap)}` };
 }
 
-const roundHours = (ms: number) => Math.round((ms / 3_600_000) * 10) / 10;
 const sinceFormat = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
-/** One row per client, in the order given. Tasks and sessions are the VA's own (RLS), matched by client. */
-export function clientRows(clients: readonly AssignedClient[], tasks: readonly Task[], sessions: ReadonlyMap<string, readonly WorkSession[]>, now: Date): ClientRow[] {
+/** One row per client, in the order given. Tasks are the VA's own (RLS), matched by client. */
+export function clientRows(clients: readonly AssignedClient[], tasks: readonly Task[], now: Date): ClientRow[] {
   return clients.map((client) => {
     const theirs = tasks.filter((task) => task.clientId === client.id);
     const open = theirs.filter((task) => task.status !== "done");
-    const zone = knownZone(client.timezone) ?? VA_ZONE;
-    const week = packageWeek(zone, now);
-    const weekMs = msBetween(theirs.flatMap((task) => sessions.get(task.id) ?? []), week.start, week.end, now);
-    const hours = client.hoursPerWeek ? { used: roundHours(weekMs), agreed: client.hoursPerWeek } : null;
+    const hoursPerWeek = client.hoursPerWeek || null;
     const overdue = open.filter((task) => isOverdue(task, now)).length;
-    const delayed = open.filter((task) => isDelayed(task.durationMinutes, sessions.get(task.id) ?? [], now)).length;
     const time = theirTime(client.timezone, now);
     return {
       id: client.id,
@@ -96,11 +86,10 @@ export function clientRows(clients: readonly AssignedClient[], tasks: readonly T
       email: client.contactEmail,
       since: sinceFormat.format(new Date(client.startedAt)),
       time,
-      hours,
+      hoursPerWeek,
       open: open.length,
       overdue,
-      delayed,
-      attention: overdue > 0 || delayed > 0 || time === null || hours === null || hours.used >= hours.agreed * NEAR_LIMIT,
+      attention: overdue > 0 || time === null || hoursPerWeek === null,
     };
   });
 }

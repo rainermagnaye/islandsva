@@ -9,7 +9,7 @@ import { DropdownMenu, type MenuItem } from "@/components/ui/dropdown-menu";
 import { Stepper } from "@/components/ui/stepper";
 import { TASK_SEVERITY_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES, type Task } from "../contract";
 import { nextStatuses } from "../metrics";
-import { MoveButton } from "./task-moves";
+import { CompleteButton, MoveButton } from "./task-moves";
 
 const ClientTaskDialogs = lazy(() => import("./task-header-dialogs").then((m) => ({ default: m.ClientTaskDialogs })));
 const FeedbackDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ default: m.FeedbackDialog })));
@@ -17,8 +17,8 @@ const FeedbackDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ d
 export type TaskNotice = { tone: "info" | "success" | "warning"; title: string; body: string; quote?: string | null };
 
 /**
- * The task's header card: title and badges, the client's next moves, the four-step progress, and a notice for
- * the current step. The VA's Start, Pause, Resume and Complete live in the Time card, beside the clock. The database still decides every move (guard_task).
+ * The task's header card: title and badges, the next moves (the VA's Start and Complete, the client's review),
+ * the four-step progress, and a notice for the current step. The database still decides every move (guard_task).
  */
 export function TaskHeader({
   task,
@@ -90,6 +90,10 @@ export function TaskHeader({
               <MoveButton taskId={task.id} status="done" label="Approve and close" pendingLabel="Closing" icon="check" />
             </>
           )}
+          {viewer === "va" && task.status === "todo" && moves.includes("in_progress") && (
+            <MoveButton taskId={task.id} status="in_progress" label="Start task" pendingLabel="Starting" variant="primary" icon="arrow-right" />
+          )}
+          {viewer === "va" && moves.includes("review") && <CompleteButton taskId={task.id} companyName={task.companyName} variant={task.status === "todo" ? "ghost" : "primary"} />}
           {viewer === "client" && reopen && moves.includes("in_progress") && (
             <Button type="button" variant="ghost" onClick={() => setDialog("feedback")}>
               Reopen task

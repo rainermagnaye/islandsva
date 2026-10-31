@@ -18,12 +18,11 @@ import { listVaSlots } from "@/features/demos/dal";
 import { listWorkingHours } from "@/features/matching/dal";
 import { agenda, vaAgendaSources } from "@/features/meetings/agenda";
 import { listBookings } from "@/features/meetings/booking-dal";
-import { listTasks, listWorkSessions } from "@/features/tasks/dal";
+import { listTasks } from "@/features/tasks/dal";
 import { performance } from "@/features/tasks/metrics";
-import { delayedIds, packageWeek } from "@/features/tasks/time";
-import { dueToday, hoursOf, msByClient, trendStart, weeklyFigures } from "@/features/tasks/weekly";
+import { dueToday, weeklyFigures } from "@/features/tasks/weekly";
 import { ClientClocks } from "./client-clocks";
-import { ClientsPanel, HoursByClient } from "./client-hours";
+import { ClientsPanel } from "./client-hours";
 import { TodaySchedule } from "./today-schedule";
 import { TodayTasks } from "./today-tasks";
 
@@ -44,7 +43,7 @@ function dayline(now: Date) {
 
 /**
  * The approved VA's dashboard: the week in four numbers, today's tasks and calls, demo requests to answer, and
- * each client's hours. A VA with no clients yet gets the first-week setup instead.
+ * the clients with their agreed weekly hours. A VA with no clients yet gets the first-week setup instead.
  */
 export async function VaDashboard({ vaId, firstName }: { vaId: string; firstName: string }) {
   // Independent reads, in parallel; each runs as the signed-in VA, so RLS applies.
@@ -54,23 +53,10 @@ export async function VaDashboard({ vaId, firstName }: { vaId: string; firstName
   const now = new Date();
   const today = dueToday(tasks, now);
   const shown = today.slice(0, TASKS_SHOWN);
-  const [recent, todaySessions] = await Promise.all([
-    // Enough history for the sparklines; msBetween cuts each session at the week edges.
-    listWorkSessions(
-      tasks.map((task) => task.id),
-      trendStart(VA_TIME_ZONE, now, WEEKS),
-    ),
-    // Delayed compares a task's whole time with its duration, so these need every session.
-    listWorkSessions(shown.map((task) => task.id)),
-  ]);
-
-  const weeks = weeklyFigures(tasks, [...recent.values()].flat(), VA_TIME_ZONE, now, WEEKS);
+  const weeks = weeklyFigures(tasks, VA_TIME_ZONE, now, WEEKS);
   const [lastWeek, thisWeek] = weeks.slice(-2);
   const labels = weeks.map((week, index) => (index === weeks.length - 1 ? "This week" : weekLabel(week.monday)));
   const overall = performance(tasks, now);
-  const week = packageWeek(VA_TIME_ZONE, now);
-  const byClient = msByClient(tasks, recent, week.start, week.end, now);
-  const clientWeeks = clients.map((client) => ({ ...client, ms: byClient.get(client.id) ?? 0 }));
   const agreed = clients.reduce((sum, client) => sum + (client.hoursPerWeek ?? 0), 0);
   const tones = new Map(clients.map((client, index) => [client.id, TONES[index % TONES.length]]));
   const requests = demos.filter((demo) => demo.status === "pending").length;
@@ -88,14 +74,13 @@ export async function VaDashboard({ vaId, firstName }: { vaId: string; firstName
       actions={<ClientClocks zones={clients.map((client) => client.timezone)} now={now} />}
     >
       <section aria-label="This week" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Agreed hours only: hours worked come with timesheets (M14). */}
         <StatCard
-          label="Hours this week"
-          value={hoursOf(thisWeek.ms)}
-          unit={agreed > 0 ? `of ${agreed} h` : "h"}
+          label="Agreed hours"
+          value={agreed > 0 ? agreed : null}
+          unit="h a week"
           icon="clock"
-          caption={`Agreed across ${plural(clients.length, "client", "clients")}`}
-          trend={weeks.map((item) => hoursOf(item.ms))}
-          trendLabels={labels}
+          caption={`Across ${plural(clients.length, "client", "clients")}`}
         />
         <StatCard
           label="Closed this week"
@@ -123,17 +108,14 @@ export async function VaDashboard({ vaId, firstName }: { vaId: string; firstName
         {/* Each row's cards stretch to the taller side, so the columns end together; the schedule sits under the
             tasks to balance the demo requests beside them. */}
         <GridItem span={4} md={8} lg={8} className="grid-rows-[auto_1fr] gap-6">
-          <TodayTasks tasks={shown} total={today.length} delayed={delayedIds(shown, todaySessions, now)} tones={tones} now={now} />
+          <TodayTasks tasks={shown} total={today.length} tones={tones} now={now} />
           <TodaySchedule items={schedule} />
         </GridItem>
         <GridItem span={4} md={8} lg={4}>
           <DemoRequests demos={demos} />
         </GridItem>
-        <GridItem span={4} md={8} lg={8}>
-          <ClientsPanel clients={clientWeeks.slice(0, CLIENTS_SHOWN)} total={clients.length} now={now} />
-        </GridItem>
-        <GridItem span={4} md={8} lg={4}>
-          <HoursByClient clients={clientWeeks} />
+        <GridItem span={4} md={8} lg={12}>
+          <ClientsPanel clients={clients.slice(0, CLIENTS_SHOWN)} total={clients.length} now={now} />
         </GridItem>
       </Grid>
     </Workspace>
@@ -206,7 +188,7 @@ async function FirstWeek({ vaId, firstName, demos }: { vaId: string; firstName: 
       </Grid>
 
       <section aria-label="This week" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Hours this week" value={null} icon="clock" caption="Starts when you log your first hours" />
+        <StatCard label="Agreed hours" value={null} icon="clock" caption="Set when you get your first client" />
         <StatCard label="Closed this week" value={null} icon="check" caption="Starts with your first client task" />
         <StatCard label="On-time rate" value={null} icon="star" caption="Needs a closed task" />
         <StatCard label="Active clients" value={0} icon="briefcase" caption="Demos turn into clients here" />

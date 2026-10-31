@@ -108,7 +108,7 @@ export function VaTaskForm({ clients, tasks, today, last, onDone }: { clients: r
           </div>
           <p className="m-0 type-body-sm text-ink-muted">
             On your calendar {clockLabel(Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5)))} – {end}.
-            {mode === "new" && client ? " The task is due when this time ends. Hours count only while its timer runs." : ""}
+            {mode === "new" && client ? " The task is due when this time ends." : ""}
           </p>
 
           <div className="flex justify-end">

@@ -1,21 +1,13 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/card";
 import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
 import { clockLabel, minutesOf, wallClockIn, zoneCity } from "@/components/ui/date-math";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import { appRoutes, vaClientHref } from "@/content/routes";
 import type { AssignedClient } from "@/features/clients/contract";
 import { safeTimeZone } from "@/features/demos/contract";
-import { hoursOf, hoursStatus } from "@/features/tasks/weekly";
 
-/** A client with the hours the VA logged for them this week. */
-export type ClientWeek = AssignedClient & { ms: number };
-
-const hoursText = (client: ClientWeek) => (client.hoursPerWeek ? `${hoursOf(client.ms)} of ${client.hoursPerWeek} h` : `${hoursOf(client.ms)} h`);
-
-function columns(now: Date): Column<ClientWeek>[] {
+function columns(now: Date): Column<AssignedClient>[] {
   return [
     {
       key: "company",
@@ -49,27 +41,19 @@ function columns(now: Date): Column<ClientWeek>[] {
         return <CellTitle title={clockLabel(minutesOf(wallClockIn(now.toISOString(), zone)))} subtitle={zoneCity(zone)} />;
       },
     },
-    { key: "hours", label: "This week", align: "end", width: "18%", render: hoursText },
+    // Agreed hours only: hours worked come with timesheets (M14).
     {
-      key: "status",
-      label: "Status",
-      width: "22%",
-      render: (client) => {
-        const status = hoursStatus(client.ms, client.hoursPerWeek);
-        return status ? (
-          <Badge tone={status.tone} size="sm">
-            {status.label}
-          </Badge>
-        ) : (
-          <span className="text-ink-muted">No agreed hours</span>
-        );
-      },
+      key: "hours",
+      label: "Agreed",
+      align: "end",
+      width: "18%",
+      render: (client) => (client.hoursPerWeek ? `${client.hoursPerWeek} h a week` : <span className="text-ink-muted">Not set</span>),
     },
   ];
 }
 
-/** The VA's clients this week: their time now and the hours logged against what was agreed. The Clients page has the rest. */
-export function ClientsPanel({ clients, total, now }: { clients: readonly ClientWeek[]; total: number; now: Date }) {
+/** The VA's clients: their time now and the weekly hours agreed. The Clients page has the rest. */
+export function ClientsPanel({ clients, total, now }: { clients: readonly AssignedClient[]; total: number; now: Date }) {
   return (
     <Panel
       boxed
@@ -91,21 +75,6 @@ export function ClientsPanel({ clients, total, now }: { clients: readonly Client
         selectable={false}
         empty={<EmptyState compact headingLevel={3} title="No clients yet" description="An admin assigns clients to you. They'll show here once you're matched." />}
       />
-    </Panel>
-  );
-}
-
-/** One bar per client with agreed hours. Warning from 85%, danger at the limit, the number always in words. */
-export function HoursByClient({ clients }: { clients: readonly ClientWeek[] }) {
-  const agreed = clients.filter((client) => client.hoursPerWeek);
-  return (
-    <Panel boxed className="content-start" title="Hours by client">
-      {agreed.length === 0 ? (
-        <p className="m-0 type-body-sm text-ink-muted">None of your clients has agreed weekly hours yet.</p>
-      ) : (
-        agreed.map((client) => <ProgressBar key={client.id} label={client.companyName} value={hoursOf(client.ms)} max={client.hoursPerWeek ?? 0} valueText={hoursText(client)} />)
-      )}
-      <p className="m-0 type-caption text-ink-muted">Hours you logged with the task timer. The week resets Monday, 12 am Manila time.</p>
     </Panel>
   );
 }
