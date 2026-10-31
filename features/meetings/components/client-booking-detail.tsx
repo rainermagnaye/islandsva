@@ -3,8 +3,9 @@
 import { cancelClientBookingAction, completeClientBookingAction, saveClientBookingNote } from "../client-actions";
 import type { Booking } from "../contract";
 import { BookingDetail } from "./booking-detail";
+import { AnswerMeetingRequest } from "./meeting-request";
 
-/** Client booking sheet: cancel, complete and add a note on meetings they created. */
+/** Client booking sheet: cancel, complete and add a note on meetings they created; answer one their VA asked for. */
 export function ClientBookingDetail({
   booking,
   canManage,
@@ -22,6 +23,7 @@ export function ClientBookingDetail({
     <BookingDetail
       booking={booking}
       canManage={canManage}
+      banner={booking.kind === "manual" && booking.status === "requested" && !canManage ? <AnswerMeetingRequest booking={booking} onDone={onDone} /> : undefined}
       onClose={onClose}
       onEdit={onEdit}
       onDone={onDone}

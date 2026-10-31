@@ -60,7 +60,7 @@ async function AdminHome() {
     .map((va) => ({ id: va.id, firstName: va.fullName }));
 
   return (
-    <Workspace title="Dashboard" lead="Pipeline, clients, packages and how your VAs are loaded.">
+    <Workspace title="Dashboard">
       {discovery.times.length === 0 && (
         <p className="m-0 type-body-sm text-ink-muted">
           Visitors can&apos;t request a discovery call yet. <Link href={appRoutes.adminSettings}>Set discovery times</Link>

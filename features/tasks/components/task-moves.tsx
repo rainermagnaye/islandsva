@@ -1,5 +1,6 @@
 "use client";
 
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import type { IconName } from "@/types/icon";
@@ -34,6 +35,25 @@ export function MoveButton({
         </>
       )}
     </Form>
+  );
+}
+
+const SubmitDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ default: m.SubmitDialog })));
+
+/** The VA's Complete: opens the handover dialog (optional note), which sends the task to review and stops the clock. */
+export function CompleteButton({ taskId, companyName, variant = "primary" }: { taskId: string; companyName: string; variant?: "primary" | "ghost" }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button type="button" variant={variant} iconLeft="check" onClick={() => setOpen(true)}>
+        Complete task
+      </Button>
+      {open && (
+        <Suspense fallback={null}>
+          <SubmitDialog open onClose={() => setOpen(false)} taskId={taskId} companyName={companyName} />
+        </Suspense>
+      )}
+    </>
   );
 }
 

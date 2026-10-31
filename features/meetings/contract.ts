@@ -41,6 +41,11 @@ export const BOOKING_LIMITS = {
   guests: 20,
 } as const;
 
+/** How long a meeting a VA books can run, in minutes (the database allows up to 8 hours). */
+export const VA_MEETING_LENGTHS = [15, 30, 45, 60, 90, 120] as const;
+
+export type VaMeetingField = "title" | "clientId" | "staffIds" | "date" | "startTime" | "minutes" | "note";
+
 export const MANILA_OFFSET = "+08:00";
 export const BOOKING_TIME_ZONE = "Asia/Manila";
 

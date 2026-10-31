@@ -4,12 +4,20 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { formatMs } from "../time";
 
-const TICK_MS = 15_000;
+const TICK_MS = 1_000;
+
+const pad = (value: number) => String(value).padStart(2, "0");
+/** "00:24:10" */
+const stopwatch = (ms: number) => {
+  const seconds = Math.floor(Math.max(0, ms) / 1000);
+  return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
+};
 
 /**
  * Duration, time used and time left. While the VA's timer runs, the numbers move on their own: the server sends
  * the closed sessions' total and the running start, and this counts from there. The first paint uses the
- * server's clock, so it matches the HTML; the next tick (every 15 seconds) moves to the browser's.
+ * server's clock, so it matches the HTML; the next tick (every second, only while running) moves to the browser's.
+ * A running session also shows its own stopwatch.
  */
 export function TaskTimeFigures({ durationMinutes, closedMs, runningSince, serverNow }: { durationMinutes: number; closedMs: number; runningSince: string | null; serverNow: string }) {
   const [now, setNow] = useState(() => Date.parse(serverNow));
@@ -23,7 +31,18 @@ export function TaskTimeFigures({ durationMinutes, closedMs, runningSince, serve
   const left = durationMinutes * 60_000 - used;
   const over = left < 0;
 
+  const session = runningSince ? Math.max(0, now - Date.parse(runningSince)) : null;
+
   return (
+    <div className="grid gap-4">
+      {session !== null && (
+        <p className="m-0 grid gap-1">
+          <span className="type-label text-ink-muted">This session</span>
+          <span role="timer" aria-live="off" className="type-display-lg tabular-nums text-ink">
+            {stopwatch(session)}
+          </span>
+        </p>
+      )}
     <dl className="m-0 grid gap-4 sm:grid-cols-3">
       <div className="grid gap-1">
         <dt className="type-label text-ink-muted">Duration</dt>
@@ -45,5 +64,6 @@ export function TaskTimeFigures({ durationMinutes, closedMs, runningSince, serve
         </dd>
       </div>
     </dl>
+    </div>
   );
 }

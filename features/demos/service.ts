@@ -1,6 +1,8 @@
 import "server-only";
 import { findOwnClient } from "@/features/clients/service";
-import { bookDemo, cancelDemo, decideDemo, type BookedDemo, type CancelledDemo, type DecidedDemo } from "./booking-dal";
+import { listOwnBookings } from "@/features/meetings/service";
+import { bookDemo, cancelDemo, decideDemo, listVaDemos, type BookedDemo, type CancelledDemo, type DecidedDemo } from "./booking-dal";
+import { busyFrom, splitFree } from "./slot-times";
 import { sendDemoCancelledEmail, sendDemoDecisionEmail, sendDemoRequestEmail } from "./email";
 
 // Demo use cases. Callers check the session first and pass the verified user; the database functions check
@@ -48,4 +50,13 @@ export async function notifyDemoDecided(demo: DecidedDemo) {
     confirmed: demo.status === "confirmed",
     reason: demo.reject_reason,
   });
+}
+
+/**
+ * The requested slot starts that are still free, and the ones a meeting or demo call now overlaps. Read again on
+ * save, so a booking made while the VA was choosing is caught.
+ */
+export async function freeSlotStarts(vaId: string, startsAt: readonly string[]) {
+  const [bookings, demos] = await Promise.all([listOwnBookings(), listVaDemos(vaId)]);
+  return splitFree(startsAt, busyFrom(bookings, demos));
 }

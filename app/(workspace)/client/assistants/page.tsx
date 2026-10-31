@@ -52,12 +52,11 @@ async function ClientAssistants() {
   }
 
   const [assignments, company, tasks] = await Promise.all([listActiveAssignments(client.id), getOwnCompany(user.id), listTasks()]);
-  const lead = "Who works for you, and what they're on right now.";
 
   if (assignments.length === 0) {
     const demo = await getLatestDemo(client.id);
     return (
-      <Workspace title="My assistants" lead="Your VAs show up here once you choose one.">
+      <Workspace title="My assistants">
         <EmptyState
           title="No assistant yet"
           description="Pick from the VAs we've matched to you. Your VA shows up here once you accept."
@@ -124,7 +123,6 @@ async function ClientAssistants() {
   return (
     <Workspace
       title="My assistants"
-      lead={lead}
       actions={
         <>
           <Button href={appRoutes.clientMatch} variant="ghost" iconLeft="star">
