@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { IconName } from "@/types/icon";
 import { Modal } from "@/components/ui/modal";
 import { cx } from "@/lib/cx";
-import { AddSlotsForm } from "@/features/demos/components/add-slots-form";
 import type { BusyTime } from "@/features/demos/slot-times";
 import type { BookingChoice } from "@/features/meetings/contract";
-import { VaMeetingForm, type VaMeetingClient } from "@/features/meetings/components/va-meeting-form";
-import { VaTaskForm } from "@/features/tasks/components/va-task-form";
+import type { VaMeetingClient } from "@/features/meetings/components/va-meeting-form";
+
+// The three book forms (DatePicker, Select, TextField, their actions) stay off /va/calendar's first load;
+// they download when the VA picks a kind. Inlined they push the page over its 169 KB cap.
+const AddSlotsForm = lazy(() => import("@/features/demos/components/add-slots-form").then((m) => ({ default: m.AddSlotsForm })));
+const VaMeetingForm = lazy(() => import("@/features/meetings/components/va-meeting-form").then((m) => ({ default: m.VaMeetingForm })));
+const VaTaskForm = lazy(() => import("@/features/tasks/components/va-task-form").then((m) => ({ default: m.VaTaskForm })));
 
 type Kind = "slots" | "meeting" | "task";
 
@@ -59,11 +63,13 @@ export function BookButton({ today, last, slots, clients, team, openTasks }: Boo
                 </label>
               ))}
             </fieldset>
-            {kind === "slots" && <AddSlotsForm key={formKey} today={today} last={last} {...slots} onAdded={close} />}
-            {kind === "meeting" && <VaMeetingForm key={formKey} today={today} last={last} clients={clients} team={team} onDone={close} />}
-            {kind === "task" && (
-              <VaTaskForm key={formKey} today={today} last={last} clients={clients.map((client) => ({ id: client.id, label: client.label }))} tasks={openTasks} onDone={close} />
-            )}
+            <Suspense fallback={null}>
+              {kind === "slots" && <AddSlotsForm key={formKey} today={today} last={last} {...slots} onAdded={close} />}
+              {kind === "meeting" && <VaMeetingForm key={formKey} today={today} last={last} clients={clients} team={team} onDone={close} />}
+              {kind === "task" && (
+                <VaTaskForm key={formKey} today={today} last={last} clients={clients.map((client) => ({ id: client.id, label: client.label }))} tasks={openTasks} onDone={close} />
+              )}
+            </Suspense>
           </div>
         )}
       </Modal>
