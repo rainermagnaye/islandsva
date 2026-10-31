@@ -27,6 +27,8 @@ export async function listBlocks(vaId: string, since: Date): Promise<CalendarBlo
     .gt("ends_at", since.toISOString())
     .order("starts_at")
     .limit(500);
+  // PGRST205: the table is not in this database yet (va_bookings is unapplied). The calendar still loads.
+  if (error?.code === "PGRST205") return [];
   if (error) throw new UpstreamError("supabase", `Listing calendar blocks failed (${error.code})`);
   return ((data ?? []) as unknown as BlockRow[]).map((row) => ({
     id: row.id,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarExtras, workingShifts } from "./calendar-events";
+import { calendarExtras } from "./calendar-events";
 
 const task = { id: "t1", title: "Inbox", vaFirstName: "Ana", deadline: "2026-11-02", deadlineTime: "17:00", deadlineTimezone: "Asia/Manila", status: "todo" as const };
 
@@ -57,14 +57,5 @@ describe("calendarExtras blocks", () => {
     expect(extras[0]).toMatchObject({ href: "/va/tasks/t1", event: { title: "Work: Recall list", start: "2026-11-02T10:30", end: "2026-11-02T12:00", who: "Lumen" } });
     expect(extras[1].href).toBeUndefined();
     expect(extras[1].event).toMatchObject({ id: "block:b2", title: "Inbox zero", who: "To-do" });
-  });
-});
-
-describe("workingShifts", () => {
-  it("maps ISO weekdays to Sunday-based days and sorts day from night", () => {
-    expect(workingShifts([{ weekday: 7, startMinute: 540, endMinute: 1080 }, { weekday: 1, startMinute: 1320, endMinute: 1440 }])).toEqual([
-      { kind: "day", start: "09:00", end: "18:00", label: "Working hours", days: [0] },
-      { kind: "night", start: "22:00", end: "00:00", label: "Working hours", days: [1] },
-    ]);
   });
 });

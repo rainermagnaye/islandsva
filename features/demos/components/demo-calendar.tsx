@@ -182,8 +182,8 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
         </div>
       </div>
 
-      <div className="flex flex-wrap items-stretch gap-5">
-      <div className="min-w-0 flex-[999_1_40rem]">
+      <div className={cx("grid items-stretch gap-5", aside ? "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]" : undefined)}>
+      <div className="min-w-0">
       {view === "month" ? (
         <MonthBoard focus={focus} today={today} events={events} legend={legend} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />
       ) : (
@@ -204,7 +204,11 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
         />
       )}
       </div>
-      {aside && <div className="flex min-w-0 flex-[1_1_18rem] lg:max-w-[22rem]">{aside}</div>}
+      {aside && (
+        <div className="relative min-h-72 min-w-0">
+          <div className="flex min-h-0 flex-col gap-4 lg:absolute lg:inset-0">{aside}</div>
+        </div>
+      )}
       </div>
     </div>
   );

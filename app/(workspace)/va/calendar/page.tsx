@@ -1,28 +1,29 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
+import { WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Panel } from "@/components/ui/card";
+import { Container } from "@/components/ui/container";
 import { minutesOf, wallClockIn } from "@/components/ui/date-math";
 import { appRoutes, vaTaskHref } from "@/content/routes";
 import { listAssignedClients } from "@/features/clients/assignment-dal";
 import { listVaDemos } from "@/features/demos/booking-dal";
 import { VaDemoList } from "@/features/demos/components/va-demo-list";
-import { VaSlotList } from "@/features/demos/components/va-slot-list";
 import { DEMO_LIMITS, manilaDate, VA_TIME_ZONE } from "@/features/demos/contract";
 import { listVaSlots } from "@/features/demos/dal";
 import { busyFrom } from "@/features/demos/slot-times";
 import { listWorkingHours } from "@/features/matching/dal";
 import { agenda, vaAgendaSources } from "@/features/meetings/agenda";
 import { listBookings } from "@/features/meetings/booking-dal";
+import { scheduleRows } from "@/features/meetings/schedule";
 import { listTeamForVa } from "@/features/meetings/service";
 import { listTasks } from "@/features/tasks/dal";
 import { listVaBlocks } from "@/features/tasks/service";
+import { datedTasks } from "@/features/tasks/team";
 import { loadVaAccess } from "@/features/users/service";
 import { requireRole } from "@/lib/auth/session";
-import { TodaySchedule } from "../_components/today-schedule";
 import { BookButton } from "./_components/book-button";
-import { CALENDAR_LEGEND, calendarExtras, workingShifts } from "./_components/calendar-events";
+import { calendarExtras } from "./_components/calendar-events";
 import { VaCalendarView } from "./_components/va-calendar-view";
 
 export const metadata: Metadata = { title: "Calendar" };
@@ -59,7 +60,39 @@ async function VaCalendar() {
   const clock = wallClockIn(now.toISOString(), VA_TIME_ZONE);
   const ownTasks = tasks.filter((task) => task.vaId === user.id);
   const extras = calendarExtras({ demos, slots, tasks: ownTasks, blocks }, VA_TIME_ZONE, vaTaskHref);
-  const comingUp = agenda(vaAgendaSources({ bookings, demos }), VA_TIME_ZONE, now, 7).slice(0, 6);
+  const dated = datedTasks(ownTasks, now).map(({ task, at, overdue }) => ({
+    id: task.id,
+    title: task.title,
+    vaFirstName: task.companyName,
+    at,
+    status: task.status,
+    overdue,
+    href: vaTaskHref(task.id),
+  }));
+  const calls = demos.flatMap((demo) =>
+    demo.status === "pending" || demo.status === "confirmed"
+      ? [{ id: demo.id, vaName: demo.companyName, startsAt: demo.startsAt, endsAt: demo.endsAt, state: demo.status, href: `${appRoutes.vaCalendar}#demo-requests` }]
+      : [],
+  );
+  const comingUp = agenda(
+    [
+      ...vaAgendaSources({ bookings, demos }),
+      ...dated.map((task) => ({
+        key: `task:${task.id}`,
+        kind: "deadline" as const,
+        title: task.title,
+        at: task.at,
+        end: null,
+        who: task.vaFirstName,
+        overdue: task.overdue,
+        badge: task.overdue ? { label: "Overdue" as const, tone: "danger" as const } : null,
+        href: task.href,
+        bookingId: null,
+      })),
+    ],
+    VA_TIME_ZONE,
+    now,
+  );
   const requests = demos.filter((demo) => demo.status === "pending");
   const openTasks = ownTasks
     .filter((task) => task.status !== "done")
@@ -77,28 +110,25 @@ async function VaCalendar() {
   );
 
   return (
-    <Workspace title="Calendar" actions={book}>
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <VaCalendarView
-          showToolbar
-          ownerId={user.id}
-          bookings={bookings}
-          extras={extras}
-          shifts={workingShifts(windows)}
-          legend={CALENDAR_LEGEND}
-          today={clock.slice(0, 10)}
-          nowMinutes={minutesOf(clock)}
-        />
-        <aside aria-label="Demos and what's next" className="grid content-start gap-4">
+    <Container className="workspace-page grid gap-8 py-6 md:py-8">
+      <VaCalendarView
+        ownerId={user.id}
+        bookings={bookings}
+        extras={extras}
+        agenda={comingUp}
+        schedule={scheduleRows({ bookings, tasks: dated, demos: calls })}
+        today={clock.slice(0, 10)}
+        now={now.toISOString()}
+        nowMinutes={minutesOf(clock)}
+        actions={book}
+        tools={
           <Panel boxed title="Demo requests">
-            <VaDemoList demos={requests} />
+            <div id="demo-requests">
+              <VaDemoList demos={requests} />
+            </div>
           </Panel>
-          <TodaySchedule title="Coming up" showDay items={comingUp} empty="Nothing in the next 7 days." />
-          <Panel boxed title="Your slots">
-            <VaSlotList slots={slots} />
-          </Panel>
-        </aside>
-      </div>
-    </Workspace>
+        }
+      />
+    </Container>
   );
 }
