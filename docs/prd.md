@@ -51,7 +51,7 @@ One platform for an agency: a public site that books discovery calls, a Lead Gen
 - **Every change is logged:** an activity log records who changed which lead, call, client, assignment or task, and when. No one can edit or delete it. Each person sees the entries for their own records; admins see all.
 - **Won is one click:** it creates the client and sends the registration link.
 - **The client picks their VA** from an admin shortlist, with an optional intro call.
-- **Hours are what the timer logged:** the VA starts and pauses it, the database clock records it, and only an admin corrects it. A day counts up to its target, never more (8 h 15 min on an 8 h target uses 8 h); a short day uses what was worked. The client validates every day after the month ends; days left undecided for 5 days are approved.
+- **Hours are what the timer logged:** the VA starts and pauses it, the database clock records it, and only an admin corrects it. A weekday counts up to its target, never more (8 h 15 min on an 8 h target uses 8 h); a short day uses what was worked; weekend hours count toward the week in full. Every client sees hours worked and the remaining balance. The client validates every day after the month ends; days left undecided for 5 days are approved.
 
 ## Principles
 

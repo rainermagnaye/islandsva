@@ -64,14 +64,15 @@ One model for every call; one Google integration; one history.
 
 - **Timer:** play opens a `work_sessions` row for one assigned client (active client, active assignment, VA portal open); pause closes it. Start and end come from the database clock, never the browser. One running session per VA (partial unique index). Playing another client while one runs: the app warns in a dialog, then one database function closes the running session and opens the new one in a single transaction.
 - **Days and weeks:** Asia/Manila, midnight to midnight, weeks Monday to Sunday. A session running at midnight is closed at midnight (Supabase `pg_cron`, as for discovery expiry) and flagged for an admin; the VA presses play again to continue.
-- **Targets:** per client per day = `hours_per_week` ÷ 5 (Essentials 4 h, Executive 8 h, Day and night 16 h). The VA's day goal = the sum over their active clients. A day is complete when worked ≥ target.
-- **Hours used** per client per day = min(worked, target): 8 h 15 min on an 8 h target uses 8 h; 6 h uses 6 h. Weekly balance = `hours_per_week` − used this week; monthly balance = `hours_per_week` × 52 ÷ 12 − used this month (40 h → 173.3 h). Computed from sessions, never stored (pure rules beside the feature, tested).
+- **Targets:** per client per weekday (Monday to Friday) = `hours_per_week` ÷ 5 (Essentials 4 h, Executive 8 h, Day and night 16 h). The VA's day goal = the sum over their active clients. A day is complete when worked ≥ target.
+- **Hours used** per client per weekday = min(worked, target), per weekend day = worked: 8 h 15 min on an 8 h target uses 8 h; 6 h uses 6 h. Weekly balance = `hours_per_week` − used this week; monthly balance = `hours_per_week` × 52 ÷ 12 − used this month (40 h → 173.3 h). Computed from sessions, never stored (pure rules beside the feature, tested).
 - **Live:** the counter ticks in the browser from the session's server start; totals and balances are recomputed on each page load and after every play / pause (Server Action, then `refresh()`). No polling or sockets.
 - **Shown:** the VA sees, per client and in total, today's counter, first start and last stop, progress to target, hours today / this week / this month, balance left this week and month, and every session by day with its validation status. The client sees the same for each of their VAs. Admins see all, plus flagged and disputed days. Pending and validated hours are shown apart.
 - **Validation:** from the 1st, the client reviews last month per VA: approve or dispute each day (a dispute needs a note). An admin resolves a dispute by correcting sessions or upholding them, which approves the day. Days still pending 5 days after month end are approved by `pg_cron` (actor System). An approved day is locked: no further corrections.
 - **Corrections:** admins only (2FA), audited with old and new times. The VA can't edit times; the client can't edit, only dispute.
 - **Audited:** session corrections and day decisions (`audit_log`; times and statuses keep values, the note is recorded by name only).
-- **Open:** weekend days (no target, or count toward the week); a client with no package hours (show worked hours only).
+- **Weekends:** Saturday and Sunday have no target and no daily cap; every hour worked counts toward that week's and month's hours used.
+- **Every client shows hours and remaining balance.** The package is set at conversion (`clients_package_complete`), so active clients have `hours_per_week`; an older client without it shows hours worked and "No package set" for the balance until an admin sets the package.
 
 ## Status flows
 
