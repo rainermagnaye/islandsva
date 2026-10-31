@@ -5,7 +5,7 @@ import { CellTitle, DataTable, type Column } from "@/components/ui/data-table";
 import { clockLabel, minutesOf, wallClockIn, zoneCity } from "@/components/ui/date-math";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import { appRoutes } from "@/content/routes";
+import { appRoutes, vaClientHref } from "@/content/routes";
 import type { AssignedClient } from "@/features/clients/contract";
 import { safeTimeZone } from "@/features/demos/contract";
 import { hoursOf, hoursStatus } from "@/features/tasks/weekly";
@@ -24,9 +24,10 @@ function columns(now: Date): Column<ClientWeek>[] {
       render: (client) => (
         <CellTitle
           title={
-            <span className="block truncate" title={client.companyName}>
+            // The row link stretches across the whole row, so any cell opens the client's profile.
+            <Link href={vaClientHref(client.id)} className="row-link" title={client.companyName}>
               {client.companyName}
-            </span>
+            </Link>
           }
           subtitle={
             <span className="block truncate" title={client.contactName}>

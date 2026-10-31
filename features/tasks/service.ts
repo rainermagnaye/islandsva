@@ -1,5 +1,7 @@
 import "server-only";
-import { TASK_LIMITS, type TaskSeverity, type TaskStatus } from "./contract";
+import { convertWallClock } from "@/components/ui/date-math";
+import { TASK_LIMITS, severityForMinutes, type TaskSeverity, type TaskStatus } from "./contract";
+import { assignedClientZone, deleteBlock, insertBlock, listBlocks } from "./blocks-dal";
 import {
   deleteTask as deleteTaskRow,
   deleteTaskComment,
@@ -19,6 +21,7 @@ import {
   type TaskWrite,
 } from "./dal";
 import { acceptableDeadline, taskTimeZone } from "./metrics";
+import type { VaTaskInput } from "./validation";
 import { defaultDuration } from "./time";
 
 export type { TaskWrite };
@@ -170,4 +173,72 @@ export async function findTasks(term: string, limit: number) {
   const needle = term.toLocaleLowerCase();
   const tasks = await listTasks();
   return tasks.filter((task) => task.title.toLocaleLowerCase().includes(needle)).slice(0, limit);
+}
+
+export type VaBookingResult =
+  | { ok: true; kind: "task" | "todo" | "block" }
+  | { ok: false; field?: "clientId" | "taskId" | "date" | "startTime"; message: string };
+
+const MANILA = "Asia/Manila";
+
+/**
+ * "Book › Task" from the VA calendar. With a client: a task for that client (the client reviews and closes it, as
+ * with their own), due when the block ends in the client's zone, and a block for it. Without a client: a to-do
+ * block of the VA's own. On an existing task: a block on it. The caller has already checked the VA role.
+ */
+export async function bookVaTask(vaId: string, input: VaTaskInput): Promise<VaBookingResult> {
+  const startsAt = new Date(`${input.date}T${input.startTime}:00+08:00`);
+  const endsAt = new Date(startsAt.getTime() + input.minutes * 60_000);
+  if (endsAt.getTime() <= Date.now()) return { ok: false, field: "startTime", message: "Choose a time that's still ahead." };
+  const span = { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+
+  if (input.mode === "block") {
+    const written = await insertBlock({ taskId: input.taskId, title: null, ...span });
+    return written.ok ? { ok: true, kind: "block" } : { ok: false, field: "taskId", message: "Choose one of your open tasks." };
+  }
+
+  if (!input.clientId) {
+    const written = await insertBlock({ taskId: null, title: input.title, ...span });
+    return written.ok ? { ok: true, kind: "todo" } : { ok: false, message: "That time can't be blocked. Check the title and length." };
+  }
+
+  const client = await assignedClientZone(input.clientId);
+  if (!client) return { ok: false, field: "clientId", message: "Choose one of your clients." };
+  const zone = taskTimeZone(client.timezone);
+  // The task is due when the block ends, as a wall clock in the client's zone (how their deadlines are kept).
+  const due = convertWallClock(`${input.date}T${input.startTime}`, MANILA, zone);
+  const end = new Date(Date.parse(`${due.date}T${due.time}:00Z`) + input.minutes * 60_000).toISOString();
+  const deadline = end.slice(0, 10);
+  const deadlineTime = end.slice(11, 16);
+  if (acceptableDeadline(deadline, deadlineTime, zone) !== "ok") return { ok: false, field: "date", message: "Choose a day from today through the next year." };
+
+  const created = await insertTask({
+    clientId: input.clientId,
+    vaId,
+    title: input.title,
+    description: input.description,
+    severity: severityForMinutes(input.minutes),
+    durationMinutes: input.minutes,
+    deadline,
+    deadlineTime,
+    createdBy: vaId,
+  });
+  if (!created.ok) {
+    if ("form" in created && created.form === "assignment") return { ok: false, field: "clientId", message: "Choose a client you're assigned to." };
+    if ("form" in created && created.form === "company") return { ok: false, field: "clientId", message: "That client's account isn't active." };
+    if ("field" in created) return { ok: false, field: "date", message: "Choose a day from today through the next year." };
+    return { ok: false, message: "That task can't be added right now." };
+  }
+  const block = await insertBlock({ taskId: created.id, title: null, ...span });
+  // The task stands even if its block didn't save; the VA can block time on it again.
+  return block.ok ? { ok: true, kind: "task" } : { ok: false, message: "The task was added, but its time couldn't be blocked. Use Block time on a task." };
+}
+
+/** The VA's blocks still ahead (and today's earlier ones), for the calendar. */
+export function listVaBlocks(vaId: string, since: Date) {
+  return listBlocks(vaId, since);
+}
+
+export function removeBlock(blockId: string) {
+  return deleteBlock(blockId);
 }

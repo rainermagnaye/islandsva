@@ -107,3 +107,25 @@ export type OwnCompany = {
   disabledAt: string | null;
   timezone: string | null;
 };
+
+// The VA calendar's "Book › Task". Limits match the calendar_blocks checks (a block is at most 12 hours).
+
+/** Lengths a VA picks for a new task or a block of time, in minutes. */
+export const VA_BLOCK_LENGTHS = [30, 60, 90, 120, 180, 240] as const;
+
+export type VaTaskField = "mode" | "title" | "clientId" | "taskId" | "description" | "date" | "startTime" | "minutes";
+
+/** Time a VA set aside: on one of their tasks (`taskId`, with that task's title and company) or a to-do of their own. */
+export type CalendarBlock = {
+  id: string;
+  taskId: string | null;
+  title: string;
+  companyName: string | null;
+  startsAt: string;
+  endsAt: string;
+};
+
+/** The severity a VA's new task gets from its length, so the client sees the same scale as their own tasks. */
+export function severityForMinutes(minutes: number): TaskSeverity {
+  return minutes <= TASK_DURATION.defaults.low ? "low" : minutes <= TASK_DURATION.defaults.medium ? "medium" : "high";
+}

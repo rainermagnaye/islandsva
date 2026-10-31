@@ -10,10 +10,10 @@ export function VaShell({ children }: { children: ReactNode }) {
         label="VA"
         items={[
           { href: appRoutes.va, label: "Dashboard", icon: "home", exact: true },
-          { href: appRoutes.vaClients, label: "Clients", icon: "briefcase" },
-          { href: appRoutes.vaTasks, label: "Tasks", icon: "check" },
-          { href: appRoutes.vaHours, label: "Hours", icon: "clock" },
           { href: appRoutes.vaCalendar, label: "Calendar", icon: "calendar" },
+          { href: appRoutes.vaTasks, label: "Tasks", icon: "check" },
+          { href: appRoutes.vaClients, label: "Clients", icon: "briefcase" },
+          { href: appRoutes.vaHours, label: "Hours", icon: "clock" },
         ]}
       />
       <div className="min-w-0">{children}</div>

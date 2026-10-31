@@ -41,7 +41,6 @@ async function ClientTasks() {
   return (
     <Workspace
       title="Tasks"
-      lead="Work for your VA, with a deadline and how long it should take."
       actions={canCreate && window ? <AddTaskButton vas={vas} today={window.today} last={window.last} timeZone={timeZone} /> : undefined}
     >
       <TaskMetrics tasks={tasks} href={appRoutes.clientTasks} />

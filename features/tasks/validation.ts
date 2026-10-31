@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, parseWith, tooLong } from "@/lib/validation";
-import { TASK_DURATION, TASK_LIMITS, TASK_SEVERITIES, TASK_STATUSES, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField } from "./contract";
+import { TASK_DURATION, TASK_LIMITS, TASK_SEVERITIES, TASK_STATUSES, VA_BLOCK_LENGTHS, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField, type VaTaskField } from "./contract";
 
 // Dates are calendar days (YYYY-MM-DD). The database checks the window in the client's zone; this only
 // checks that the day is real, so a day that is "today" there and "yesterday" in UTC still parses.
@@ -191,3 +191,50 @@ const commentDeleteSchema = z.strictObject({
 
 /** The author removes one comment. A bad id is a tampered form. */
 export const parseCommentDelete = (input: unknown) => parseWith<typeof commentDeleteSchema, string>(commentDeleteSchema, input, []);
+
+const HALF_HOUR = /^([01]\d|2[0-3]):(00|30)$/;
+
+const vaTaskSchema = z
+  .strictObject({
+    mode: z.enum(["new", "block"], { error: FORM_ERROR }),
+    title: z.string().trim().default(""),
+    // "" = no client: a to-do of the VA's own.
+    clientId: z.union([z.literal(""), z.uuid({ error: "Choose one of your clients." })]).default(""),
+    taskId: z.union([z.literal(""), z.uuid({ error: "Choose one of your tasks." })]).default(""),
+    description: description.default(""),
+    date: deadline,
+    startTime: z.string({ error: "Choose a start time." }).regex(HALF_HOUR, "Choose a start time."),
+    minutes: z
+      .string({ error: "Choose how long it takes." })
+      .transform(Number)
+      .refine((value) => (VA_BLOCK_LENGTHS as readonly number[]).includes(value), "Choose how long it takes."),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === "new") {
+      const checked = title.safeParse(value.title);
+      if (!checked.success) ctx.addIssue({ code: "custom", path: ["title"], message: checked.error.issues[0]?.message ?? "Enter a title." });
+    } else if (!value.taskId) {
+      ctx.addIssue({ code: "custom", path: ["taskId"], message: "Choose one of your tasks." });
+    }
+  })
+  .transform((value) => ({
+    mode: value.mode,
+    title: value.title,
+    clientId: value.mode === "new" ? value.clientId || null : null,
+    taskId: value.mode === "block" ? value.taskId : null,
+    description: value.description || null,
+    date: value.date,
+    startTime: value.startTime,
+    minutes: value.minutes,
+  }));
+
+export type VaTaskInput = z.infer<typeof vaTaskSchema>;
+
+/**
+ * "Book › Task" from the VA calendar. New: a title, an optional client (none = a to-do of the VA's own), details,
+ * a Manila day and half-hour start, and a length. Block: one of the VA's tasks, a day, a start and a length.
+ */
+export const parseVaTask = (input: unknown) =>
+  parseWith<typeof vaTaskSchema, VaTaskField>(vaTaskSchema, input, ["mode", "title", "clientId", "taskId", "description", "date", "startTime", "minutes"]);
+
+export const parseBlockId = (input: unknown) => parseWith(z.strictObject({ blockId: z.uuid({ error: FORM_ERROR }) }), input, [] as const);

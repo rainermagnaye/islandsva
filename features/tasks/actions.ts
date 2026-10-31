@@ -6,10 +6,10 @@ import { appRoutes, clientTaskHref } from "@/content/routes";
 import { requireRole } from "@/lib/auth/session";
 import { FIELD_ERRORS, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { TASK_LIMITS, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField } from "./contract";
-import { addComment, attachFiles, changeTaskStatus, createTask as saveTask, editComment, editTask, pauseTimer, removeComment, removeTask, sendBack, startTimer, submitForReview, type TaskWrite } from "./service";
+import { TASK_LIMITS, type CommentField, type TaskField, type TaskNoteField, type TaskStatusField, type VaTaskField } from "./contract";
+import { addComment, attachFiles, bookVaTask, removeBlock, changeTaskStatus, createTask as saveTask, editComment, editTask, pauseTimer, removeComment, removeTask, sendBack, startTimer, submitForReview, type TaskWrite } from "./service";
 import { readFiles } from "./upload";
-import { parseAttach, parseComment, parseCommentDelete, parseCommentEdit, parseCreate, parseDelete, parseFeedback, parseStatus, parseSubmit, parseTimer, parseUpdate } from "./validation";
+import { parseAttach, parseBlockId, parseComment, parseCommentDelete, parseCommentEdit, parseCreate, parseDelete, parseFeedback, parseStatus, parseSubmit, parseTimer, parseUpdate, parseVaTask } from "./validation";
 
 const MISSING = "That task no longer exists. Refresh the page.";
 
@@ -217,6 +217,39 @@ export async function deleteTaskComment(formData: FormData): Promise<SubmitResul
     if (!removed.ok) return fromWrite(removed);
   } catch (error) {
     return outageResult(error, "Deleting a comment");
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** "Book › Task" on the VA calendar: a task for one of their clients, a to-do of their own, or time on a task. */
+export async function bookVaTaskAction(formData: FormData): Promise<SubmitResult<VaTaskField>> {
+  const user = await requireRole(["va"]);
+  const parsed = parseVaTask(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await bookVaTask(user.id, parsed.value);
+    if (!result.ok) {
+      return result.field
+        ? { ok: false, message: FIELD_ERRORS, fieldErrors: { [result.field]: result.message } as Partial<Record<VaTaskField, string>> }
+        : { ok: false, message: result.message };
+    }
+  } catch (error) {
+    return outageResult(error, "Booking a VA task");
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** Removes one of the VA's own blocks. A block that's already gone counts as removed. */
+export async function removeBlockAction(formData: FormData): Promise<SubmitResult> {
+  await requireRole(["va"]);
+  const parsed = parseBlockId(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    await removeBlock(parsed.value.blockId);
+  } catch (error) {
+    return outageResult(error, "Removing a calendar block");
   }
   refresh();
   return { ok: true };

@@ -1,8 +1,10 @@
 import "server-only";
 import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertBooking, insertBookingNote, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
-import { cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
+import { answerVaMeetingRow, cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
+import { cancelVaMeetingRow, insertVaMeeting, listVaTeam } from "./va-dal";
+import { listBookings } from "./booking-dal";
 import type { BookingFile as FileInput } from "./form-data";
-import type { BookingInput, BookingNoteInput } from "./validation";
+import type { BookingInput, BookingNoteInput, VaMeetingInput } from "./validation";
 
 export function createBooking(input: BookingInput, file: FileInput) {
   return insertBooking(input, file);
@@ -58,4 +60,27 @@ export function completeClientBooking(meetingId: string) {
 
 export function addClientBookingNote(input: BookingNoteInput, file: FileInput) {
   return insertClientBookingNote(input, file);
+}
+
+/** The signed-in person's meetings (RLS decides which), for features that need their busy times. */
+export function listOwnBookings() {
+  return listBookings();
+}
+
+/** A meeting a VA books: with their client (it waits for the client's answer) or with the team only. */
+export function createVaMeeting(input: VaMeetingInput) {
+  return insertVaMeeting(input);
+}
+
+export function cancelVaMeeting(meetingId: string) {
+  return cancelVaMeetingRow(meetingId);
+}
+
+export function answerVaMeeting(meetingId: string, accept: boolean) {
+  return answerVaMeetingRow(meetingId, accept);
+}
+
+/** Staff a VA can invite to a team meeting. Call only after requireRole(["va"]). */
+export function listTeamForVa(vaId: string) {
+  return listVaTeam(vaId);
 }

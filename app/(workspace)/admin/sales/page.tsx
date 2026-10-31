@@ -42,7 +42,7 @@ async function AdminSales() {
   const year = totalOf(byMonth);
 
   return (
-    <Workspace title="Sales" lead="Payments received, as recorded when registrations are confirmed. Net is gross minus bank or transfer fees.">
+    <Workspace title="Sales">
       <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Figure label="Gross this month" value={money(thisMonth.grossCents)} caption={`${thisMonth.payments} payment${thisMonth.payments === 1 ? "" : "s"}`} />
         <Figure label="Net this month" value={money(thisMonth.netCents)} caption={`After ${money(thisMonth.feeCents)} in fees`} />

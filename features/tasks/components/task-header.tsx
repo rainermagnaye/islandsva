@@ -13,13 +13,12 @@ import { MoveButton } from "./task-moves";
 
 const ClientTaskDialogs = lazy(() => import("./task-header-dialogs").then((m) => ({ default: m.ClientTaskDialogs })));
 const FeedbackDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ default: m.FeedbackDialog })));
-const SubmitDialog = lazy(() => import("./task-move-dialogs").then((m) => ({ default: m.SubmitDialog })));
 
 export type TaskNotice = { tone: "info" | "success" | "warning"; title: string; body: string; quote?: string | null };
 
 /**
- * The task's header card: title and badges, the next moves for whoever is looking, the four-step progress,
- * and a notice for the current step. The database still decides every move (guard_task).
+ * The task's header card: title and badges, the client's next moves, the four-step progress, and a notice for
+ * the current step. The VA's Start, Pause, Resume and Complete live in the Time card, beside the clock. The database still decides every move (guard_task).
  */
 export function TaskHeader({
   task,
@@ -45,7 +44,7 @@ export function TaskHeader({
   /** The client's edit form, when the task is open and the company can still change it. */
   edit: { today: string; last: string; timeZone: string } | null;
 }) {
-  const [dialog, setDialog] = useState<"edit" | "feedback" | "submit" | "close" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"edit" | "feedback" | "close" | "delete" | null>(null);
   const [copied, setCopied] = useState(false);
   const close = () => setDialog(null);
   const moves = canMove ? nextStatuses(task.status, viewer) : [];
@@ -96,12 +95,6 @@ export function TaskHeader({
               Reopen task
             </Button>
           )}
-          {viewer === "va" && moves.includes("in_progress") && <MoveButton taskId={task.id} status="in_progress" label="Start task" pendingLabel="Starting" variant="ghost" />}
-          {viewer === "va" && moves.includes("review") && (
-            <Button type="button" variant="secondary" iconLeft="inbox" onClick={() => setDialog("submit")}>
-              Submit for review
-            </Button>
-          )}
           <DropdownMenu label="More actions" icon="more" iconOnly align="end" items={items} />
         </div>
       </div>
@@ -123,11 +116,6 @@ export function TaskHeader({
       {dialog === "feedback" && (
         <Suspense fallback={null}>
           <FeedbackDialog open onClose={close} taskId={task.id} vaFirstName={task.vaFirstName} reopen={reopen} />
-        </Suspense>
-      )}
-      {dialog === "submit" && (
-        <Suspense fallback={null}>
-          <SubmitDialog open onClose={close} taskId={task.id} companyName={task.companyName} />
         </Suspense>
       )}
     </Card>

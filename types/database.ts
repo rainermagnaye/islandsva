@@ -221,6 +221,18 @@ type TaskWorkSessionRow = {
   created_at: string;
 };
 
+/** Time a VA set aside: on one of their tasks (title null) or a to-do of their own (title set). Owner and tenant come from the session. */
+type CalendarBlockRow = {
+  id: string;
+  tenant_id: string;
+  va_id: string;
+  task_id: string | null;
+  title: string | null;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+};
+
 type TaskAttachmentRow = {
   id: string;
   task_id: string;
@@ -556,6 +568,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      calendar_blocks: {
+        Row: CalendarBlockRow;
+        Insert: { task_id?: string | null; title?: string | null; starts_at: string; ends_at: string };
+        Update: never;
+        Relationships: [];
+      };
       task_comments: {
         Row: TaskCommentRow;
         Insert: InsertOf<TaskCommentRow, "task_id" | "author_id" | "body">;
@@ -773,6 +791,12 @@ export type Database = {
       update_client_meeting: { Args: { meeting_id: string; title: string; starts_at: string; ends_at: string; staff_ids: string[] }; Returns: undefined };
       cancel_client_meeting: { Args: { meeting_id: string }; Returns: undefined };
       complete_client_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      create_va_meeting: {
+        Args: { title: string; starts_at: string; ends_at: string; client_id?: string | null; staff_ids?: string[]; note?: string | null };
+        Returns: string;
+      };
+      cancel_va_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      answer_va_meeting: { Args: { meeting_id: string; accept: boolean }; Returns: undefined };
       start_task_timer: { Args: { task_id: string }; Returns: string };
       pause_task_timer: { Args: { task_id: string }; Returns: string };
       add_client_meeting_note: {
