@@ -1,5 +1,5 @@
 import { wallClockIn } from "@/components/ui/date-math";
-import type { ScheduleEvent, ScheduleShift } from "@/components/ui/schedule-events";
+import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import type { Tone } from "@/components/ui/tone";
 import { deadlineEvent, type DeadlineSource } from "@/features/tasks/deadline-event";
 
@@ -12,10 +12,7 @@ export const BLOCK_PREFIX = "block:";
 
 type Demo = { id: string; status: string; startsAt: string; endsAt: string; companyName: string };
 type Slot = { id: string; startsAt: string; booking: unknown };
-type Window = { weekday: number; startMinute: number; endMinute: number };
 type Block = { id: string; taskId: string | null; title: string; companyName: string | null; startsAt: string; endsAt: string };
-
-const clock = (minute: number) => `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 
 /**
  * What the VA's calendar shows beside meetings: demo requests (dashed) and calls, open demo slots, the deadlines
@@ -68,20 +65,6 @@ export function calendarExtras(
     href: block.taskId ? taskHref(block.taskId) : undefined,
   }));
   return [...demoEvents, ...slotEvents, ...taskEvents, ...blockEvents];
-}
-
-/**
- * Working hours as shift bands. Windows are ISO weekdays (1 = Monday) in Manila minutes; the calendar's days are
- * 0 = Sunday. A window starting between 6 am and 6 pm is a day shift, otherwise a night shift.
- */
-export function workingShifts(windows: readonly Window[]): ScheduleShift[] {
-  return windows.map((window) => ({
-    kind: window.startMinute >= 360 && window.startMinute < 1080 ? "day" : "night",
-    start: clock(window.startMinute),
-    end: clock(window.endMinute),
-    label: "Working hours",
-    days: [window.weekday % 7],
-  }));
 }
 
 export const CALENDAR_LEGEND: readonly { tone: Tone; label: string }[] = [

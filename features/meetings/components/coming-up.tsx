@@ -18,7 +18,7 @@ const itemClass = "grid w-full grid-cols-[0.625rem_minmax(0,1fr)] items-start ga
  * Beside the calendar: a link to the tasks waiting for review, then what's coming up, grouped by day. On wide
  * screens it fills the calendar card's height and scrolls inside, so the two line up.
  */
-export function ComingUp({ items, review, onOpenBooking }: { items: readonly AgendaItem[]; review: { count: number; href: string } | null; onOpenBooking: (id: string) => void }) {
+export function ComingUp({ items, review, onOpenBooking, className }: { items: readonly AgendaItem[]; review: { count: number; href: string } | null; onOpenBooking: (id: string) => void; className?: string }) {
   const groups: { label: string; items: AgendaItem[] }[] = [];
   for (const item of items) {
     const last = groups.at(-1);
@@ -27,8 +27,7 @@ export function ComingUp({ items, review, onOpenBooking }: { items: readonly Age
   }
 
   return (
-    <div className="relative w-full min-h-72">
-      <div className="flex flex-col gap-4 lg:absolute lg:inset-0">
+    <div className={cx("flex min-h-0 w-full flex-1 flex-col gap-4", className)}>
         {review && (
           <Link href={review.href} className="flex shrink-0 items-center gap-3 rounded-md border border-status-warning bg-status-warning-bg p-4 text-ink no-underline">
             <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-pill bg-surface-card text-status-warning">
@@ -88,7 +87,6 @@ export function ComingUp({ items, review, onOpenBooking }: { items: readonly Age
             )}
           </div>
         </section>
-      </div>
     </div>
   );
 }

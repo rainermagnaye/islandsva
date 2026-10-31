@@ -1,8 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useState } from "react";
-import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import type { IconName } from "@/types/icon";
+import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { cx } from "@/lib/cx";
 import type { BusyTime } from "@/features/demos/slot-times";
@@ -17,10 +16,10 @@ const VaTaskForm = lazy(() => import("@/features/tasks/components/va-task-form")
 
 type Kind = "slots" | "meeting" | "task";
 
-const KINDS: readonly { value: Kind; label: string; hint: string; icon: IconName }[] = [
-  { value: "slots", label: "Demo slots", hint: "Times clients can book a demo", icon: "calendar" },
-  { value: "meeting", label: "Meeting", hint: "With a client (they accept first) or your team", icon: "users" },
-  { value: "task", label: "Task", hint: "Add a task or block time to work on one", icon: "check" },
+const KINDS: readonly { value: Kind; label: string }[] = [
+  { value: "slots", label: "Demo slots" },
+  { value: "meeting", label: "Meeting" },
+  { value: "task", label: "Task" },
 ];
 
 export type BookProps = {
@@ -32,42 +31,51 @@ export type BookProps = {
   openTasks: readonly BookingChoice[];
 };
 
-/** "Book" in the calendar header: pick demo slots, a meeting or a task; each opens in one "Book" dialog. */
+/** "Book" opens one dialog. The kind — demo slots, a meeting or a task — is chosen on the form. */
 export function BookButton({ today, last, slots, clients, team, openTasks }: BookProps) {
-  const [kind, setKind] = useState<Kind | null>(null);
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<Kind>("slots");
   const [formKey, setFormKey] = useState(0);
-  const open = (next: Kind) => {
+  const choose = (next: Kind) => {
+    if (next === kind) return;
     setFormKey((key) => key + 1);
     setKind(next);
   };
-  const close = () => setKind(null);
 
   return (
     <>
-      <DropdownMenu label="Book" icon="plus" align="end" items={KINDS.map((item) => ({ label: item.label, hint: item.hint, icon: item.icon, onSelect: () => open(item.value) }))} />
-      <Modal open={kind !== null} onClose={close} size="wide" title="Book">
-        {kind && (
+      <Button
+        type="button"
+        variant="ghost"
+        iconLeft="plus"
+        onClick={() => {
+          setKind("slots");
+          setFormKey((key) => key + 1);
+          setOpen(true);
+        }}
+      >
+        Book
+      </Button>
+      <Modal open={open} onClose={() => setOpen(false)} size="wide" title="Book">
+        {open && (
           <div className="grid gap-4">
             <fieldset className="m-0 grid gap-2 border-0 p-0 sm:grid-cols-3">
               <legend className="sr-only">What are you booking?</legend>
               {KINDS.map((item) => (
                 <label
                   key={item.value}
-                  className={cx("flex cursor-pointer items-start gap-2.5 rounded-md border p-3", kind === item.value ? "border-action-secondary bg-status-info-bg" : "border-border")}
+                  className={cx("flex cursor-pointer items-center gap-2.5 rounded-md border p-3", kind === item.value ? "border-action-secondary bg-status-info-bg" : "border-border")}
                 >
-                  <input type="radio" name="book-kind" checked={kind === item.value} onChange={() => open(item.value)} className="mt-0.5 size-4" />
-                  <span className="grid gap-0.5">
-                    <span className="type-label text-ink">{item.label}</span>
-                    <span className="type-body-sm text-ink-muted">{item.hint}</span>
-                  </span>
+                  <input type="radio" name="book-kind" checked={kind === item.value} onChange={() => choose(item.value)} className="size-4" />
+                  <span className="type-label text-ink">{item.label}</span>
                 </label>
               ))}
             </fieldset>
             <Suspense fallback={null}>
-              {kind === "slots" && <AddSlotsForm key={formKey} today={today} last={last} {...slots} onAdded={close} />}
-              {kind === "meeting" && <VaMeetingForm key={formKey} today={today} last={last} clients={clients} team={team} onDone={close} />}
+              {kind === "slots" && <AddSlotsForm key={formKey} today={today} last={last} {...slots} onAdded={() => setOpen(false)} />}
+              {kind === "meeting" && <VaMeetingForm key={formKey} today={today} last={last} clients={clients} team={team} onDone={() => setOpen(false)} />}
               {kind === "task" && (
-                <VaTaskForm key={formKey} today={today} last={last} clients={clients.map((client) => ({ id: client.id, label: client.label }))} tasks={openTasks} onDone={close} />
+                <VaTaskForm key={formKey} today={today} last={last} clients={clients.map((client) => ({ id: client.id, label: client.label }))} tasks={openTasks} onDone={() => setOpen(false)} />
               )}
             </Suspense>
           </div>
