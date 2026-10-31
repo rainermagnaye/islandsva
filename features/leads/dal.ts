@@ -12,15 +12,27 @@ type NewLead = LeadInput & { ipHash: string | null; userAgent: string | null };
 // Secret-key client: the visitor is anonymous and leads are server-only (no RLS policies). The route has
 // already validated the input and passed the anti-spam checks.
 
-const TIME_REFUSED = "Choose a time on the hour or half hour, from now through the next 14 days.";
+const TIME_REFUSED = "That time is no longer open. Choose another.";
 const DISCOVERY_REFUSAL: Record<string, string> = {
   IVA22: TIME_REFUSED,
   // A check constraint on the meeting's start (e.g. its half-hour rule) is the same mistake as IVA22 to the
   // visitor; without this it would surface as an outage (503).
   "23514": TIME_REFUSED,
-  IVA24: "You already have a discovery call waiting. We'll be in touch.",
+  // Worded so it doesn't confirm that this email (or someone on this network) already has a request.
+  IVA24: "We couldn't book this time. If you've already requested a call, we'll be in touch by email.",
   "23505": "That time was just taken. Choose another.",
 };
+
+/**
+ * The open discovery-call starts, as UTC ISO instants in order. Public: the contact form shows them to anyone.
+ * Secret key because `open_discovery_slots` is granted to the server only; it takes no input and returns only
+ * times, never who booked them.
+ */
+export async function listOpenDiscoverySlots(): Promise<string[]> {
+  const { data, error } = await createAdminClient().rpc("open_discovery_slots");
+  if (error) throw new UpstreamError("supabase", `Listing discovery slots failed: ${error.message}`, { cause: error });
+  return (data ?? []).map((start) => new Date(start).toISOString());
+}
 
 /** The visitor's message for a refused discovery request, or null when the failure is an outage. */
 export function discoveryRefusal(code: string | undefined): string | null {
@@ -29,7 +41,8 @@ export function discoveryRefusal(code: string | undefined): string | null {
 
 /** The contact form: one lead and its requested discovery call. Secret key, after the route's checks. */
 export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
-  const { data, error } = await createAdminClient().rpc("submit_discovery_request", {
+  // request_discovery_call books only a start that open_discovery_slots lists (IVA22), and stores the source.
+  const { data, error } = await createAdminClient().rpc("request_discovery_call", {
     full_name: lead.name,
     email: lead.email,
     company_name: lead.company,
@@ -49,10 +62,12 @@ export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): P
   return { ok: true, id: data };
 }
 
-export async function insertLead(lead: NewLead): Promise<string> {
+/** `fromWebsite`: the contact form's plain enquiry, stored with the lead source Website like a booked call. */
+export async function insertLead(lead: NewLead, { fromWebsite = false } = {}): Promise<string> {
   const { data, error } = await createAdminClient()
     .from("leads")
     .insert({
+      ...(fromWebsite ? { profile: { source: "Website" } } : {}),
       full_name: lead.name,
       email: lead.email,
       company_name: lead.company,

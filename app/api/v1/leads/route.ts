@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import type { LeadCreated } from "@/features/leads/contract";
-import { notifyNewLead, requestDiscoveryCall } from "@/features/leads/service";
+import { notifyNewLead, submitContactRequest } from "@/features/leads/service";
 import { parseLead } from "@/features/leads/validation";
 import { ApiError } from "@/lib/api/errors";
 import { UpstreamError } from "@/lib/upstream-error";
@@ -9,7 +9,8 @@ import { hashIp } from "@/lib/api/ip-hash";
 import { ok } from "@/lib/api/response";
 import { verifyTurnstile } from "@/lib/api/turnstile";
 
-// Contact form submissions. Rate limiting runs before this (Vercel Firewall rule on /api/v1/leads).
+// Contact form submissions: an enquiry with a picked discovery-call slot, or a plain enquiry while none is
+// open. Rate limiting runs before this (Vercel Firewall rule on /api/v1/leads).
 const options = {
   maxBytes: 10_000,
   unavailableMessage: "We couldn't send your message just now. Please try again in a moment.",
@@ -28,11 +29,11 @@ export const POST = createHandler(options, async ({ req, body, ip }) => {
 
   let id: string;
   try {
-    const stored = await requestDiscoveryCall(parsed.value, parsed.startsAt, {
+    const stored = await submitContactRequest(parsed.value, parsed.startsAt, {
       ipHash: await hashIp(ip),
       userAgent: req.headers.get("user-agent")?.slice(0, 512) ?? null,
     });
-    if (!stored.ok) throw new ApiError(422, "validation_failed", "Please check the highlighted fields.", { meetingTime: stored.message });
+    if (!stored.ok) throw new ApiError(422, "validation_failed", "Please check the highlighted fields.", { startsAt: stored.message });
     id = stored.id;
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -42,7 +43,7 @@ export const POST = createHandler(options, async ({ req, body, ip }) => {
   }
 
   // Email runs after the response, so the visitor never waits on (or sees) a mail outage.
-  after(() => notifyNewLead(id, parsed.value, parsed.startsAt));
+  after(() => notifyNewLead(id, parsed.value, parsed.startsAt ?? undefined));
 
   return ok<LeadCreated>({ ok: true }, 201);
 });

@@ -2566,8 +2566,9 @@ describe("discovery calls", () => {
     it("stores the lead, its 30-minute meeting and the first history row; the slot leaves the list", async () => {
       const start = await nextSlot();
       const lead = await request("first@disc.co", start, IP);
-      const [stored] = await asServer("select email, status::text as status, closer_id, tenant_id, ip_hash from public.leads where id = $1", [lead]);
-      expect(stored).toEqual({ email: "first@disc.co", status: "new", closer_id: null, tenant_id: tenantA, ip_hash: IP });
+      const [stored] = await asServer("select email, status::text as status, closer_id, tenant_id, ip_hash, profile from public.leads where id = $1", [lead]);
+      // The contact form is the only caller, so the lead's source is the website.
+      expect(stored).toEqual({ email: "first@disc.co", status: "new", closer_id: null, tenant_id: tenantA, ip_hash: IP, profile: { source: "Website" } });
       const [meeting] = await asServer<Record<string, unknown>>(
         "select id, kind::text as kind, status::text as status, starts_at, ends_at, organizer_id, decided_by, tenant_id from public.meetings where lead_id = $1",
         [lead],

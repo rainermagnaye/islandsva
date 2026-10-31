@@ -135,6 +135,17 @@ export function discoveryStart(date: string, time: string, now = Date.now(), tim
   return { ok: true, startsAt };
 }
 
+/**
+ * A picked slot (an instant with its offset, "2026-11-03T01:00:00.000Z") inside the booking window, as UTC ISO.
+ * Only a first check: the database refuses any start that isn't one of the open slots.
+ */
+export function discoveryInstant(value: string, now = Date.now()): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const start = Date.parse(value);
+  if (Number.isNaN(start) || start <= now || start > now + DISCOVERY_WINDOW_MS) return null;
+  return new Date(start).toISOString();
+}
+
 const whenFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BOOKING_TIME_ZONE });
 
 /** Both ends in Philippine time, which is how the booking was entered. */

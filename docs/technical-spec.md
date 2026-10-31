@@ -70,7 +70,8 @@ One model for every call; one Google integration; one history.
 ## Discovery-call booking
 
 - The database side is built: times, slots (12 hours to 14 days ahead), requests, confirm / reject, outcomes and the Lead Gens' inbox — `supabase/CLAUDE.md`. Pickers show PHT and the viewer's local time.
-- The contact page stays static: the picker fetches open slots from `GET /api/v1/discovery-slots` (secret key, `open_discovery_slots`), and the form posts the lead and slot together to `POST /api/v1/leads` (`request_discovery_call`). A slot taken in the meantime (`IVA22`, or `23505` from a request at the same moment) is a field error; `IVA24` gets a generic message.
+- Built (the slot picker): the contact form has two steps, details then a time. The page stays static: step 2 (`discovery-time-step.tsx`, loaded with `next/dynamic`) fetches open slots from `GET /api/v1/discovery-slots` (secret key, `open_discovery_slots`) and shows them in the visitor's country's zone with Philippine time under each; the form posts the lead and the slot's UTC instant (`startsAt`) together to `POST /api/v1/leads` (`request_discovery_call`, which stores the source Website). A slot taken in the meantime (`IVA22`, or `23505` from a request at the same moment) is a field error and the form reloads the slots; `IVA24` gets a generic message that doesn't confirm an existing request. A server error on a details field sends the visitor back to step 1.
+- With no open slot (no times set, or all taken) the form sends a plain enquiry (`startsAt: ""`, the lead with source Website and no call); the service accepts that only while `open_discovery_slots` is empty, so the picker can't be skipped.
 - Planned with the lead handover (M8 slice 6): column-level select grants on `leads`, so an owning Lead Gen can't read `ip_hash` and `user_agent`.
 - **Request vs lead:** no separate table. A submitted request is the lead row plus its `requested` meeting; leads lists, pipeline counts, search and the sales summary leave out unowned leads that came from a discovery request and were never confirmed (no meeting of theirs ever reached `scheduled`) — open, expired and rejected requests alike — through one shared filter (a dal helper or a `security_invoker` view; slices 4 and 7). The visitor counts as a lead once a Lead Gen confirms. Admins see requests under a Requests filter, searchable by email (for "I booked and heard nothing" and abuse); Lead Gens only through the inbox.
 
@@ -127,7 +128,7 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 
 | Milestone | Feature folder | Routes |
 |---|---|---|
-| M8 | `features/meetings` (started: discovery times in `/admin/settings`; now in the §3 map) · `features/audit` | `api/v1/discovery-slots`; Lead Gen inbox, schedule, call history and activity under `closer/` |
+| M8 | `features/meetings` (started: discovery times in `/admin/settings`; now in the §3 map) · `features/audit` | `api/v1/discovery-slots` (built); Lead Gen inbox, schedule, call history and activity under `closer/` |
 | M9 | `features/google` | `api/v1/google/calendar-events`; Google connect / callback |
 | M10 | `features/matching` (replaces `features/demos`) | client VA Match; VA working hours |
 | M11 | `features/tasks` | client and VA task pages |

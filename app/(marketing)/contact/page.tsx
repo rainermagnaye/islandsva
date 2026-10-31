@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 const nextSteps = [
-  "We reply within one business day to book a 30-minute call.",
+  "You pick a time for a 30-minute call, and we confirm it by email.",
   "On the call, we learn how you work and what you'd like to hand off.",
   "We recommend a package and match you with a vetted VA.",
 ];

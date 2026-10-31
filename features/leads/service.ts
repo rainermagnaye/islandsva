@@ -3,7 +3,7 @@ import { packages } from "@/content/packages";
 import { timezoneForCountry } from "@/content/timezones";
 import { businessFromEnquiry } from "@/features/clients/contract";
 import { openClientRegistration, openOnboardingLink } from "@/features/clients/service";
-import { claimLead, deleteLead, getLead, insertDiscoveryRequest, insertLead, markLeadNotified, searchLeads, setLeadDisabled, updateLeadDetails } from "./dal";
+import { claimLead, deleteLead, getLead, insertDiscoveryRequest, insertLead, listOpenDiscoverySlots, markLeadNotified, searchLeads, setLeadDisabled, updateLeadDetails } from "./dal";
 import { convertLeadNoted, convertLeadToClient } from "./convert-dal";
 import { recordLeadFile, recordLeadStep } from "./timeline-dal";
 import { sendLeadNotification } from "./email";
@@ -21,9 +21,20 @@ export async function createLead(lead: LeadInput, source: LeadSource) {
   return insertLead({ ...lead, ...source });
 }
 
-/** Stores the enquiry and a requested discovery call at the visitor's chosen time. */
-export async function requestDiscoveryCall(lead: LeadInput, startsAt: string, source: LeadSource) {
-  return insertDiscoveryRequest({ ...lead, ...source }, startsAt);
+/** The discovery-call starts the contact form offers (the admin's daily times that are still open). */
+export async function openDiscoverySlots() {
+  return listOpenDiscoverySlots();
+}
+
+/**
+ * The contact form: the enquiry plus a requested discovery call at the picked slot. Without a slot it is a plain
+ * enquiry, accepted only while no slot is open, so a visitor can always reach the team but can't skip the
+ * picker. A slot opening between the check and the insert just leaves one enquiry without a call.
+ */
+export async function submitContactRequest(lead: LeadInput, startsAt: string | null, source: LeadSource): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+  if (startsAt) return insertDiscoveryRequest({ ...lead, ...source }, startsAt);
+  if ((await listOpenDiscoverySlots()).length > 0) return { ok: false, message: "Choose a time for your call." };
+  return { ok: true, id: await insertLead({ ...lead, ...source }, { fromWebsite: true }) };
 }
 
 /**
