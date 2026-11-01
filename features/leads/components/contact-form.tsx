@@ -64,6 +64,8 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
   const [zone, setZone] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [noTimes, setNoTimes] = useState(false);
+  const [picked, setPicked] = useState(false);
+  const [passed, setPassed] = useState(false);
 
   // Loaded on choice, not with the page, so the zone table stays off the first-load script.
   async function chooseCountry(value: string) {
@@ -95,7 +97,13 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
     turnstileId.current = id;
   }, []);
   const handleLoaded = useCallback((count: number) => setNoTimes(count === 0), []);
-  const reload = useCallback(() => setReloadKey((key) => key + 1), []);
+  const reload = useCallback(() => {
+    setReloadKey((key) => key + 1);
+    setPicked(false);
+  }, []);
+
+  // Send stays off until what step 2 needs is there: a time (when any are open) and a passed Turnstile check.
+  const missing = [!noTimes && !picked && "pick a time", TURNSTILE_SITE_KEY && !passed && "finish the security check"].filter(Boolean);
 
   return (
     <Form<LeadField>
@@ -104,6 +112,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
       onError={(result) => {
         // Turnstile tokens are single-use, so every failed submit needs a fresh one.
         if (turnstileId.current) window.turnstile?.reset(turnstileId.current);
+        setPassed(false);
         const errors = result.fieldErrors ?? {};
         if (DETAIL_FIELDS.some((field) => errors[field])) {
           focusError.current = true;
@@ -189,19 +198,25 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
                 reloadKey={reloadKey}
                 onRetry={reload}
                 onLoaded={handleLoaded}
+                onPickedChange={setPicked}
                 error={fieldErrors.startsAt}
               />
 
-              {TURNSTILE_SITE_KEY && <Turnstile siteKey={TURNSTILE_SITE_KEY} onRender={handleTurnstileRender} />}
+              {TURNSTILE_SITE_KEY && <Turnstile siteKey={TURNSTILE_SITE_KEY} onRender={handleTurnstileRender} onPassedChange={setPassed} />}
 
               <div className="flex flex-wrap items-center gap-4">
                 <Button type="button" variant="ghost" size="lg" iconLeft="chevron-left" onClick={() => setStep(1)}>
                   Back
                 </Button>
-                <Button type="submit" size="lg" loading={pending}>
+                <Button type="submit" size="lg" loading={pending} disabled={missing.length > 0} aria-describedby={missing.length > 0 ? "contact-missing" : undefined}>
                   {pending ? "Sending" : noTimes ? "Send my details" : "Request my discovery call"}
                 </Button>
               </div>
+              {missing.length > 0 && (
+                <p id="contact-missing" className="m-0 type-body-sm text-ink-muted">
+                  To send, {missing.join(" and ")}.
+                </p>
+              )}
               <p className="m-0 type-body-sm text-ink-muted">
                 We&apos;ll only use your details to reply. See our <Link href={routes.privacy}>privacy policy</Link>.
               </p>

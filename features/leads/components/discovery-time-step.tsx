@@ -20,6 +20,8 @@ type DiscoveryTimeStepProps = {
   onRetry: () => void;
   /** How many times are open once loaded: with none, the form sends a plain enquiry instead. */
   onLoaded: (count: number) => void;
+  /** Whether a time is picked now: a new day or a reload clears the pick. */
+  onPickedChange: (picked: boolean) => void;
   error?: string;
 };
 
@@ -28,7 +30,7 @@ type DiscoveryTimeStepProps = {
  * picked), then that day's times. The checked radio posts the slot's UTC instant as `startsAt`; the server
  * books only a time that is still open. Loaded with next/dynamic, so the calendar stays off the page's first load.
  */
-export function DiscoveryTimeStep({ timeZone, reloadKey, onRetry, onLoaded, error }: DiscoveryTimeStepProps) {
+export function DiscoveryTimeStep({ timeZone, reloadKey, onRetry, onLoaded, onPickedChange, error }: DiscoveryTimeStepProps) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [day, setDay] = useState<IsoDate | null>(null);
 
@@ -90,7 +92,11 @@ export function DiscoveryTimeStep({ timeZone, reloadKey, onRetry, onLoaded, erro
     <div className="grid items-start gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
       <Calendar
         value={shown}
-        onChange={setDay}
+        onChange={(date) => {
+          // The picker remounts for the new day, so its pick is gone.
+          if (date !== shown) onPickedChange(false);
+          setDay(date);
+        }}
         min={days[0]}
         max={days.at(-1)}
         defaultMonth={days[0]}
@@ -98,7 +104,7 @@ export function DiscoveryTimeStep({ timeZone, reloadKey, onRetry, onLoaded, erro
         today={current.today}
       />
       <div className="grid gap-2">
-        <TimeSlotPicker key={`${shown}-${reloadKey}`} date={shown} timeZone={timeZone} otherTimeZone={DISCOVERY_ZONE} name="startsAt" slots={daySlots} />
+        <TimeSlotPicker key={`${shown}-${reloadKey}`} date={shown} timeZone={timeZone} otherTimeZone={DISCOVERY_ZONE} name="startsAt" slots={daySlots} onChange={() => onPickedChange(true)} />
         {error && <p className="m-0 type-label text-status-danger">{error}</p>}
       </div>
     </div>
