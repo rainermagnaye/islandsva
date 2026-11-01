@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Booking, BookingGuest } from "../contract";
+import { Badge } from "@/components/ui/badge";
+import { BOOKING_STATUS_LABELS, formatBookingWhen, type Booking, type BookingGuest, type BookingStatus } from "../contract";
 
 // Small pieces of BookingDetail: the start clock, the time shown in both zones, guest names and a read-only
 // field.
@@ -35,6 +36,38 @@ export function guestNames(booking: Booking, kind: BookingGuest["kind"]) {
   const names = booking.guests.filter((guest) => guest.kind === kind).map((guest) => guest.name);
   if (names.length > 0) return names.join(", ");
   return kind === "client" ? booking.clientName : booking.staffName;
+}
+
+export function statusTone(status: BookingStatus) {
+  if (status === "done") return "info" as const;
+  if (status === "cancelled") return "neutral" as const;
+  if (status === "requested") return "warning" as const;
+  return "success" as const;
+}
+
+export function StatusField({ status }: { status: BookingStatus }) {
+  return (
+    <div className="min-w-0">
+      <dt className="type-caption text-ink-muted">Status</dt>
+      <dd className="m-0 mt-1">
+        <Badge tone={statusTone(status)} size="sm" dot>
+          {BOOKING_STATUS_LABELS[status]}
+        </Badge>
+      </dd>
+    </div>
+  );
+}
+
+export function WhenFields({ booking }: { booking: Booking }) {
+  if (booking.kind === "discovery" && booking.timeZone && booking.timeZone !== "Asia/Manila") {
+    return (
+      <>
+        <Field label="Starts" value={clocks(booking, booking.startsAt)} />
+        <Field label="Ends" value={clocks(booking, booking.endsAt)} />
+      </>
+    );
+  }
+  return <Field label="When" value={formatBookingWhen(booking.startsAt, booking.endsAt)} />;
 }
 
 export function Field({ label, value }: { label: string; value: string | null }) {

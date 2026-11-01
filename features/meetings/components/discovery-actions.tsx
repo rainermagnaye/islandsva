@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { addDays, todayIn } from "@/components/ui/date-math";
 import { Form } from "@/components/ui/form";
 import { TextField } from "@/components/ui/text-field";
-import { BOOKING_TIME_ZONE, type BookingField } from "../contract";
-import { confirmDiscoveryAction, rescheduleDiscoveryAction } from "../actions";
+import { BOOKING_TIME_ZONE, DISCOVERY_LIMITS, type BookingField, type DiscoveryRejectField } from "../contract";
+import { confirmDiscoveryAction, rejectDiscoveryAction, rescheduleDiscoveryAction } from "../actions";
 
-/** Claim a requested discovery call, or move it to another time. */
+/** Claim a requested discovery call, decline it, or move it to another time. */
 export function DiscoveryActions({ meetingId, canConfirm, onDone }: { meetingId: string; canConfirm: boolean; onDone: (message: string) => void }) {
   return (
     <div className="grid gap-4">
@@ -22,6 +22,33 @@ export function DiscoveryActions({ meetingId, canConfirm, onDone }: { meetingId:
               <input type="hidden" name="meetingId" value={meetingId} />
               <Button type="submit" loading={pending}>{pending ? "Confirming" : "Assign to me and confirm"}</Button>
             </>
+          )}
+        </Form>
+      )}
+      {canConfirm && (
+        <Form<DiscoveryRejectField> aria-label="Decline discovery call" onSubmit={async (formData) => {
+          const result = await rejectDiscoveryAction(formData);
+          if (result.ok) onDone("Call declined.");
+          return result;
+        }}>
+          {({ pending, fieldErrors }) => (
+            <div className="grid gap-3 rounded-lg border border-border p-4">
+              <input type="hidden" name="meetingId" value={meetingId} />
+              <p className="m-0 type-label">Decline</p>
+              <TextField
+                label="Reason"
+                name="reason"
+                multiline
+                compact
+                required
+                maxLength={DISCOVERY_LIMITS.rejectReason}
+                hint="This closes the enquiry as junk."
+                error={fieldErrors.reason}
+              />
+              <div className="flex justify-end">
+                <Button type="submit" variant="secondary" size="sm" loading={pending}>{pending ? "Declining" : "Decline"}</Button>
+              </div>
+            </div>
           )}
         </Form>
       )}

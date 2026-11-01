@@ -1,7 +1,7 @@
 import "server-only";
 import { CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
 import { packages } from "@/content/packages";
-import { requireRole } from "@/lib/auth/session";
+import { getSessionUser, requireRole } from "@/lib/auth/session";
 import { timezoneForCountry } from "@/content/timezones";
 import { inviteClient, rollbackInvite } from "@/features/users/service";
 import type { ClientBusiness } from "./contract";
@@ -48,12 +48,16 @@ export async function openClientRegistration(clientId: string, business: ClientB
 }
 
 /**
- * Creates the stable registration link. The caller is an admin; this still checks the client is visible
- * to them before the secret key writes the token.
+ * Creates the stable registration link. The secret key writes the token; a Lead Gen may only do this for
+ * a client they created (writes stay owner-scoped even though they can read the rest of the agency).
  */
 export async function openOnboardingLink(clientId: string) {
   const client = await getClient(clientId);
   if (!client || client.disabledAt || client.status !== "pending") return { ok: false as const, reason: "not_found" as const };
+  const user = await getSessionUser();
+  if (user?.roles.includes("closer") && !user.roles.includes("admin") && client.createdById !== user.id) {
+    return { ok: false as const, reason: "not_found" as const };
+  }
   if (client.onboardingStatus !== "ready") return { ok: false as const, reason: "exists" as const };
   const token = createOnboardingToken();
   const stored = await issueClientOnboardingLink(clientId, token, onboardingTokenHash(token));

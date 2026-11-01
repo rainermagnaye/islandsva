@@ -45,10 +45,29 @@ export async function cancelVaMeetingRow(meetingId: string) {
   return settle(error, "Cancelling a VA meeting");
 }
 
+export async function insertCloserMeeting(input: VaMeetingInput) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_closer_meeting", {
+    title: input.title,
+    starts_at: input.startsAt,
+    ends_at: input.endsAt,
+    client_id: input.clientId,
+    staff_ids: input.staffIds,
+    note: input.note || null,
+  });
+  return settle(error, "Creating a closer meeting");
+}
+
+export async function cancelCloserMeetingRow(meetingId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_closer_meeting", { meeting_id: meetingId });
+  return settle(error, "Cancelling a closer meeting");
+}
+
 /**
- * The agency's other staff (admins, Lead Gens, VAs), for a VA's team meeting. Secret key: RLS lets a VA read only
- * their own profile and roles. Called only after requireRole(["va"]); it returns names and ids only, in the VA's
- * own tenant, without anyone deactivated.
+ * The agency's other staff (admins, Lead Gens, VAs), for a team meeting. Secret key: RLS lets a VA or Lead Gen
+ * read only their own profile and roles. Called only after requireRole; names and ids only, in their tenant,
+ * without anyone deactivated.
  */
 export async function listVaTeam(vaId: string): Promise<BookingChoice[]> {
   if (!isUuid(vaId)) return [];

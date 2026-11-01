@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, parseWith, tooLong } from "@/lib/validation";
-import { BOOKING_LIMITS, DISCOVERY_LIMITS, VA_MEETING_LENGTHS, discoveryStart, manilaToIso, type BookingField, type BookingNoteField, type DiscoveryTimesField, type VaMeetingField } from "./contract";
+import { BOOKING_LIMITS, DISCOVERY_LIMITS, VA_MEETING_LENGTHS, discoveryStart, manilaToIso, type BookingField, type BookingNoteField, type DiscoveryOutcomeField, type DiscoveryRejectField, type DiscoveryTimesField, type VaMeetingField } from "./contract";
 
 const HALF_HOUR = /^([01]\d|2[0-3]):(00|30)$/;
 
@@ -127,6 +127,39 @@ const discoveryMoveSchema = z.strictObject({
 
 export function parseDiscoveryMove(input: unknown) {
   return parseWith(discoveryMoveSchema, input, ["startDate", "startTime"] as const satisfies readonly BookingField[]);
+}
+
+const rejectSchema = z.strictObject({
+  meetingId: z.uuid({ error: FORM_ERROR }),
+  reason: z
+    .string({ error: "Say why you're declining." })
+    .trim()
+    .min(1, "Say why you're declining.")
+    .max(DISCOVERY_LIMITS.rejectReason, tooLong("the reason", DISCOVERY_LIMITS.rejectReason))
+    .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the reason", DISCOVERY_LIMITS.rejectReason)),
+});
+
+/** Decline a requested discovery call: the reason is stored on the meeting and closes the lead as junk. */
+export function parseDiscoveryReject(input: unknown) {
+  return parseWith(rejectSchema, input, ["reason"] as const satisfies readonly DiscoveryRejectField[]);
+}
+
+const outcomeSchema = z.strictObject({
+  meetingId: z.uuid({ error: FORM_ERROR }),
+  outcome: z.enum(["done", "no_show"], { error: FORM_ERROR }),
+  note: z
+    .string()
+    .trim()
+    .max(BOOKING_LIMITS.note, tooLong("the note", BOOKING_LIMITS.note))
+    .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("the note", BOOKING_LIMITS.note))
+    .default(""),
+});
+
+export type DiscoveryOutcomeInput = z.infer<typeof outcomeSchema>;
+
+/** Done or no-show on a discovery call that has started. */
+export function parseDiscoveryOutcome(input: unknown) {
+  return parseWith(outcomeSchema, input, ["note"] as const satisfies readonly DiscoveryOutcomeField[]);
 }
 
 const vaMeetingSchema = z

@@ -5,11 +5,11 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FORM_ERROR, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { BookingField, BookingNoteField, DiscoveryTimesField } from "./contract";
+import type { BookingField, BookingNoteField, DiscoveryOutcomeField, DiscoveryRejectField, DiscoveryTimesField } from "./contract";
 import { saveDiscoveryTimes, type DiscoveryTimesRefusal } from "./dal";
 import { bookingEntries, fileFrom, noteEntries } from "./form-data";
-import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createBooking, editBookingNote, moveDiscoveryCall, removeBookingNote, updateBooking } from "./service";
-import { parseBooking, parseBookingEventId, parseBookingId, parseBookingNote, parseBookingNoteEdit, parseDiscoveryMove, parseDiscoveryTimes } from "./validation";
+import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createBooking, editBookingNote, moveDiscoveryCall, rejectDiscoveryCall, removeBookingNote, saveDiscoveryOutcome, updateBooking } from "./service";
+import { parseBooking, parseBookingEventId, parseBookingId, parseBookingNote, parseBookingNoteEdit, parseDiscoveryMove, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes } from "./validation";
 
 const REFUSAL_MESSAGES: Record<DiscoveryTimesRefusal, string> = {
   not_allowed: "Your two-factor sign-in has expired. Sign in again, then save.",
@@ -200,6 +200,40 @@ export async function rescheduleDiscoveryAction(formData: FormData): Promise<Sub
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Discovery reschedule failed", { service: error.service, error });
     return { ok: false, message: "We couldn't move this call just now. Please try again in a moment." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** A Lead Gen declines a requested discovery call. The reason closes the lead as junk. */
+export async function rejectDiscoveryAction(formData: FormData): Promise<SubmitResult<DiscoveryRejectField>> {
+  const user = await requireRole(["closer"]);
+  const parsed = parseDiscoveryReject(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await rejectDiscoveryCall(parsed.value.meetingId, user.id, parsed.value.reason);
+    if (!result.ok) return { ok: false, message: result.message };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Discovery reject failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't decline this call just now. Please try again in a moment." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** The Lead Gen who confirmed a discovery call records Done or No-show after it has started. */
+export async function recordDiscoveryOutcomeAction(formData: FormData): Promise<SubmitResult<DiscoveryOutcomeField>> {
+  const user = await requireRole(["closer"]);
+  const parsed = parseDiscoveryOutcome(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await saveDiscoveryOutcome(parsed.value.meetingId, user.id, parsed.value.outcome, parsed.value.note);
+    if (!result.ok) return { ok: false, message: result.message };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Discovery outcome failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't save the outcome just now. Please try again in a moment." };
   }
   refresh();
   return { ok: true };

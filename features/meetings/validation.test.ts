@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBooking, parseDiscoveryTimes } from "./validation";
+import { parseBooking, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes } from "./validation";
 
 describe("parseDiscoveryTimes", () => {
   it("accepts none to six half-hour times and returns them in order", () => {
@@ -65,5 +65,42 @@ describe("parseBooking", () => {
   it("refuses a blank title", () => {
     const parsed = parseBooking({ ...booking, title: "  " });
     expect(parsed.ok).toBe(false);
+  });
+});
+
+const MEETING = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+describe("parseDiscoveryReject", () => {
+  it("accepts a reason and the meeting id", () => {
+    const parsed = parseDiscoveryReject({ meetingId: MEETING, reason: "Not a fit." });
+    expect(parsed).toEqual({ ok: true, value: { meetingId: MEETING, reason: "Not a fit." } });
+  });
+
+  it("refuses a blank reason", () => {
+    expect(parseDiscoveryReject({ meetingId: MEETING, reason: "  " })).toMatchObject({
+      ok: false,
+      fieldErrors: { reason: "Say why you're declining." },
+    });
+  });
+
+  it("refuses a reason over 300 characters", () => {
+    expect(parseDiscoveryReject({ meetingId: MEETING, reason: "x".repeat(301) })).toMatchObject({ ok: false, fieldErrors: { reason: expect.any(String) } });
+  });
+});
+
+describe("parseDiscoveryOutcome", () => {
+  it("accepts Done or No-show and an optional note", () => {
+    expect(parseDiscoveryOutcome({ meetingId: MEETING, outcome: "done" })).toEqual({
+      ok: true,
+      value: { meetingId: MEETING, outcome: "done", note: "" },
+    });
+    expect(parseDiscoveryOutcome({ meetingId: MEETING, outcome: "no_show", note: "No answer." })).toEqual({
+      ok: true,
+      value: { meetingId: MEETING, outcome: "no_show", note: "No answer." },
+    });
+  });
+
+  it("refuses an unknown outcome", () => {
+    expect(parseDiscoveryOutcome({ meetingId: MEETING, outcome: "cancelled" })).toMatchObject({ ok: false });
   });
 });

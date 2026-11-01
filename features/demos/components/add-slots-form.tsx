@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Form } from "@/components/ui/form";
 import { cx } from "@/lib/cx";
+import type { SubmitResult } from "@/types/form";
 import { addDemoSlots } from "../actions";
 import type { SlotField } from "../contract";
 import { slotCells, slotLabel, workingTimes, type BusyTime, type SlotCell } from "../slot-times";
@@ -30,6 +31,9 @@ export function AddSlotsForm({
   offered,
   windows,
   onAdded,
+  defaultDate,
+  defaultTimes,
+  save = addDemoSlots,
 }: {
   today: string;
   last: string;
@@ -38,9 +42,12 @@ export function AddSlotsForm({
   offered: readonly string[];
   windows: readonly { weekday: number; startMinute: number; endMinute: number }[];
   onAdded?: () => void;
+  defaultDate?: string;
+  defaultTimes?: readonly string[];
+  save?: (formData: FormData) => Promise<SubmitResult<SlotField>>;
 }) {
-  const [date, setDate] = useState(today);
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  const [date, setDate] = useState(defaultDate ?? today);
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set(defaultTimes));
   const cells = useMemo(() => slotCells(date, offered, busy, new Date()), [date, offered, busy]);
   const fill = workingTimes(cells, date, windows);
   const free = new Set(cells.filter((cell) => cell.state === "free").map((cell) => cell.time));
@@ -60,7 +67,7 @@ export function AddSlotsForm({
     <Form<SlotField>
       aria-label="Add demo slots"
       onSubmit={async (formData) => {
-        const result = await addDemoSlots(formData);
+        const result = await save(formData);
         if (result.ok) {
           setChosen(new Set());
           onAdded?.();

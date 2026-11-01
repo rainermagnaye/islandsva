@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -8,9 +8,10 @@ import { Icon } from "@/components/ui/icon";
 import type { AccessBadge, RegistrationStep, EmployeeDetails, EmployeeReviewStatus, UserSummary } from "../contract";
 import type { EmployeeProfileMeta } from "../profile-fields";
 import { EmployeeReviewActions } from "./employee-review-actions";
-import { EmployeeProfileForm } from "./employee-profile-form";
 import { RegistrationStepper, EmployeeProfileView } from "./employee-profile-view";
 import { ProfileMenu } from "./employee-profile-menu";
+
+const EmployeeProfileForm = lazy(() => import("./employee-profile-form").then((module) => ({ default: module.EmployeeProfileForm })));
 
 /**
  * The profile opens read-only. Confirm and return sit on the right; edit, disable and delete are in the menu beside them.
@@ -120,15 +121,17 @@ export function EmployeeProfileScreen({
         </Alert>
       )}
       {editing ? (
-        <EmployeeProfileForm
-          userId={user.id}
-          email={user.email}
-          details={details}
-          meta={meta}
-          profilePic={profilePic}
-          onSaved={() => stopEditing(true)}
-          onCancel={() => stopEditing(false)}
-        />
+        <Suspense fallback={null}>
+          <EmployeeProfileForm
+            userId={user.id}
+            email={user.email}
+            details={details}
+            meta={meta}
+            profilePic={profilePic}
+            onSaved={() => stopEditing(true)}
+            onCancel={() => stopEditing(false)}
+          />
+        </Suspense>
       ) : (
         <EmployeeProfileView userId={user.id} details={details} email={user.email} meta={meta} />
       )}

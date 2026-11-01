@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FilterMenu } from "@/components/ui/filter-menu";
@@ -8,7 +8,8 @@ import { IconBadge } from "@/components/ui/icon-badge";
 import { Modal } from "@/components/ui/modal";
 import { appRoutes } from "@/content/routes";
 import { LEAD_VIEWS, type LeadView } from "../contract";
-import { CreateLeadForm } from "./create-lead-form";
+
+const CreateLeadForm = lazy(() => import("./create-lead-form").then((module) => ({ default: module.CreateLeadForm })));
 
 type LeadFilter = LeadView | "disabled";
 
@@ -18,7 +19,7 @@ const STATUS_OPTIONS: { value: LeadFilter; label: string }[] = [
 ];
 
 /** Filter and Create Lead, in the same places as the team list. Both keep the current search. */
-export function LeadsToolbar({ status, disabled, query }: { status?: LeadView; disabled?: boolean; query?: string }) {
+export function LeadsToolbar({ status, disabled, query, path = appRoutes.adminLeads }: { status?: LeadView; disabled?: boolean; query?: string; path?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [added, setAdded] = useState(false);
@@ -31,7 +32,7 @@ export function LeadsToolbar({ status, disabled, query }: { status?: LeadView; d
     else if (next) params.set("status", next);
     if (query) params.set("q", query);
     const search = params.toString();
-    router.push(search ? `${appRoutes.adminLeads}?${search}` : appRoutes.adminLeads);
+    router.push(search ? `${path}?${search}` : path);
   }
 
   return (
@@ -71,7 +72,11 @@ export function LeadsToolbar({ status, disabled, query }: { status?: LeadView; d
           ) : undefined
         }
       >
-        {open && !added ? <CreateLeadForm key={formKey} onAdded={() => setAdded(true)} /> : null}
+        {open && !added ? (
+          <Suspense fallback={null}>
+            <CreateLeadForm key={formKey} onAdded={() => setAdded(true)} />
+          </Suspense>
+        ) : null}
       </Modal>
     </div>
   );

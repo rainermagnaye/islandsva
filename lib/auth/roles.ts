@@ -12,13 +12,13 @@ export type Role = Enums<"app_role">;
  */
 export const ROLES = ["admin", "closer", "va", "client"] as const satisfies readonly Role[];
 
-export const ROLE_LABELS: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", closer: "Closer", va: "VA", client: "Client" };
+export const ROLE_LABELS: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", closer: "Lead Gen", va: "VA", client: "Client" };
 
-/** Each role's workspace. The admin system is for admins only; Closers get their own workspace. */
+/** Each role's workspace. The admin system is for admins only; Lead Gens get their own workspace. */
 export const ROLE_HOME: Record<Role, AppRoutePath> = {
   super_admin: appRoutes.admin,
   admin: appRoutes.admin,
-  closer: appRoutes.closer,
+  closer: appRoutes.leadgen,
   va: appRoutes.va,
   client: appRoutes.client,
 };

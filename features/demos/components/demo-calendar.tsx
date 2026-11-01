@@ -182,7 +182,7 @@ export function DemoCalendar({ rows, now, today, nowMinutes, extraEvents = [], t
         </div>
       </div>
 
-      <div className={cx("grid items-stretch gap-5", aside ? "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]" : undefined)}>
+      <div className={cx("grid items-stretch gap-5", aside ? "lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : undefined)}>
       <div className="min-w-0">
       {view === "month" ? (
         <MonthBoard focus={focus} today={today} events={events} legend={legend} onEventClick={openEvent} onSlotClick={onSlotClick} eventGesture={eventGesture} onEventMove={onEventMove} filter={dateFilter} />

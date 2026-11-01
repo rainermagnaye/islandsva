@@ -13,14 +13,14 @@ import { OnboardingLinkCard } from "./onboarding-link";
 import { SendActivation } from "./client-activation";
 import { ClientReviewActions } from "./client-review-actions";
 import { ClientActions } from "./client-actions";
-import { ClientNotes } from "./client-notes";
 import { ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
-import { ShortlistAdmin } from "@/features/matching/components/shortlist-admin";
+import type { ShortlistEntry } from "@/features/matching/contract";
 
 // The editor opens only after "Edit": loaded then, so the profile page doesn't ship it (or its package and time-zone
-// data) up front.
+// data) up front. Notes and the shortlist stay off first load for the same reason.
 const ClientCompanyForm = lazy(() => import("./client-company-form").then((m) => ({ default: m.ClientCompanyForm })));
-import type { ShortlistEntry } from "@/features/matching/contract";
+const ClientNotes = lazy(() => import("./client-notes").then((m) => ({ default: m.ClientNotes })));
+const ShortlistAdmin = lazy(() => import("@/features/matching/components/shortlist-admin").then((m) => ({ default: m.ShortlistAdmin })));
 
 /** The client profile: registration progress, then overview, notes, consents, or invoices. */
 export function ClientProfile({
@@ -95,14 +95,18 @@ export function ClientProfile({
         </Alert>
       )}
       <ClientStepper steps={steps} />
-      <ShortlistAdmin clientId={client.id} assignments={assignments} offers={offers} vas={vas} />
+      <Suspense fallback={null}>
+        <ShortlistAdmin clientId={client.id} assignments={assignments} offers={offers} vas={vas} />
+      </Suspense>
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
         <Suspense fallback={null}>
           <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />
         </Suspense>
       ) : tab === "notes" ? (
-        <ClientNotes clientId={client.id} notes={notes} />
+        <Suspense fallback={null}>
+          <ClientNotes clientId={client.id} notes={notes} />
+        </Suspense>
       ) : tab === "consents" ? (
         review.record
       ) : tab === "invoices" ? (

@@ -1,5 +1,5 @@
 import "server-only";
-import { adminClientHref, adminLeadHref, adminUserHref, appRoutes, clientTaskHref, clientVaHref, closerClientHref, vaTaskHref } from "@/content/routes";
+import { adminClientHref, adminLeadHref, adminUserHref, appRoutes, clientTaskHref, clientVaHref, leadgenClientHref, leadgenLeadHref, vaTaskHref } from "@/content/routes";
 import { findClients, findOwnVas } from "@/features/clients/service";
 import { findLeads } from "@/features/leads/service";
 import { findTasks } from "@/features/tasks/service";
@@ -14,9 +14,9 @@ function hit(id: string, title: string, detail: string, href: string): SearchHit
 const group = (key: string, label: string, hits: SearchHit[]): SearchGroup => ({ key, label, hits });
 
 /**
- * Matches for the caller's scope. Every read runs as the signed-in user, so RLS limits each list again: a Closer
- * sees only the clients they created, a VA only their assigned clients and tasks, a client only their own
- * company's tasks and VAs. The caller has already resolved the scope from the session.
+ * Matches for the caller's scope. A Lead Gen searches the agency's leads and clients; a VA only their assigned
+ * clients and tasks; a client only their own company's tasks and VAs. The caller has already resolved the
+ * scope from the session.
  */
 export async function searchRecords(scope: SearchScope, userId: string, term: string): Promise<SearchResults> {
   const limit = SEARCH_GROUP_LIMIT;
@@ -33,8 +33,13 @@ export async function searchRecords(scope: SearchScope, userId: string, term: st
   }
 
   if (scope === "closer") {
-    const clients = await findClients(term, limit);
-    return { groups: [group("clients", "Your clients", clients.map((client) => hit(client.id, client.companyName, client.contactName, closerClientHref(client.id))))] };
+    const [leads, clients] = await Promise.all([findLeads(term, limit), findClients(term, limit)]);
+    return {
+      groups: [
+        group("leads", "Leads", leads.map((lead) => hit(lead.id, lead.fullName, lead.companyName ? `${lead.companyName} · ${lead.email}` : lead.email, leadgenLeadHref(lead.id)))),
+        group("clients", "Clients", clients.map((client) => hit(client.id, client.companyName, client.contactName, leadgenClientHref(client.id)))),
+      ],
+    };
   }
 
   if (scope === "va") {

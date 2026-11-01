@@ -8,12 +8,13 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
+import type { SubmitResult } from "@/types/form";
 import { addVaMeeting } from "../va-actions";
 import { BOOKING_LIMITS, BOOKING_TIME_ZONE, VA_MEETING_LENGTHS, type BookingChoice, type VaMeetingField } from "../contract";
 import { InviteField } from "./invite-field";
 
-/** A client the VA works with, and the zone their clock is shown in. */
-export type VaMeetingClient = BookingChoice & { timezone: string | null };
+/** A client the VA or Lead Gen works with, and the zone their clock is shown in. */
+export type VaMeetingClient = BookingChoice & { timezone: string | null; active?: boolean };
 
 const START_TIMES = Array.from({ length: 48 }, (_, index) => {
   const minutes = index * 30;
@@ -31,11 +32,30 @@ function lengthLabel(minutes: number) {
  * "Book › Meeting" on the VA calendar. With a client it goes in as a request the client accepts or declines; with
  * no client it's a team call, booked right away. Times are Manila; the client's own clock is shown beside them.
  */
-export function VaMeetingForm({ clients, team, today, last, onDone }: { clients: readonly VaMeetingClient[]; team: readonly BookingChoice[]; today: string; last: string; onDone?: () => void }) {
+export function VaMeetingForm({
+  clients,
+  team,
+  today,
+  last,
+  onDone,
+  book = addVaMeeting,
+  startTime = "10:00",
+  defaultDate,
+}: {
+  clients: readonly VaMeetingClient[];
+  team: readonly BookingChoice[];
+  today: string;
+  last: string;
+  onDone?: () => void;
+  book?: (formData: FormData) => Promise<SubmitResult<VaMeetingField>>;
+  startTime?: string;
+  defaultDate?: string;
+}) {
   const [clientId, setClientId] = useState("");
-  const [date, setDate] = useState(today);
-  const [start, setStart] = useState("10:00");
+  const [date, setDate] = useState(defaultDate ?? today);
+  const [start, setStart] = useState(startTime);
   const client = clients.find((item) => item.id === clientId) ?? null;
+  const waiting = Boolean(client && client.active !== false);
   const theirs = client?.timezone && client.timezone !== BOOKING_TIME_ZONE ? convertWallClock(`${date}T${start}`, BOOKING_TIME_ZONE, client.timezone) : null;
 
   return (
@@ -43,7 +63,7 @@ export function VaMeetingForm({ clients, team, today, last, onDone }: { clients:
       aria-label="Book a meeting"
       className="gap-4"
       onSubmit={async (formData) => {
-        const result = await addVaMeeting(formData);
+        const result = await book(formData);
         if (result.ok) onDone?.();
         return result;
       }}
@@ -73,16 +93,18 @@ export function VaMeetingForm({ clients, team, today, last, onDone }: { clients:
             </p>
           )}
           <TextField label="Agenda" name="note" multiline rows={3} optional maxLength={BOOKING_LIMITS.note} error={fieldErrors.note} />
-          {client ? (
-            <Alert tone="info" title={`${client.label} needs to accept`}>
+          {waiting ? (
+            <Alert tone="info" title={`${client?.label} needs to accept`}>
               It shows as Requested on both calendars until they accept or decline.
             </Alert>
           ) : (
-            <p className="m-0 type-body-sm text-ink-muted">No client, so it&apos;s booked right away and your guests see it on their calendars.</p>
+            <p className="m-0 type-body-sm text-ink-muted">
+              {client ? `${client.label} has no login yet, so this is booked right away.` : "No client, so it's booked right away and your guests see it on their calendars."}
+            </p>
           )}
           <div className="flex justify-end">
-            <Button type="submit" iconLeft={client ? "arrow-right" : "plus"} loading={pending}>
-              {pending ? "Booking" : client ? "Send request" : "Book meeting"}
+            <Button type="submit" iconLeft={waiting ? "arrow-right" : "plus"} loading={pending}>
+              {pending ? "Booking" : waiting ? "Send request" : "Book meeting"}
             </Button>
           </div>
         </>

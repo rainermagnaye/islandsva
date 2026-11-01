@@ -221,9 +221,9 @@ describe("clients: who can read which client", () => {
     await asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientA, VA]);
   });
 
-  it("a Closer reads only clients they created", async () => {
-    expect(await visible(asCloser)).toEqual([clientA, clientB].sort());
-    expect(await visible(asCloser2)).toEqual([clientC]);
+  it("a Closer reads every client in the agency", async () => {
+    expect(await visible(asCloser)).toEqual([clientA, clientB, clientC].sort());
+    expect(await visible(asCloser2)).toEqual([clientA, clientB, clientC].sort());
   });
 
   it("an admin reads every client, but only with a two-factor session", async () => {
@@ -334,12 +334,12 @@ describe("clients: who can write", () => {
 describe("VA assignments", () => {
   const visible = async (claims: Claims) => (await asUser<{ client_id: string }>(claims, "select client_id from public.client_va_assignments")).length;
 
-  it("each side sees only its own assignments", async () => {
+  it("a VA and a client see their own assignments; Lead Gens see the agency's", async () => {
     expect(await visible(asClient)).toBeGreaterThan(0);
     expect(await visible(asVa)).toBeGreaterThan(0);
     expect(await visible(asVa2)).toBe(0);
     expect(await visible(asCloser)).toBeGreaterThan(0);
-    expect(await visible(asCloser2)).toBe(0);
+    expect(await visible(asCloser2)).toBe(await visible(asCloser));
   });
 
   it("signed-in users cannot insert an assignment", async () => {
@@ -460,13 +460,14 @@ describe("leads", () => {
     await expect(asServer("update public.leads set notified_at = now() where id = $1", [lead.id])).resolves.toBeDefined();
   });
 
-  it("only admins with two-factor sign-in read every lead; a Lead Gen only those they own", async () => {
+  it("only admins with two-factor and Lead Gens read every lead in the agency", async () => {
+    const [unowned] = await insert({ email: "unowned-agency@x.co" });
     expect((await asUser(asAdmin, "select id from public.leads")).length).toBeGreaterThan(0);
     for (const claims of [token(ADMIN, ["admin"], "aal1"), asVa, asClient]) {
       expect(await asUser(claims, "select id from public.leads")).toEqual([]);
     }
-    const owners = await asUser<{ closer_id: string }>(asCloser, "select distinct closer_id from public.leads");
-    expect(owners).toEqual([{ closer_id: CLOSER }]);
+    expect(ids(await asUser<{ id: string }>(asCloser, "select id from public.leads"))).toEqual(ids(await asUser<{ id: string }>(asAdmin, "select id from public.leads")));
+    expect(await asUser(asCloser, "select id from public.leads where id = $1", [unowned.id])).toEqual([{ id: unowned.id }]);
     await expect(as("anon", {}, "select id from public.leads")).rejects.toThrow(/permission denied/);
   });
 
@@ -638,7 +639,9 @@ describe("leads", () => {
       for (const claims of [token(ADMIN, ["admin"], "aal1"), asCloser]) {
         await expect(asUser(claims, "select public.record_lead_step($1, 'call', 'hi')", [lead.id])).rejects.toThrow(/admins with two-factor sign-in only/);
       }
-      expect(await asUser(asCloser, "select id from public.lead_events")).toEqual([]);
+      expect(ids(await asUser<{ id: string }>(asCloser, "select id from public.lead_events"))).toEqual(
+        ids(await asUser<{ id: string }>(asAdmin, "select id from public.lead_events")),
+      );
       await expect(as("anon", {}, "select id from public.lead_events")).rejects.toThrow(/permission denied/);
     });
 
@@ -2693,13 +2696,15 @@ describe("discovery calls", () => {
       expect(await inbox(token(ADMIN_ONLY, ["admin", "closer"], "aal2"))).toEqual([]);
     });
 
-    it("a Lead Gen can't read an unowned lead, or the request, through the tables", async () => {
-      expect(await asUser(asLgA, "select id from public.leads where id = $1", [lead])).toEqual([]);
-      expect(await asUser(asLgA, "select id from public.meetings where id = $1", [meeting])).toEqual([]);
-      expect(await asUser(asLgA, "select id from public.meeting_events where meeting_id = $1", [meeting])).toEqual([]);
+    it("a Lead Gen reads an unowned lead and the request through the tables", async () => {
+      expect(await asUser(asLgA, "select id from public.leads where id = $1", [lead])).toEqual([{ id: lead }]);
+      expect(await asUser(asLgA, "select id from public.meetings where id = $1", [meeting])).toEqual([{ id: meeting }]);
+      expect(await asUser(asLgA, "select id from public.meeting_events where meeting_id = $1", [meeting])).toHaveLength(1);
+      expect(await asUser(asVa, "select id from public.leads where id = $1", [lead])).toEqual([]);
+      expect(await asUser(asClient, "select id from public.meetings where id = $1", [meeting])).toEqual([]);
     });
 
-    it("confirming makes the Lead Gen the organizer and the lead's owner; then only they (and admins with 2FA) see it", async () => {
+    it("confirming makes the Lead Gen the organizer and the lead's owner; other Lead Gens in the agency still see it", async () => {
       const [{ r }] = await decide(meeting, LG_A, "scheduled", null, "evt-1", "https://meet.google.com/abc-defg-hij");
       expect(r).toMatchObject({ lead_id: lead, status: "scheduled", email: "inbox@disc.co", full_name: "Ana Cruz" });
       const [stored] = await asServer("select status::text as status, organizer_id, decided_by, google_event_id, meet_url from public.meetings where id = $1", [meeting]);
@@ -2712,9 +2717,10 @@ describe("discovery calls", () => {
         { kind: "requested" },
         { kind: "scheduled" },
       ]);
-      expect(await asUser(asLgB, "select id from public.leads where id = $1", [lead])).toEqual([]);
-      expect(await asUser(asLgB, "select id from public.meetings where id = $1", [meeting])).toEqual([]);
-      expect(await asUser(asLgB, "select id from public.meeting_events where meeting_id = $1", [meeting])).toEqual([]);
+      expect(await asUser(asLgB, "select id from public.leads where id = $1", [lead])).toEqual([{ id: lead }]);
+      expect(await asUser(asLgB, "select id from public.meetings where id = $1", [meeting])).toEqual([{ id: meeting }]);
+      expect(await asUser(asLgB, "select id from public.meeting_events where meeting_id = $1", [meeting])).toHaveLength(2);
+      expect(await asUser(asVa, "select id from public.leads where id = $1", [lead])).toEqual([]);
       expect(await inboxIds(asLgA)).not.toContain(meeting);
       expect(await inboxIds(asLgB)).not.toContain(meeting);
       expect(await asUser(asAdmin, "select id from public.meeting_events where meeting_id = $1", [meeting])).toHaveLength(2);
@@ -2768,9 +2774,8 @@ describe("discovery calls", () => {
       ]);
       expect(await asServer("select body from public.meeting_events where meeting_id = $1 and kind = 'rejected'", [junkMeeting])).toEqual([{ body: "Not a business" }]);
       expect(await slots()).toContain(iso(start));
-      // The decider reads the call, not the lead (it has no owner).
       expect(await asUser(asLgB, "select id from public.meetings where id = $1", [junkMeeting])).toHaveLength(1);
-      expect(await asUser(asLgB, "select id from public.leads where id = $1", [junk])).toEqual([]);
+      expect(await asUser(asLgB, "select id from public.leads where id = $1", [junk])).toEqual([{ id: junk }]);
     });
 
     it("is for the server only", async () => {
@@ -3811,7 +3816,7 @@ describe("manual meetings", () => {
     expect(await asUser(asVa, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
     expect(await asUser(asClient, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
     expect(await asUser(asVa2, "select id from public.meetings where id = $1", [row.id])).toEqual([]);
-    expect(await asUser(asCloser, "select id from public.meetings where id = $1", [row.id])).toEqual([]);
+    expect(await asUser(asCloser, "select id from public.meetings where id = $1", [row.id])).toEqual([{ id: row.id }]);
     const history = await asServer<{ kind: string; actor_name: string }>(
       "select kind::text as kind, actor_name from public.meeting_events where meeting_id = $1 order by created_at",
       [row.id],
@@ -4019,7 +4024,7 @@ describe("client meetings", () => {
     });
   });
 
-  it("allows admins, clients and VAs as a meeting's creator; a Lead Gen still cannot", async () => {
+  it("allows admins, clients, VAs and Lead Gens as a meeting's creator", async () => {
     await rolledBack(async () => {
       await ready();
       await expect(db.query(
@@ -4029,7 +4034,7 @@ describe("client meetings", () => {
       await expect(db.query(
         "insert into public.meetings (kind, status, title, starts_at, ends_at, created_by, creator_name, tenant_id) select 'manual', 'scheduled', 'Y', $1, $2, $3, 'Pat', tenant_id from public.profiles where id = $3",
         [start, end, CLOSER],
-      )).rejects.toThrow(/is not an active user with the admin or client or va role/);
+      )).resolves.toMatchObject({ rowCount: 1 });
     });
   });
 });
@@ -4674,6 +4679,65 @@ describe("VA bookings", () => {
       expect(await call(asVa2, "delete from public.calendar_blocks where id = $1 returning id", [todo.id])).toEqual([]);
       await expect(call(asVa, "update public.calendar_blocks set title = 'x' where id = $1", [todo.id])).rejects.toThrow(/permission denied/);
       expect(await call(asVa, "delete from public.calendar_blocks where id = $1 returning id", [todo.id])).toEqual([{ id: todo.id }]);
+    });
+  });
+});
+
+describe("Closer bookings", () => {
+  const ahead = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+  const start = ahead(48);
+  const end = ahead(49);
+  const call = async <T = Record<string, unknown>>(claims: Claims, sql: string, params: unknown[] = []) => {
+    await db.exec("savepoint call");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+      await db.exec("set local role authenticated");
+      const rows = (await db.query<T>(sql, params)).rows;
+      await db.exec("reset role");
+      await db.exec("release savepoint call");
+      return rows;
+    } catch (error) {
+      await db.exec("rollback to savepoint call");
+      await db.exec("reset role");
+      throw error;
+    }
+  };
+  const meet = (claims: Claims, client: string | null, staff: string[] = [], from = start, to = end) =>
+    call<{ id: string }>(claims, "select public.create_closer_meeting('Pipeline review', $1, $2, $3, $4, 'Agenda') as id", [from, to, client, staff]);
+  const status = async (id: string) => (await asServer<{ status: string }>("select status::text as status from public.meetings where id = $1", [id]))[0].status;
+
+  it("a meeting with the closer's active client waits; a pending client or team call is booked right away", async () => {
+    await rolledBack(async () => {
+      await db.query("update public.clients set status = 'active', activated_at = now(), disabled_at = null where id = $1", [clientA]);
+      await db.query("update public.profiles set status = 'active' where id = $1", [CLIENT]);
+      const [request] = await meet(asCloser, clientA);
+      expect(await asServer("select status::text as status, created_by, client_names, staff_ids from public.meetings where id = $1", [request.id])).toEqual([
+        { status: "requested", created_by: CLOSER, client_names: ["Acme"], staff_ids: [CLOSER] },
+      ]);
+      expect(await call(asCloser, "select id from public.meetings where id = $1", [request.id])).toEqual([{ id: request.id }]);
+      const [pending] = await meet(asCloser, clientB);
+      expect(await status(pending.id)).toBe("scheduled");
+      const [team] = await meet(asCloser, null, [ADMIN]);
+      expect(await status(team.id)).toBe("scheduled");
+      await expect(meet(asCloser, clientC)).rejects.toMatchObject({ code: "IVA46" });
+      await expect(meet(asCloser, clientA, [], ahead(-2), ahead(-1))).rejects.toMatchObject({ code: "IVA38" });
+      await expect(meet(asVa, null)).rejects.toMatchObject({ code: "42501" });
+      await expect(meet(asAdmin, null)).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+
+  it("only the closer cancels their own, and an active client can accept a request", async () => {
+    await rolledBack(async () => {
+      await db.query("update public.clients set status = 'active', activated_at = now(), disabled_at = null where id = $1", [clientA]);
+      await db.query("update public.profiles set status = 'active' where id = $1", [CLIENT]);
+      const [accepted] = await meet(asCloser, clientA);
+      await call(asClient, "select public.answer_va_meeting($1, true)", [accepted.id]);
+      expect(await status(accepted.id)).toBe("scheduled");
+      const [mine] = await meet(asCloser, null);
+      await expect(call(asCloser2, "select public.cancel_closer_meeting($1)", [mine.id])).rejects.toMatchObject({ code: expect.stringMatching(/^(IVA01|42501)$/) });
+      await call(asCloser, "select public.cancel_closer_meeting($1)", [mine.id]);
+      expect(await status(mine.id)).toBe("cancelled");
+      await expect(call(asCloser, "select public.cancel_closer_meeting($1)", [mine.id])).rejects.toMatchObject({ code: "IVA30" });
     });
   });
 });

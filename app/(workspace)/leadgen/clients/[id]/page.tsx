@@ -16,22 +16,21 @@ import { requireRole } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Client" };
 
-export default function CloserClientPage({ params }: PageProps<"/closer/clients/[id]">) {
+export default function LeadgenClientPage({ params }: PageProps<"/leadgen/clients/[id]">) {
   return (
     <Suspense fallback={<WorkspaceSkeleton />}>
-      <CloserClient params={params} />
+      <LeadgenClient params={params} />
     </Suspense>
   );
 }
 
-async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, "params">) {
+async function LeadgenClient({ params }: Pick<PageProps<"/leadgen/clients/[id]">, "params">) {
   await requireRole(["closer"]);
   const { id } = await params;
   if (!parseClientId({ clientId: id }).ok) notFound();
-  // RLS: a Closer reads only the clients they created, so anyone else's id is a 404.
   const client = await getClient(id);
   if (!client) notFound();
-  // The token is server-only; read it only now that RLS has shown this Closer the client.
+  // The token is server-only; read it only after this client is visible to the Lead Gen.
   const awaitingRegistration = client.status === "pending" && !client.disabledAt;
   const token = awaitingRegistration ? await getRegistrationToken(id) : null;
   const url = token ? onboardingUrl(token, await registrationOrigin()) : null;
@@ -39,7 +38,7 @@ async function CloserClient({ params }: Pick<PageProps<"/closer/clients/[id]">, 
   return (
     <Workspace
       compact
-      breadcrumbs={<Breadcrumbs items={[{ label: "Your clients", href: appRoutes.closer }, { label: client.companyName }]} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: "Clients", href: appRoutes.leadgenClients }, { label: client.companyName }]} />}
     >
       <div className="grid gap-4">
         <Card as="header" padding="sm" className="flex flex-wrap items-center gap-2">

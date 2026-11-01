@@ -1,26 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// A Closer may now create the registration link. The guard is that the client is read under RLS first:
-// a client the caller can't see (another Closer's) comes back null, and no link may be stored for it.
+// A Closer may create the registration link only for a client they created. Reads can now see the
+// rest of the agency, so the guard is createdById, not RLS.
 
 const dal = vi.hoisted(() => ({ getClient: vi.fn() }));
 const onboarding = vi.hoisted(() => ({ issueClientOnboardingLink: vi.fn() }));
+const session = vi.hoisted(() => ({
+  getSessionUser: vi.fn(async (): Promise<{ id: string; roles: string[]; aal: string } | null> => null),
+  requireRole: vi.fn(),
+}));
 vi.mock("./dal", () => dal);
 vi.mock("./onboarding-dal", () => onboarding);
 vi.mock("./link", () => ({ onboardingUrl: (token: string, origin: string) => `${origin}/register/${token}`, registrationOrigin: async () => "https://app.test" }));
 vi.mock("@/features/users/service", () => ({}));
+vi.mock("@/lib/auth/session", () => session);
 
 const { openOnboardingLink } = await import("./service");
 
-const client = { id: "c1", status: "pending", disabledAt: null, onboardingStatus: "ready" };
+const client = { id: "c1", status: "pending", disabledAt: null, onboardingStatus: "ready", createdById: "closer-1" };
 
 describe("openOnboardingLink", () => {
   beforeEach(() => {
     dal.getClient.mockReset();
     onboarding.issueClientOnboardingLink.mockReset().mockResolvedValue({ ok: true });
+    session.getSessionUser.mockReset().mockResolvedValue(null);
   });
 
-  it("stores nothing for a client the caller can't read (RLS returns null)", async () => {
+  it("stores nothing for a client the caller can't read", async () => {
     dal.getClient.mockResolvedValue(null);
     expect(await openOnboardingLink("c1")).toEqual({ ok: false, reason: "not_found" });
     expect(onboarding.issueClientOnboardingLink).not.toHaveBeenCalled();
@@ -34,7 +40,14 @@ describe("openOnboardingLink", () => {
     expect(onboarding.issueClientOnboardingLink).not.toHaveBeenCalled();
   });
 
-  it("creates the link for a pending client the caller can read, and returns its URL", async () => {
+  it("a Lead Gen cannot store a link for a client they did not create", async () => {
+    session.getSessionUser.mockResolvedValue({ id: "closer-1", roles: ["closer"], aal: "aal1" });
+    dal.getClient.mockResolvedValue({ ...client, createdById: "closer-2" });
+    expect(await openOnboardingLink("c1")).toEqual({ ok: false, reason: "not_found" });
+    expect(onboarding.issueClientOnboardingLink).not.toHaveBeenCalled();
+  });
+
+  it("creates the link for a pending client the caller can write, and returns its URL", async () => {
     dal.getClient.mockResolvedValue(client);
     const result = await openOnboardingLink("c1");
     expect(result).toMatchObject({ ok: true, url: expect.stringMatching(/^https:\/\/app\.test\/register\/[A-Za-z0-9_-]{43}$/) });

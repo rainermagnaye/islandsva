@@ -6,7 +6,7 @@ describe("searchScopeFor", () => {
     expect(searchScopeFor({ roles: ["admin"], aal: "aal2" })).toBe("admin");
     expect(searchScopeFor({ roles: ["super_admin", "admin"], aal: "aal2" })).toBe("admin");
     expect(searchScopeFor({ roles: ["admin"], aal: "aal1" })).toBeNull();
-    // An admin who is also a Closer still needs two-factor; they never fall back to the Closer's view.
+    // An admin who is also a Lead Gen still needs two-factor; they never fall back to the Lead Gen view.
     expect(searchScopeFor({ roles: ["admin", "closer"], aal: "aal1" })).toBeNull();
   });
 

@@ -1,6 +1,6 @@
 import { clockLabel, minutesOf, todayIn, wallClockIn } from "@/components/ui/date-math";
 import { TASK_STATUS_LABELS, TASK_STATUS_TONES } from "@/features/tasks/contract";
-import type { Booking } from "./contract";
+import type { Booking, DiscoveryRequest } from "./contract";
 import type { ScheduleDemo, ScheduleTask } from "./schedule";
 
 // "Coming up" on the client's calendar: what is overdue, then the next two weeks of deadlines, meetings and demo
@@ -148,6 +148,42 @@ export function vaAgendaSources({
         badge: null,
         href: null,
         bookingId: null,
+      })),
+  ];
+}
+
+/**
+ * The closer's calendar: requested inbox rows (RLS hides them from listBookings) plus meetings still on.
+ * Inbox ids win so a request is not drawn twice if it also appears in bookings.
+ */
+export function closerAgendaSources({ bookings, requests }: { bookings: readonly Booking[]; requests: readonly DiscoveryRequest[] }): AgendaSource[] {
+  const waiting = new Set(requests.map((request) => request.meetingId));
+  return [
+    ...requests.map((request): AgendaSource => ({
+      key: `meeting:${request.meetingId}`,
+      kind: "meeting",
+      title: request.companyName || request.fullName,
+      at: request.startsAt,
+      end: request.endsAt,
+      who: request.fullName,
+      overdue: false,
+      badge: { label: "Requested", tone: "warning" },
+      href: null,
+      bookingId: request.meetingId,
+    })),
+    ...bookings
+      .filter((booking) => (booking.status === "requested" || booking.status === "scheduled") && !waiting.has(booking.id))
+      .map((booking): AgendaSource => ({
+        key: `meeting:${booking.id}`,
+        kind: "meeting",
+        title: booking.title,
+        at: booking.startsAt,
+        end: booking.endsAt,
+        who: booking.clientName,
+        overdue: false,
+        badge: booking.status === "requested" ? { label: "Requested", tone: "warning" } : null,
+        href: null,
+        bookingId: booking.id,
       })),
   ];
 }

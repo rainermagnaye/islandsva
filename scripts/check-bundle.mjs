@@ -20,7 +20,6 @@ const OVER_BUDGET_CAPS_KB = {
   "/client/calendar": 168.0,
   "/admin/users/[id]": 167.1,
   "/admin/users": 161.6,
-  "/admin/leads": 161.6,
 };
 
 if (!existsSync(APP_DIR)) {

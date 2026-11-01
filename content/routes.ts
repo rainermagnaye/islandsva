@@ -38,8 +38,11 @@ export const appRoutes = {
   vaTasks: "/va/tasks",
   vaHours: "/va/hours",
   vaCalendar: "/va/calendar",
-  closer: "/closer",
-  closerNewClient: "/closer/clients/new",
+  leadgen: "/leadgen",
+  leadgenCalendar: "/leadgen/calendar",
+  leadgenLeads: "/leadgen/leads",
+  leadgenClients: "/leadgen/clients",
+  leadgenNewClient: "/leadgen/clients/new",
   admin: "/admin",
   /** Public registration packet. The token is the access; the customer does not sign in. */
   register: "/register",
@@ -86,8 +89,11 @@ export const vaClientHref = (id: string) => `${appRoutes.vaClients}/${id}`;
 export const vaTaskFileHref = (taskId: string, fileId: string) => `${vaTaskHref(taskId)}/files/${fileId}`;
 
 
-/** A Closer's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */
-export const closerClientHref = (id: string) => `${appRoutes.closer}/clients/${id}`;
+/** A Lead Gen's view of one of their clients. The id is a random UUID, so the URL carries no personal data. */
+export const leadgenClientHref = (id: string) => `${appRoutes.leadgenClients}/${id}`;
+
+/** One lead in the Lead Gen workspace. The id is a random UUID, so the URL carries no personal data. */
+export const leadgenLeadHref = (id: string) => `${appRoutes.leadgenLeads}/${id}`;
 
 /** A file on a booking note. The id is a random UUID. */
 export const meetingFileHref = (eventId: string) => `/meeting-files/${eventId}`;
