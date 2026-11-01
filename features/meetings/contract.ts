@@ -14,6 +14,8 @@ export const DISCOVERY_LIMITS = {
   minNoticeHours: 12,
   /** …and at most this far ahead. */
   maxDaysAhead: 14,
+  /** Rejecting a request needs a reason (decide_discovery_call). */
+  rejectReason: 300,
 } as const;
 
 /** Every half hour of a day, "00:00" to "23:30" — the times an admin may choose. */
@@ -120,6 +122,8 @@ export type Booking = {
 
 export type BookingField = "title" | "startDate" | "startTime" | "endDate" | "endTime" | "clientIds" | "staffIds" | "note";
 export type BookingNoteField = "note";
+export type DiscoveryRejectField = "reason";
+export type DiscoveryOutcomeField = "note";
 
 /** A Manila date ("2026-11-03") and time ("09:30") as a UTC ISO timestamp. */
 export function manilaToIso(date: string, time: string) {

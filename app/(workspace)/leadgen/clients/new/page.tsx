@@ -21,7 +21,7 @@ async function NewClient() {
   return (
     <Workspace
       title="New client"
-      breadcrumbs={<Breadcrumbs items={[{ label: "Your clients", href: appRoutes.closer }, { label: "New client" }]} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: "Clients", href: appRoutes.leadgenClients }, { label: "New client" }]} />}
     >
       <div className="max-w-2xl">
         <NewClientForm />

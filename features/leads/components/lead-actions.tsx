@@ -18,12 +18,18 @@ import { ConvertDialog } from "./convert-dialog";
 
 type Dialog = "step" | "junk" | "convert" | "pause" | "delete" | null;
 
-/** Pipeline button and the edit / disable / delete menu. Each write opens a dialog first. */
-export function LeadActions({ lead, viewerId, canDelete, editing }: { lead: LeadDetail; viewerId: string; canDelete: boolean; editing: boolean }) {
+const CLOSER_STEP = {
+  new: { kind: "call", label: "Book demo", title: "Book a demo", prompt: "Demo notes" },
+  contacted: { kind: "qualification", label: "Qualified", title: "Mark as qualified", prompt: "Qualification details" },
+} as const;
+
+/** Pipeline button and the edit / disable / delete menu. Each write opens a dialog first. A closer's only button is Book demo, then Qualified. */
+export function LeadActions({ lead, viewerId, canDelete, editing, audience = "admin", leadHref = adminLeadHref }: { lead: LeadDetail; viewerId: string; canDelete: boolean; editing: boolean; audience?: "admin" | "closer"; leadHref?: (id: string) => string }) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const menu = useRef<HTMLDetailsElement>(null);
   const router = useRouter();
-  const step = lead.status === "new" || lead.status === "contacted" ? PIPELINE_STEP[lead.status] : null;
+  const steps = audience === "closer" ? CLOSER_STEP : PIPELINE_STEP;
+  const step = lead.status === "new" || lead.status === "contacted" ? steps[lead.status] : null;
   const working = !lead.disabledAt && lead.status !== "converted" && lead.status !== "closed";
   const mine = lead.closerId === viewerId;
   const close = () => setDialog(null);
@@ -36,7 +42,7 @@ export function LeadActions({ lead, viewerId, canDelete, editing }: { lead: Lead
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        {working && !mine && (
+        {audience === "admin" && working && !mine && (
           <Form className="flex" aria-label="Assign this lead to me" onSubmit={assignLeadToMe}>
             {({ pending }) => (
               <>
@@ -53,12 +59,12 @@ export function LeadActions({ lead, viewerId, canDelete, editing }: { lead: Lead
             {step.label}
           </Button>
         )}
-        {working && lead.status === "qualified" && (
+        {audience === "admin" && working && lead.status === "qualified" && (
           <Button type="button" onClick={() => setDialog("convert")}>
             Mark as Converted
           </Button>
         )}
-        {lead.status !== "closed" && (
+        {audience === "admin" && lead.status !== "closed" && (
           <button
             type="button"
             aria-label="Mark as junk"
@@ -68,6 +74,7 @@ export function LeadActions({ lead, viewerId, canDelete, editing }: { lead: Lead
             <Icon name="trash" />
           </button>
         )}
+        {audience === "admin" && (
         <details ref={menu} className="relative">
           <summary aria-label="Lead actions" className={buttonClasses({ variant: "ghost", className: "size-11 cursor-pointer list-none px-0 marker:content-none [&::-webkit-details-marker]:hidden" })}>
             <Icon name="menu" />
@@ -79,17 +86,18 @@ export function LeadActions({ lead, viewerId, canDelete, editing }: { lead: Lead
               onClick={() => {
                 const details = menu.current;
                 if (details) details.open = false;
-                router.push(editing ? adminLeadHref(lead.id) : `${adminLeadHref(lead.id)}?edit=1`);
+                router.push(editing ? leadHref(lead.id) : `${leadHref(lead.id)}?edit=1`);
               }}
             />
             <MenuItem icon={lead.disabledAt ? "check" : "x-circle"} label={lead.disabledAt ? "Enable" : "Disable"} onClick={() => openDialog("pause")} />
             {canDelete && <MenuItem icon="trash" label="Delete" danger onClick={() => openDialog("delete")} />}
           </ul>
         </details>
+        )}
       </div>
 
       {dialog === "step" && step && (
-        <RemarkDialog title={step.title} label={step.prompt} kind={step.kind} leadId={lead.id} allowFile={step.kind === "call"} onClose={close} />
+        <RemarkDialog title={step.title} label={step.prompt} kind={step.kind} leadId={lead.id} allowFile={audience === "admin" && step.kind === "call"} onClose={close} />
       )}
       {dialog === "junk" && (
         <RemarkDialog

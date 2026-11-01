@@ -18,7 +18,7 @@ const STATUS_OPTIONS: { value: LeadFilter; label: string }[] = [
 ];
 
 /** Filter and Create Lead, in the same places as the team list. Both keep the current search. */
-export function LeadsToolbar({ status, disabled, query }: { status?: LeadView; disabled?: boolean; query?: string }) {
+export function LeadsToolbar({ status, disabled, query, path = appRoutes.adminLeads }: { status?: LeadView; disabled?: boolean; query?: string; path?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [added, setAdded] = useState(false);
@@ -31,7 +31,7 @@ export function LeadsToolbar({ status, disabled, query }: { status?: LeadView; d
     else if (next) params.set("status", next);
     if (query) params.set("q", query);
     const search = params.toString();
-    router.push(search ? `${appRoutes.adminLeads}?${search}` : appRoutes.adminLeads);
+    router.push(search ? `${path}?${search}` : path);
   }
 
   return (

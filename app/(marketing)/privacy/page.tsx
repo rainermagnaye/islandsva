@@ -101,7 +101,7 @@ export default function PrivacyPage() {
 
           <h2>Who can see it</h2>
           <p>
-            Only the people who need it: our admins, the Closer who looks after your account, and your VA (who sees your company
+            Only the people who need it: our admins, the Lead Gen who looks after your account, and your VA (who sees your company
             name, contact name and email, time zone and agreed hours, not your billing or payment records). Clients don&apos;t see other clients&apos;
             information.
           </p>

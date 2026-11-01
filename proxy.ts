@@ -11,7 +11,7 @@ const SIGNED_IN_ONLY = [
   appRoutes.dashboard,
   appRoutes.client,
   appRoutes.va,
-  appRoutes.closer,
+  appRoutes.leadgen,
   appRoutes.admin,
   appRoutes.profile,
   appRoutes.setPassword,
@@ -34,6 +34,10 @@ export async function proxy(request: NextRequest) {
 
   const { response, claims } = session;
   const { pathname, search } = request.nextUrl;
+
+  if (isUnder(pathname, "/closer")) {
+    return redirectWithSession(request, response, `/leadgen${pathname.slice("/closer".length)}`, search);
+  }
 
   if (!claims && SIGNED_IN_ONLY.some((base) => isUnder(pathname, base))) {
     return redirectWithSession(
@@ -65,6 +69,7 @@ export const config = {
     "/client/:path*",
     "/va/:path*",
     "/closer/:path*",
+    "/leadgen/:path*",
     "/admin/:path*",
     "/profile",
   ],

@@ -13,7 +13,7 @@ const SHIFT = { day: { classes: "bg-shift-day-bg text-shift-day-ink", icon: "sun
 
 /**
  * A week of a client's coverage: day and night shifts as soft bands, events on top, the now-line, and a
- * day-by-day agenda under 640px of container width. Drag and stretch are on when the page passes `eventGesture`.
+ * day-by-day agenda on small viewports. Drag and stretch are on when the page passes `eventGesture`.
  */
 export function ScheduleCalendar({ events = [], shifts = [], legend = [], view = "week", focus, weekOf, today, nowMinutes, timeZone = "Asia/Manila", weekStartsOn = 1, locale = "en-US", startHour = 0, endHour = 24, hourHeight = 44, scrollToHour = 8, height = 520, title = "This week", showToolbar = true, leading, actions, onEventClick, eventGesture, onEventMove, onSlotClick, className }: ScheduleCalendarProps) {
   const now = today ?? todayIn(timeZone);
@@ -137,7 +137,7 @@ export function ScheduleCalendar({ events = [], shifts = [], legend = [], view =
   }
 
   return (
-    <section aria-label={title} className={cx("@container grid gap-3 p-4 text-ink", cardSurface, className)}>
+    <section aria-label={title} className={cx("grid gap-3 p-4 text-ink", cardSurface, className)}>
       {(showToolbar || leading || legend.length > 0 || actions) && (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {leading}
@@ -170,7 +170,7 @@ export function ScheduleCalendar({ events = [], shifts = [], legend = [], view =
       )}
 
       {/* Header and hours share one scrollport, so the day lines stay under the day names when a scrollbar appears. */}
-      <div className="hidden overflow-hidden rounded-md border border-border @[640px]:block">
+      <div className="max-sm:hidden overflow-hidden rounded-md border border-border">
         <div ref={scroller} className="overflow-y-auto overscroll-contain" style={{ maxHeight: height }}>
           <div className="sticky top-0 z-10 grid border-b border-border bg-surface-sunken" style={{ gridTemplateColumns: columns }}>
             <span className="self-end px-1.5 pb-1.5 text-right type-caption text-ink-muted">{zoneName}</span>
@@ -250,8 +250,8 @@ export function ScheduleCalendar({ events = [], shifts = [], legend = [], view =
         </div>
       </div>
 
-      {/* The agenda, under 640px of container width. */}
-      <ol className="m-0 grid list-none p-0 @[640px]:hidden">
+      {/* The agenda, on small viewports only — the hour grid is the desktop week. */}
+      <ol className="m-0 grid list-none p-0 sm:hidden">
         {days.map((day) => {
           const dayEvents = [...eventsOn(day)].sort((a, b) => a.start.localeCompare(b.start));
           return (

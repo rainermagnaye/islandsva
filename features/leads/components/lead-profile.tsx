@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { adminLeadHref } from "@/content/routes";
+import { adminLeadHref, appRoutes, leadgenLeadHref } from "@/content/routes";
 import type { Booking } from "@/features/meetings/contract";
 import type { LeadDetail, LeadEvent, LeadProfileTab } from "../contract";
 import { LeadActions } from "./lead-actions";
@@ -27,9 +27,10 @@ function withWebsiteSource(lead: LeadDetail, meetings: readonly Booking[]): Lead
 }
 
 /** The lead's own page. A dash is a detail this lead does not have yet. */
-export function LeadProfile({ lead, events, meetings, viewerId, tab, editing }: { lead: LeadDetail; events: readonly LeadEvent[]; meetings: readonly Booking[]; viewerId: string; tab: LeadProfileTab; editing: boolean }) {
+export function LeadProfile({ lead, events, meetings, viewerId, tab, editing, audience = "admin" }: { lead: LeadDetail; events: readonly LeadEvent[]; meetings: readonly Booking[]; viewerId: string; tab: LeadProfileTab; editing: boolean; audience?: "admin" | "closer" }) {
   const shown = withWebsiteSource(lead, meetings);
   const canDelete = shown.status === "new" && events.length === 0;
+  const leadHref = audience === "closer" ? leadgenLeadHref : adminLeadHref;
 
   return (
     <div className="grid gap-4">
@@ -43,21 +44,21 @@ export function LeadProfile({ lead, events, meetings, viewerId, tab, editing }: 
           <LeadStatusBadge status={shown.status} />
           {shown.disabledAt && <Badge tone="neutral" size="sm" dot>Disabled</Badge>}
         </div>
-        <LeadActions lead={shown} viewerId={viewerId} canDelete={canDelete} editing={editing} />
+        <LeadActions lead={shown} viewerId={viewerId} canDelete={canDelete} editing={editing} audience={audience} />
       </Card>
 
-      <ProfileTabs id={shown.id} tab={tab} />
+      <ProfileTabs id={shown.id} tab={tab} leadHref={leadHref} />
 
-      {editing ? <LeadProfileForm lead={shown} /> : tab === "timeline" ? <ToastProvider><LeadTimeline lead={shown} events={events} meetings={meetings} /></ToastProvider> : <LeadOverview lead={shown} events={events} />}
+      {editing ? <LeadProfileForm lead={shown} /> : tab === "timeline" ? <ToastProvider><LeadTimeline lead={shown} events={events} meetings={meetings} canAddNote={audience === "admin"} canManage={audience === "admin"} clientsHref={audience === "closer" ? appRoutes.leadgenClients : appRoutes.adminClients} /></ToastProvider> : <LeadOverview lead={shown} events={events} showFiles={audience === "admin"} />}
     </div>
   );
 }
 
 /** Pill tabs, the same treatment as the client status filter: a link per section, so the URL can be shared. */
-function ProfileTabs({ id, tab }: { id: string; tab: LeadProfileTab }) {
+function ProfileTabs({ id, tab, leadHref }: { id: string; tab: LeadProfileTab; leadHref: (id: string) => string }) {
   const tabs: { id: LeadProfileTab; label: string; href: string }[] = [
-    { id: "overview", label: "Overview", href: adminLeadHref(id) },
-    { id: "timeline", label: "Timeline", href: `${adminLeadHref(id)}?tab=timeline` },
+    { id: "overview", label: "Overview", href: leadHref(id) },
+    { id: "timeline", label: "Timeline", href: `${leadHref(id)}?tab=timeline` },
   ];
 
   return (
@@ -79,7 +80,7 @@ function ProfileTabs({ id, tab }: { id: string; tab: LeadProfileTab }) {
   );
 }
 
-function LeadOverview({ lead, events }: { lead: LeadDetail; events: readonly LeadEvent[] }) {
+function LeadOverview({ lead, events, showFiles }: { lead: LeadDetail; events: readonly LeadEvent[]; showFiles: boolean }) {
   const owner = lead.closerName ?? EMPTY;
 
   const profile = lead.profile;
@@ -131,12 +132,12 @@ function LeadOverview({ lead, events }: { lead: LeadDetail; events: readonly Lea
         <Field label="Priority" value={profile.priority || EMPTY} />
       </FieldCard>
 
-      <LeadFiles lead={lead} events={events} />
+      <LeadFiles lead={lead} events={events} showFiles={showFiles} />
     </div>
   );
 }
 
-function LeadFiles({ lead, events }: { lead: LeadDetail; events: readonly LeadEvent[] }) {
+function LeadFiles({ lead, events, showFiles }: { lead: LeadDetail; events: readonly LeadEvent[]; showFiles: boolean }) {
   const files = events.filter((event) => event.attachmentName && event.attachmentType);
   return (
     <Card as="section" padding="none">
@@ -148,7 +149,11 @@ function LeadFiles({ lead, events }: { lead: LeadDetail; events: readonly LeadEv
           <ul className="m-0 grid list-none gap-4 sm:grid-cols-2">
             {files.map((event) => (
               <li key={event.id}>
-                <AttachmentPreview href={`${adminLeadHref(lead.id)}/files/${event.id}`} name={event.attachmentName ?? ""} type={event.attachmentType ?? ""} />
+                {showFiles ? (
+                  <AttachmentPreview href={`${adminLeadHref(lead.id)}/files/${event.id}`} name={event.attachmentName ?? ""} type={event.attachmentType ?? ""} />
+                ) : (
+                  <p className="m-0 type-body-sm">{event.attachmentName}</p>
+                )}
               </li>
             ))}
           </ul>

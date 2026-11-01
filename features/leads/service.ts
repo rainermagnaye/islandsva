@@ -5,7 +5,7 @@ import { businessFromEnquiry } from "@/features/clients/contract";
 import { openClientRegistration, openOnboardingLink } from "@/features/clients/service";
 import { claimLead, deleteLead, getLead, insertDiscoveryRequest, insertLead, listOpenDiscoverySlots, markLeadNotified, searchLeads, setLeadDisabled, updateLeadDetails } from "./dal";
 import { convertLeadNoted, convertLeadToClient } from "./convert-dal";
-import { recordLeadFile, recordLeadStep } from "./timeline-dal";
+import { recordLeadFile, recordLeadStep, recordOwnedLeadStep } from "./timeline-dal";
 import { sendLeadNotification } from "./email";
 import type { LeadEditInput, LeadInput, LeadStepInput } from "./validation";
 import type { ConvertInput, ConvertNotedInput } from "./convert-validation";
@@ -17,8 +17,8 @@ export type LeadSource = { ipHash: string | null; userAgent: string | null };
  * Stores a validated lead and returns its id. The single entry point for creating leads, so later rules
  * (duplicate checks, assigning a Closer) live here, not in each caller.
  */
-export async function createLead(lead: LeadInput, source: LeadSource) {
-  return insertLead({ ...lead, ...source });
+export async function createLead(lead: LeadInput, source: LeadSource, closerId?: string) {
+  return insertLead({ ...lead, ...source }, closerId ? { closerId } : undefined);
 }
 
 /** The discovery-call starts the contact form offers (the admin's daily times that are still open). */
@@ -69,6 +69,18 @@ export async function assignLead(leadId: string, userId: string) {
 /** Timeline entry, and the status move when the kind is a pipeline step. */
 export async function logLeadStep(input: LeadStepInput) {
   return recordLeadStep(input.leadId, input.kind, input.body);
+}
+
+/**
+ * Book demo or Qualified, for a lead this closer owns. Anything else (junk, notes, a lead they don't own,
+ * a step that doesn't match the status) is refused before the write.
+ */
+export async function logOwnedLeadStep(userId: string, input: LeadStepInput) {
+  if (input.kind !== "call" && input.kind !== "qualification") return { ok: false as const, reason: "unavailable" as const };
+  const lead = await getLead(input.leadId);
+  if (!lead || lead.closerId !== userId || lead.disabledAt) return { ok: false as const, reason: "not_found" as const };
+  if (lead.status !== (input.kind === "call" ? "new" : "contacted")) return { ok: false as const, reason: "unavailable" as const };
+  return recordOwnedLeadStep(userId, input.leadId, input.kind, input.body);
 }
 
 /** A call summary or a note, with the optional file stored on the same timeline row. */

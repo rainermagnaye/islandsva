@@ -27,7 +27,7 @@ type Row = {
 };
 
 /** History for one lead, with each meeting opening the same detail as the calendar. */
-export function LeadTimeline({ lead, events, meetings }: { lead: LeadDetail; events: readonly LeadEvent[]; meetings: readonly Booking[] }) {
+export function LeadTimeline({ lead, events, meetings, canAddNote = true, canManage = true, clientsHref = appRoutes.adminClients }: { lead: LeadDetail; events: readonly LeadEvent[]; meetings: readonly Booking[]; canAddNote?: boolean; canManage?: boolean; clientsHref?: string }) {
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = meetings.find((meeting) => meeting.id === selectedId) ?? null;
@@ -38,7 +38,7 @@ export function LeadTimeline({ lead, events, meetings }: { lead: LeadDetail; eve
       <Card as="section" padding="none">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <h2 className="m-0 type-label">History</h2>
-          <TimelineButtons leadId={lead.id} />
+          {canAddNote && <TimelineButtons leadId={lead.id} />}
         </div>
         <ol className="m-0 grid list-none gap-0 p-4">
           {rows.map((event, index) => (
@@ -74,13 +74,13 @@ export function LeadTimeline({ lead, events, meetings }: { lead: LeadDetail; eve
           <Activity label="Discovery call logs" value={callLogs(meetings)} wide />
           <Activity label="Follow-up notes" value={EMPTY} wide />
           <Activity label="Status changes" value={EMPTY} wide />
-          <Activity label="Closer changes" value={EMPTY} wide />
+          <Activity label="Lead Gen changes" value={EMPTY} wide />
           <Activity
             label="Conversion"
             wide
             value={
               lead.status === "converted" ? (
-                <Link href={appRoutes.adminClients}>This lead is now a client. View clients.</Link>
+                <Link href={clientsHref}>This lead is now a client. View clients.</Link>
               ) : (
                 EMPTY
               )
@@ -93,7 +93,7 @@ export function LeadTimeline({ lead, events, meetings }: { lead: LeadDetail; eve
         <Suspense fallback={null}>
           <AdminBookingDetail
             booking={selected}
-            canManage
+            canManage={canManage}
             onClose={() => setSelectedId(null)}
             onEdit={() => undefined}
             onDone={(message) => toast.show({ title: message, tone: "success" })}

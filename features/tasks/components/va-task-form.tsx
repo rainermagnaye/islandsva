@@ -8,6 +8,7 @@ import { Form } from "@/components/ui/form";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { cx } from "@/lib/cx";
+import type { SubmitResult } from "@/types/form";
 import { bookVaTaskAction } from "../actions";
 import { TASK_LIMITS, VA_BLOCK_LENGTHS, type VaTaskField } from "../contract";
 
@@ -34,7 +35,21 @@ const MODES: readonly { value: Mode; label: string; hint: string }[] = [
  * "Book › Task" on the VA calendar: a new task (for a client, who sees it in their list, or a to-do with no client)
  * or time set aside on one of the VA's open tasks. Either way it shows on the calendar at the chosen time.
  */
-export function VaTaskForm({ clients, tasks, today, last, onDone }: { clients: readonly Choice[]; tasks: readonly Choice[]; today: string; last: string; onDone?: () => void }) {
+export function VaTaskForm({
+  clients,
+  tasks,
+  today,
+  last,
+  onDone,
+  book = bookVaTaskAction,
+}: {
+  clients: readonly Choice[];
+  tasks: readonly Choice[];
+  today: string;
+  last: string;
+  onDone?: () => void;
+  book?: (formData: FormData) => Promise<SubmitResult<VaTaskField>>;
+}) {
   const [mode, setMode] = useState<Mode>("new");
   const [clientId, setClientId] = useState("");
   const [date, setDate] = useState(today);
@@ -48,7 +63,7 @@ export function VaTaskForm({ clients, tasks, today, last, onDone }: { clients: r
       aria-label="Book a task"
       className="gap-4"
       onSubmit={async (formData) => {
-        const result = await bookVaTaskAction(formData);
+        const result = await book(formData);
         if (result.ok) onDone?.();
         return result;
       }}

@@ -9,7 +9,7 @@ import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { ConvertField, LeadEditField, LeadField } from "./contract";
 import { acceptLeadAttachment } from "./attachment";
-import { assignLead, convertLead as convert, convertLeadWithRemarks, createLead, editLead, logLeadFile, logLeadStep, pauseLead, removeLead } from "./service";
+import { assignLead, convertLead as convert, convertLeadWithRemarks, createLead, editLead, logLeadFile, logLeadStep, logOwnedLeadStep, pauseLead, removeLead } from "./service";
 import { parseAdminLead, parseLeadEdit, parseLeadFlag, parseLeadStep, parseLeadTarget, type LeadStepField } from "./validation";
 import { parseConvert, parseConvertNoted, type ConvertNotedField } from "./convert-validation";
 
@@ -39,14 +39,14 @@ export async function convertLead(formData: FormData): Promise<SubmitResult<Conv
   return { ok: true };
 }
 
-/** An admin adds a lead that didn't come through the discovery form. Stored the same way, with no visitor IP. */
+/** An admin or the closer adds a lead that didn't come through the discovery form. A closer owns the lead they add. */
 export async function addLead(formData: FormData): Promise<SubmitResult<LeadField>> {
-  await requireRole(["admin"]);
+  const user = await requireRole(["admin", "closer"]);
   const parsed = parseAdminLead(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
 
   try {
-    await createLead(parsed.value, { ipHash: null, userAgent: null });
+    await createLead(parsed.value, { ipHash: null, userAgent: null }, user.roles.includes("admin") ? undefined : user.id);
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Creating a lead failed", { service: error.service, error });
@@ -62,9 +62,9 @@ const STEP_REFUSED = {
   unavailable: "That step isn't available for this lead anymore. Refresh the page.",
 } as const;
 
-/** Call summary, qualification, junk remark, note or remark. The database moves the status when the kind is a step. */
+/** Call summary, qualification, junk remark, note or remark. The database moves the status when the kind is a step. A closer may only book a demo or mark qualified on a lead they own. */
 export async function saveLeadStep(formData: FormData): Promise<SubmitResult<LeadStepField>> {
-  await requireRole(["admin"]);
+  const user = await requireRole(["admin", "closer"]);
   const file = formData.get("attachment");
   const title = formData.get("attachmentName");
   const entries = formEntries(formData);
@@ -85,10 +85,14 @@ export async function saveLeadStep(formData: FormData): Promise<SubmitResult<Lea
     attachment = { name: checked.name, type: checked.type, base64: Buffer.from(bytes).toString("base64") };
   }
 
+  if (!user.roles.includes("admin") && attachment) return { ok: false, message: "Something went wrong with the form. Please refresh the page and try again." };
+
   try {
-    const result = attachment && (parsed.value.kind === "call" || parsed.value.kind === "note")
-      ? await logLeadFile(parsed.value.kind, parsed.value.leadId, parsed.value.body, attachment)
-      : await logLeadStep(parsed.value);
+    const result = user.roles.includes("admin")
+      ? attachment && (parsed.value.kind === "call" || parsed.value.kind === "note")
+        ? await logLeadFile(parsed.value.kind, parsed.value.leadId, parsed.value.body, attachment)
+        : await logLeadStep(parsed.value)
+      : await logOwnedLeadStep(user.id, parsed.value);
     if (!result.ok) return { ok: false, message: STEP_REFUSED[result.reason] };
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;

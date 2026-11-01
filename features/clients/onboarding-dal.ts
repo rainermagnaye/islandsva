@@ -44,8 +44,8 @@ export async function getClientPacket(clientId: string) {
 
 /**
  * Only the registration token, for the Closer's copy of the link (they don't see the signature or payment file).
- * The token isn't granted to the signed-in role, so this uses the secret key; the caller has already read the
- * client under RLS, so a Closer reaches here only for a client they created.
+ * The token isn't granted to the signed-in role, so this uses the secret key; the caller has already confirmed
+ * they can read this client.
  */
 export async function getRegistrationToken(clientId: string) {
   if (!isUuid(clientId)) return null;

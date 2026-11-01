@@ -1,4 +1,5 @@
 import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { manilaToIso, type DiscoveryRequest } from "./contract";
@@ -183,6 +184,44 @@ export async function rescheduleDiscovery(meetingId: string, startsAt: string) {
     const message = refused(error);
     if (message) return { ok: false as const, message };
     throw new UpstreamError("supabase", `Rescheduling a discovery call failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Secret key: decide_discovery_call is service_role only. The actor is the closer requireRole just checked;
+ * the function refuses anyone who is not an active Lead Gen of the call's agency (IVA14).
+ */
+export async function rejectDiscovery(meetingId: string, actorId: string, reason: string) {
+  const { error } = await createAdminClient().rpc("decide_discovery_call", {
+    meeting_id: meetingId,
+    actor: actorId,
+    decision: "rejected",
+    reason,
+  });
+  if (error) {
+    const message = refused(error);
+    if (message) return { ok: false as const, message };
+    throw new UpstreamError("supabase", `Rejecting a discovery call failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Secret key: record_discovery_outcome is service_role only. The actor is the closer requireRole just checked;
+ * the function refuses anyone who is not the call's organizer (IVA14) or a call that hasn't started (IVA23).
+ */
+export async function recordDiscoveryOutcome(meetingId: string, actorId: string, outcome: "done" | "no_show", note: string) {
+  const { error } = await createAdminClient().rpc("record_discovery_outcome", {
+    meeting_id: meetingId,
+    actor: actorId,
+    outcome,
+    note: note || null,
+  });
+  if (error) {
+    const message = refused(error);
+    if (message) return { ok: false as const, message };
+    throw new UpstreamError("supabase", `Recording a discovery outcome failed: ${error.message}`, { cause: error });
   }
   return { ok: true as const };
 }

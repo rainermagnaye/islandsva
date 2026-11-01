@@ -4,7 +4,6 @@ import { useState, type ReactNode } from "react";
 import { AttachmentField } from "@/components/ui/attachment-field";
 import { AttachmentPreview } from "@/components/ui/attachment-preview";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { addDays, todayIn, type IsoDate } from "@/components/ui/date-math";
@@ -18,9 +17,9 @@ import { TextField } from "@/components/ui/text-field";
 import { meetingFileHref } from "@/content/routes";
 import type { SubmitResult } from "@/types/form";
 import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
-import { BOOKING_STATUS_LABELS, BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingNoteField } from "../contract";
+import { BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingNoteField } from "../contract";
 import { NoteForm } from "./booking-note-form";
-import { at, useStarted, clocks, guestNames, Field } from "./booking-detail-parts";
+import { at, useStarted, clocks, guestNames, Field, StatusField, WhenFields } from "./booking-detail-parts";
 
 export type BookingDetailActions = {
   cancel: (formData: FormData) => Promise<SubmitResult>;
@@ -36,12 +35,15 @@ export type BookingDetailActions = {
  * A booking's details and notes. The caller passes the Server Actions so admin and client calendars don't
  * ship each other's code. A read-only view (VA calendar) omits them.
  */
-export function BookingDetail({ booking, canManage, actions, banner, onClose, onEdit, onDone }: {
+export function BookingDetail({ booking, canManage, actions, banner, description, footer, onClose, onEdit, onDone }: {
   booking: Booking;
   canManage: boolean;
   actions?: BookingDetailActions;
   /** Shown above the details, e.g. a request waiting for an answer. */
   banner?: ReactNode;
+  description?: string;
+  /** Replaces the complete-booking footer, e.g. a Lead Gen cancel. */
+  footer?: ReactNode;
   onClose: () => void;
   onEdit?: () => void;
   onDone: (message: string) => void;
@@ -64,6 +66,9 @@ export function BookingDetail({ booking, canManage, actions, banner, onClose, on
   const openCall = booking.status === "requested" || booking.status === "scheduled";
   const notes = booking.events.filter((event) => event.kind === "note");
   const attachments = notes.filter((note) => note.attachmentName && note.attachmentType);
+  const compact = !manage;
+  const showNotes = Boolean(manage) || notes.length > 0;
+  const showAttachments = Boolean(manage) || attachments.length > 0;
   const menu: MenuItem[] = !manage ? [] : discovery ? [
     ...(booking.status === "requested" && actions.confirmDiscovery ? [{ label: "Assign to me and confirm", icon: "check" as const, onSelect: claim }] : []),
     ...(openCall && actions.rescheduleDiscovery ? [{ label: "Reschedule", icon: "calendar" as const, onSelect: openReschedule }] : []),
@@ -94,11 +99,12 @@ export function BookingDetail({ booking, canManage, actions, banner, onClose, on
         open
         onClose={onClose}
         title={booking.title}
-        size="wide"
+        description={description}
+        size={compact ? "md" : "wide"}
         actions={menu.length > 0 ? (
           <DropdownMenu label="More" icon="menu" iconOnly align="end" items={menu} />
         ) : undefined}
-        footer={manage && booking.status === "scheduled" ? (
+        footer={footer ?? (manage && booking.status === "scheduled" ? (
           <Form aria-label="Complete booking" className="w-full justify-items-end gap-2" onSubmit={async (formData) => {
             const result = await actions.complete(formData);
             if (result.ok) onDone("Booking completed.");
@@ -112,26 +118,32 @@ export function BookingDetail({ booking, canManage, actions, banner, onClose, on
               </>
             )}
           </Form>
-        ) : undefined}
+        ) : undefined)}
       >
         {banner && <div className="mb-4">{banner}</div>}
         <dl className="m-0 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-          <Field label="Starts" value={clocks(booking, booking.startsAt)} />
-          <Field label="Ends" value={clocks(booking, booking.endsAt)} />
-          <div className="min-w-0">
-            <dt className="type-caption text-ink-muted">Status</dt>
-            <dd className="m-0 mt-1">
-              <Badge tone={booking.status === "done" ? "info" : booking.status === "cancelled" ? "neutral" : booking.status === "requested" ? "warning" : "success"} size="sm" dot>
-                {BOOKING_STATUS_LABELS[booking.status]}
-              </Badge>
-            </dd>
-          </div>
-          <Field label="Client" value={guestNames(booking, "client")} />
-          <Field label="Staff" value={guestNames(booking, "staff")} />
-          <Field label="Created by" value={booking.creatorName} />
+          {compact ? (
+            <>
+              <WhenFields booking={booking} />
+              <StatusField status={booking.status} />
+              {guestNames(booking, "client") ? <Field label="Client" value={guestNames(booking, "client")} /> : null}
+              {guestNames(booking, "staff") ? <Field label="Staff" value={guestNames(booking, "staff")} /> : null}
+            </>
+          ) : (
+            <>
+              <Field label="Starts" value={clocks(booking, booking.startsAt)} />
+              <Field label="Ends" value={clocks(booking, booking.endsAt)} />
+              <StatusField status={booking.status} />
+              <Field label="Client" value={guestNames(booking, "client")} />
+              <Field label="Staff" value={guestNames(booking, "staff")} />
+              <Field label="Created by" value={booking.creatorName} />
+            </>
+          )}
         </dl>
         {claimError && <Alert tone="danger" title="Couldn't confirm" className="mt-4">{claimError}</Alert>}
+        {(showNotes || showAttachments) && (
         <div className="mt-6 grid gap-4">
+          {showNotes && (
           <Card as="section" padding="none">
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
               <h3 className="m-0 type-label">Notes</h3>
@@ -185,6 +197,8 @@ export function BookingDetail({ booking, canManage, actions, banner, onClose, on
               {manage && adding && <NoteForm meetingId={booking.id} save={actions.note} onDone={() => { setAdding(false); onDone("Note added."); }} />}
             </div>
           </Card>
+          )}
+          {showAttachments && (
           <Card as="section" padding="none">
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
               <h3 className="m-0 type-label">Attachments</h3>
@@ -240,7 +254,9 @@ export function BookingDetail({ booking, canManage, actions, banner, onClose, on
               )}
             </div>
           </Card>
+          )}
         </div>
+        )}
       </Modal>
       {deletingId && deleteNote && (
         <Modal open onClose={() => setDeletingId(null)} title="Delete note" description="Are you sure you want to delete this note?" role="alertdialog">

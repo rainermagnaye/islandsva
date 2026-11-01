@@ -6,7 +6,7 @@ import { SearchField } from "@/components/ui/search-field";
 import { appRoutes } from "@/content/routes";
 
 /** Teams-style search. Writes `?q=` so the list (and the status tabs) stay shareable. */
-export function LeadSearch() {
+export function LeadSearch({ path = appRoutes.adminLeads }: { path?: string }) {
   const params = useSearchParams();
   const router = useRouter();
   const urlQuery = params.get("q") ?? "";
@@ -31,10 +31,10 @@ export function LeadSearch() {
       else next.delete("q");
       next.delete("page");
       const search = next.toString();
-      router.replace(search ? `${appRoutes.adminLeads}?${search}` : appRoutes.adminLeads, { scroll: false });
+      router.replace(search ? `${path}?${search}` : path, { scroll: false });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [value, urlQuery, params, router]);
+  }, [value, urlQuery, params, router, path]);
 
   return <SearchField label="Search leads" value={value} onChange={(event) => setValue(event.target.value)} className="w-full sm:w-70" />;
 }

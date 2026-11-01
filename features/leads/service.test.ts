@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { submitContactRequest } from "./service";
+import { logOwnedLeadStep, submitContactRequest } from "./service";
 
 // The contact form's plain enquiry (no slot) is accepted only while no discovery-call time is open. Without that
 // rule any caller could post startsAt "" and skip the picker, since parseLead allows it by design.
@@ -8,10 +8,12 @@ const dal = vi.hoisted(() => ({
   insertDiscoveryRequest: vi.fn(),
   insertLead: vi.fn(),
   listOpenDiscoverySlots: vi.fn(),
+  getLead: vi.fn(),
 }));
+const timeline = vi.hoisted(() => ({ recordOwnedLeadStep: vi.fn() }));
 vi.mock("./dal", () => dal);
 vi.mock("./convert-dal", () => ({}));
-vi.mock("./timeline-dal", () => ({}));
+vi.mock("./timeline-dal", () => timeline);
 vi.mock("./email", () => ({}));
 vi.mock("@/features/clients/service", () => ({}));
 
@@ -41,5 +43,36 @@ describe("submitContactRequest", () => {
     dal.insertLead.mockResolvedValue("lead-2");
     expect(await submitContactRequest(lead, null, source)).toEqual({ ok: true, id: "lead-2" });
     expect(dal.insertLead).toHaveBeenCalledWith({ ...lead, ...source }, { fromWebsite: true });
+  });
+});
+
+const owned = { closerId: "closer-1", status: "new", disabledAt: null };
+
+describe("logOwnedLeadStep", () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it("refuses a lead this closer does not own", async () => {
+    dal.getLead.mockResolvedValue(null);
+    expect(await logOwnedLeadStep("closer-1", { leadId: "lead-1", kind: "call", body: "Demo at 2." })).toEqual({ ok: false, reason: "not_found" });
+    expect(timeline.recordOwnedLeadStep).not.toHaveBeenCalled();
+  });
+
+  it("refuses a step that does not match the lead's status", async () => {
+    dal.getLead.mockResolvedValue({ ...owned, status: "contacted" });
+    expect(await logOwnedLeadStep("closer-1", { leadId: "lead-1", kind: "call", body: "Demo at 2." })).toEqual({ ok: false, reason: "unavailable" });
+    expect(timeline.recordOwnedLeadStep).not.toHaveBeenCalled();
+  });
+
+  it("refuses junk, notes and conversion", async () => {
+    dal.getLead.mockResolvedValue(owned);
+    expect(await logOwnedLeadStep("closer-1", { leadId: "lead-1", kind: "junk", body: "Not a fit." })).toEqual({ ok: false, reason: "unavailable" });
+    expect(timeline.recordOwnedLeadStep).not.toHaveBeenCalled();
+  });
+
+  it("records a demo on a new lead this closer owns", async () => {
+    dal.getLead.mockResolvedValue(owned);
+    timeline.recordOwnedLeadStep.mockResolvedValue({ ok: true });
+    expect(await logOwnedLeadStep("closer-1", { leadId: "lead-1", kind: "call", body: "Demo at 2." })).toEqual({ ok: true });
+    expect(timeline.recordOwnedLeadStep).toHaveBeenCalledWith("closer-1", "lead-1", "call", "Demo at 2.");
   });
 });

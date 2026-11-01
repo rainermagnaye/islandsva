@@ -1,7 +1,7 @@
 import "server-only";
-import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertBooking, insertBookingNote, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
+import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertBooking, insertBookingNote, recordDiscoveryOutcome, rejectDiscovery, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
 import { answerVaMeetingRow, cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
-import { cancelVaMeetingRow, insertVaMeeting, listVaTeam } from "./va-dal";
+import { cancelCloserMeetingRow, cancelVaMeetingRow, insertCloserMeeting, insertVaMeeting, listVaTeam } from "./va-dal";
 import { listBookings } from "./booking-dal";
 import type { BookingFile as FileInput } from "./form-data";
 import type { BookingInput, BookingNoteInput, VaMeetingInput } from "./validation";
@@ -40,6 +40,14 @@ export function confirmDiscoveryCall(meetingId: string) {
 
 export function moveDiscoveryCall(meetingId: string, startsAt: string) {
   return rescheduleDiscovery(meetingId, startsAt);
+}
+
+export function rejectDiscoveryCall(meetingId: string, actorId: string, reason: string) {
+  return rejectDiscovery(meetingId, actorId, reason);
+}
+
+export function saveDiscoveryOutcome(meetingId: string, actorId: string, outcome: "done" | "no_show", note: string) {
+  return recordDiscoveryOutcome(meetingId, actorId, outcome, note);
 }
 
 export function createClientBooking(input: BookingInput, file: FileInput) {
@@ -83,4 +91,33 @@ export function answerVaMeeting(meetingId: string, accept: boolean) {
 /** Staff a VA can invite to a team meeting. Call only after requireRole(["va"]). */
 export function listTeamForVa(vaId: string) {
   return listVaTeam(vaId);
+}
+
+export function createCloserMeeting(input: VaMeetingInput) {
+  return insertCloserMeeting(input);
+}
+
+/** One 30-minute team meeting per start, from the closer's "Demo slots" grid. */
+export async function createCloserSlotMeetings(startsAt: readonly string[]) {
+  for (const start of startsAt) {
+    const result = await insertCloserMeeting({
+      title: "Meeting",
+      clientId: null,
+      staffIds: [],
+      note: "",
+      startsAt: start,
+      endsAt: new Date(Date.parse(start) + 30 * 60_000).toISOString(),
+    });
+    if (!result.ok) return result;
+  }
+  return { ok: true as const };
+}
+
+export function cancelCloserMeeting(meetingId: string) {
+  return cancelCloserMeetingRow(meetingId);
+}
+
+/** Staff a Lead Gen can invite. Call only after requireRole(["closer"]). */
+export function listTeamForCloser(closerId: string) {
+  return listVaTeam(closerId);
 }

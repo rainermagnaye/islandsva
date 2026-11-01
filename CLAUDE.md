@@ -19,7 +19,7 @@ Rules for people and AI agents; change them by PR. Each fact lives in one place 
 - **Priorities:** secure → correct → maintainable → performant.
 - **Phase:** M14 — timesheets (started while M7 and M8 finish; user decision); then M9–M13 (`docs/mvp.md`). **Build only the current phase.**
 - **Domain:**
-  - **Roles:** Client, VA, Lead Gen (`closer` in code), Admin; Super Admin across tenants. A user can hold several. **Employee** = VA, Lead Gen or Admin.
+  - **Roles:** Client, VA, Lead Gen (`closer` in the database, workspace `/leadgen`), Admin; Super Admin across tenants. A user can hold several. **Employee** = VA, Lead Gen or Admin.
   - **Tenant** = an agency; one today ("Islands VA"); every user and record belongs to exactly one.
   - **Lead** = a contact-form enquiry. From M8 it carries a discovery call and is owned by the Lead Gen who confirms it.
   - **Client** = a company record, `pending` until activated, with a login only once invited; one stable link (no sign-in) opens its details, agreement and payment proof.
@@ -52,7 +52,7 @@ app/                  routes only — thin pages and endpoints; robots, sitemap,
   (marketing)/        static public site; page-only pieces in <page>/_components/
   (auth)/             login · forgot-password · set-password · mfa · accept-invite (temporary, §6)
   (onboarding)/       register/[token] — the client's registration link
-  (workspace)/        portal: dashboard (fallback) · profile · client · va · closer · admin; @search = header search slot
+  (workspace)/        portal: dashboard (fallback) · profile · client · va · leadgen · admin; @search = header search slot
   auth/confirm/       email-link landing (token hash → session)
   api/v1/<resource>/  Route Handlers — the HTTP API (plural nouns, versioned)
 features/<feature>/   one business area (today: auth, leads, clients, users, demos, sales, search, tasks, matching, meetings)

@@ -1,5 +1,6 @@
 import "server-only";
 import { decodeBytea } from "@/lib/bytea";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
@@ -18,6 +19,27 @@ export async function recordLeadStep(leadId: string, kind: LeadEventKind, body: 
     const refusal = STEP_REFUSALS[error.code as keyof typeof STEP_REFUSALS];
     if (refusal) return { ok: false as const, reason: refusal };
     throw new UpstreamError("supabase", `Recording a lead step failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Book demo (new → contacted) or Qualified (contacted → qualified) for a lead the caller already proved they
+ * own. The step function and the update policy are admin-only, so this uses the secret key. The status filter
+ * and closer id are checked again here so a mismatched lead is left unchanged.
+ */
+export async function recordOwnedLeadStep(authorId: string, leadId: string, kind: "call" | "qualification", body: string) {
+  const from = kind === "call" ? "new" : "contacted";
+  const next = kind === "call" ? "contacted" : "qualified";
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("leads").update({ status: next }).eq("id", leadId).eq("closer_id", authorId).eq("status", from).is("disabled_at", null).select("id");
+  if (error) throw new UpstreamError("supabase", `Recording a lead step failed: ${error.message}`, { cause: error });
+  if ((data ?? []).length === 0) return { ok: false as const, reason: "unavailable" as const };
+
+  const { error: eventError } = await admin.from("lead_events").insert({ lead_id: leadId, author_id: authorId, kind, body: body.trim() });
+  if (eventError) {
+    await admin.from("leads").update({ status: from }).eq("id", leadId).eq("closer_id", authorId).eq("status", next);
+    throw new UpstreamError("supabase", `Recording a lead step failed: ${eventError.message}`, { cause: eventError });
   }
   return { ok: true as const };
 }

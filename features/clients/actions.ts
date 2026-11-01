@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
-import { closerClientHref } from "@/content/routes";
+import { leadgenClientHref } from "@/content/routes";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
@@ -17,7 +17,7 @@ import { insertVaMessage } from "./message-dal";
 import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
 import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseVaMessage } from "./validation";
 
-/** A Closer adds a pending client with the agreed package, then lands on its profile. */
+/** A Lead Gen adds a pending client with the agreed package, then lands on its profile. */
 export async function addClientProfile(formData: FormData): Promise<SubmitResult<NewClientField>> {
   const user = await requireRole(["closer"]);
   const parsed = parseNewClient(formEntries(formData));
@@ -32,7 +32,7 @@ export async function addClientProfile(formData: FormData): Promise<SubmitResult
     return { ok: false, message: "We couldn't add this client just now. Please try again in a moment." };
   }
 
-  redirect(closerClientHref(id));
+  redirect(leadgenClientHref(id));
 }
 
 /** A client added on the list, with no lead. They stay pending until registration. */
@@ -125,8 +125,7 @@ export async function setClientPaused(formData: FormData): Promise<SubmitResult>
 
 /**
  * Creates the registration link for a client that does not have one yet. The client's Closer may too:
- * openOnboardingLink reads the client under RLS first (a Closer sees only the clients they created), and only
- * then stores the link with the secret key.
+ * openOnboardingLink still refuses a client they did not create, then stores the link with the secret key.
  */
 export async function generateOnboardingLink(formData: FormData): Promise<SubmitResult> {
   await requireRole(["admin", "closer"]);

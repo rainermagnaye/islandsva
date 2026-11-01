@@ -777,6 +777,11 @@ export type Database = {
         Returns: string;
       };
       cancel_va_meeting: { Args: { meeting_id: string }; Returns: undefined };
+      create_closer_meeting: {
+        Args: { title: string; starts_at: string; ends_at: string; client_id?: string | null; staff_ids?: string[]; note?: string | null };
+        Returns: string;
+      };
+      cancel_closer_meeting: { Args: { meeting_id: string }; Returns: undefined };
       answer_va_meeting: { Args: { meeting_id: string; accept: boolean }; Returns: undefined };
       add_client_meeting_note: {
         Args: { meeting_id: string; note: string; attachment_name?: string | null; attachment_type?: string | null; attachment_base64?: string | null };

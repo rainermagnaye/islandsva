@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agenda, clientAgendaSources, vaAgendaSources, type AgendaSource } from "./agenda";
+import { agenda, clientAgendaSources, closerAgendaSources, vaAgendaSources, type AgendaSource } from "./agenda";
 import type { Booking } from "./contract";
 
 // Wed Oct 28, 2026, 4:34 pm in Manila.
@@ -101,6 +101,26 @@ describe("vaAgendaSources", () => {
       ["asked", "Today", "5 pm–5:30 pm"],
       ["on", "Today", "5 pm–5:30 pm"],
       ["Demo call with Kalye Coffee", "Today", "6 pm–6:30 pm"],
+    ]);
+  });
+});
+
+describe("closerAgendaSources", () => {
+  const meeting = (id: string, status: Booking["status"]) =>
+    ({ id, title: id, status, startsAt: "2026-10-28T09:00:00.000Z", endsAt: "2026-10-28T09:30:00.000Z", clientName: "Harbor Legal" }) as unknown as Booking;
+
+  it("puts inbox requests on the calendar and skips cancelled or duplicate booking rows", () => {
+    const sources = closerAgendaSources({
+      bookings: [meeting("on", "scheduled"), meeting("asked", "requested"), meeting("off", "cancelled")],
+      requests: [
+        { meetingId: "asked", startsAt: "2026-10-28T09:00:00.000Z", endsAt: "2026-10-28T09:30:00.000Z", fullName: "Ada", companyName: "Kalye Coffee" },
+        { meetingId: "inbox", startsAt: "2026-10-28T10:00:00.000Z", endsAt: "2026-10-28T10:30:00.000Z", fullName: "Lia", companyName: null },
+      ],
+    });
+    expect(sources.map((source) => [source.key, source.bookingId, source.badge?.label ?? null])).toEqual([
+      ["meeting:asked", "asked", "Requested"],
+      ["meeting:inbox", "inbox", "Requested"],
+      ["meeting:on", "on", null],
     ]);
   });
 });

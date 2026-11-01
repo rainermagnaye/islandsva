@@ -222,6 +222,8 @@ export type ClientNote = {
 
 /** The client profile: the list row, the agreed package, and the registration progress. */
 export type ClientDetail = ClientSummary & {
+  /** Who created the record. Used to keep Closers from writing another person's client. */
+  createdById: string;
   contactPhone: string | null;
   packageCode: string | null;
   hoursPerWeek: number | null;
