@@ -10,6 +10,7 @@ import { OnboardingLinkCard } from "@/features/clients/components/onboarding-lin
 import { clientRegistrationSteps } from "@/features/clients/registration";
 import { getClient } from "@/features/clients/dal";
 import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
+import { canSeeRegistrationLink } from "@/features/clients/link-access";
 import { getRegistrationToken } from "@/features/clients/onboarding-dal";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
@@ -25,14 +26,15 @@ export default function LeadgenClientPage({ params }: PageProps<"/leadgen/client
 }
 
 async function LeadgenClient({ params }: Pick<PageProps<"/leadgen/clients/[id]">, "params">) {
-  await requireRole(["closer"]);
+  const user = await requireRole(["closer"]);
   const { id } = await params;
   if (!parseClientId({ clientId: id }).ok) notFound();
   const client = await getClient(id);
   if (!client) notFound();
-  // The token is server-only; read it only after this client is visible to the Lead Gen.
-  const awaitingRegistration = client.status === "pending" && !client.disabledAt;
-  const token = awaitingRegistration ? await getRegistrationToken(id) : null;
+  // The token is server-only and the link needs no sign-in: read it only after this client is visible to the Lead Gen,
+  // and only for the Lead Gen who created it (every Lead Gen in the agency can read the client).
+  const showLink = client.status === "pending" && !client.disabledAt && canSeeRegistrationLink(user, client);
+  const token = showLink ? await getRegistrationToken(id) : null;
   const url = token ? onboardingUrl(token, await registrationOrigin()) : null;
 
   return (
@@ -49,7 +51,7 @@ async function LeadgenClient({ params }: Pick<PageProps<"/leadgen/clients/[id]">
           <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </Card>
         <ClientStepper steps={clientRegistrationSteps({ onboardingStatus: client.onboardingStatus, accountStatus: client.status })} />
-        {awaitingRegistration && <OnboardingLinkCard clientId={client.id} url={url} />}
+        {showLink && <OnboardingLinkCard clientId={client.id} url={url} />}
         <ClientProfileView client={client} />
       </div>
     </Workspace>

@@ -8,6 +8,7 @@ import type { ClientBusiness } from "./contract";
 import { approveClientPayment, issueClientOnboardingLink, recordClientInvite, saveClientReview } from "./onboarding-dal";
 import { listActiveAssignments } from "./assignment-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
+import { canSeeRegistrationLink } from "./link-access";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
 import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
 import { recordClientNote } from "./notes-dal";
@@ -55,9 +56,7 @@ export async function openOnboardingLink(clientId: string) {
   const client = await getClient(clientId);
   if (!client || client.disabledAt || client.status !== "pending") return { ok: false as const, reason: "not_found" as const };
   const user = await getSessionUser();
-  if (user?.roles.includes("closer") && !user.roles.includes("admin") && client.createdById !== user.id) {
-    return { ok: false as const, reason: "not_found" as const };
-  }
+  if (!user || !canSeeRegistrationLink(user, client)) return { ok: false as const, reason: "not_found" as const };
   if (client.onboardingStatus !== "ready") return { ok: false as const, reason: "exists" as const };
   const token = createOnboardingToken();
   const stored = await issueClientOnboardingLink(clientId, token, onboardingTokenHash(token));
