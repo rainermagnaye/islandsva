@@ -124,7 +124,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
     >
       {({ pending, fieldErrors }) => (
         <>
-          <Stepper steps={STEPS} current={step - 1} label="Booking steps" />
+          <Stepper steps={STEPS} current={step - 1} label="Booking steps" orientation="horizontal" />
 
           <div ref={details} hidden={step !== 1} className="grid gap-5">
             <div className="grid gap-5 sm:grid-cols-2">
