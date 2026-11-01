@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FilterMenu } from "@/components/ui/filter-menu";
@@ -8,7 +8,8 @@ import { IconBadge } from "@/components/ui/icon-badge";
 import { Modal } from "@/components/ui/modal";
 import { appRoutes } from "@/content/routes";
 import { CLIENT_STATUS_LABELS, type ClientStatus } from "../contract";
-import { CreateClientForm } from "./create-client-form";
+
+const CreateClientForm = lazy(() => import("./create-client-form").then((module) => ({ default: module.CreateClientForm })));
 
 type ClientFilter = ClientStatus | "disabled";
 
@@ -90,7 +91,11 @@ export function ClientsToolbar({
               ) : undefined
             }
           >
-            {open && !added ? <CreateClientForm key={formKey} onAdded={() => setAdded(true)} /> : null}
+            {open && !added ? (
+              <Suspense fallback={null}>
+                <CreateClientForm key={formKey} onAdded={() => setAdded(true)} />
+              </Suspense>
+            ) : null}
           </Modal>
         </>
       )}

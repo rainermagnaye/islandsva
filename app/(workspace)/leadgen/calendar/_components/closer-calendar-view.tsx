@@ -1,27 +1,32 @@
 "use client";
 
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import { useToast } from "@/components/ui/toast";
 import { leadgenClientHref, leadgenLeadHref } from "@/content/routes";
-import { DemoCalendar, type CalendarLegendItem } from "@/features/demos/components/demo-calendar";
 import type { BusyTime } from "@/features/demos/slot-times";
 import type { AgendaItem } from "@/features/meetings/agenda";
 import { ComingUp } from "@/features/meetings/components/coming-up";
-import { ScheduleTable } from "@/features/meetings/components/schedule-table";
+import { DiscoveryInbox } from "@/features/meetings/components/discovery-inbox";
 import type { Booking, BookingChoice, DiscoveryRequest } from "@/features/meetings/contract";
 import type { VaMeetingClient } from "@/features/meetings/components/va-meeting-form";
 import type { ScheduleRow } from "@/features/meetings/schedule";
-import { BookButton, type CloserBookDraft } from "./book-button";
 
+type CloserBookDraft = { date: string; time?: string };
+
+const DemoCalendar = lazy(() => import("@/features/demos/components/demo-calendar").then((module) => ({ default: module.DemoCalendar })));
+const ScheduleTable = lazy(() => import("@/features/meetings/components/schedule-table").then((module) => ({ default: module.ScheduleTable })));
+const BookButton = lazy(() => import("./book-button").then((module) => ({ default: module.BookButton })));
 const BookingDetail = lazy(() => import("@/features/meetings/components/booking-detail").then((module) => ({ default: module.BookingDetail })));
 const DiscoveryDetail = lazy(() => import("@/features/meetings/components/discovery-detail").then((module) => ({ default: module.DiscoveryDetail })));
 const CloserMeetingCancel = lazy(() => import("@/features/meetings/components/closer-meeting-cancel").then((module) => ({ default: module.CloserMeetingCancel })));
 
-const LEGEND: readonly CalendarLegendItem[] = [
-  { tone: "lagoon", label: "Meetings" },
-  { tone: "sand", label: "Discovery requests" },
+const LEGEND = [
+  { tone: "lagoon" as const, label: "Meetings" },
+  { tone: "sand" as const, label: "Discovery requests" },
 ];
 
 function timeFromMinute(minute: number) {
@@ -45,7 +50,6 @@ export function CloserCalendarView({
   team,
   openTasks,
   slots,
-  tools,
 }: {
   ownerId: string;
   bookings: readonly Booking[];
@@ -61,7 +65,6 @@ export function CloserCalendarView({
   team: readonly BookingChoice[];
   openTasks: readonly BookingChoice[];
   slots: { busy: readonly BusyTime[]; offered: readonly string[]; windows: readonly { weekday: number; startMinute: number; endMinute: number }[] };
-  tools: ReactNode;
 }) {
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -88,42 +91,56 @@ export function CloserCalendarView({
 
   return (
     <>
-      <DemoCalendar
-        rows={[]}
-        now={now}
-        today={today}
-        nowMinutes={nowMinutes}
-        extraEvents={events}
-        legend={LEGEND}
-        viewsInHeader
-        actions={
-          <BookButton
-            today={today}
-            last={last}
-            slots={slots}
-            clients={clients}
-            team={team}
-            openTasks={openTasks}
-            draft={draft}
-            onDraftChange={setDraft}
-          />
-        }
-        aside={
-          <>
-            {tools && <div className="shrink-0">{tools}</div>}
-            <ComingUp className="min-h-0 flex-1" items={agenda} review={null} onOpenBooking={open} />
-          </>
-        }
-        onSlotClick={(day, minute) => {
-          setSelectedId(null);
-          setDraft({ date: day, time: timeFromMinute(minute) });
-        }}
-        onEventClick={(event) => {
-          open(event.id);
-          return true;
-        }}
-      />
-      <ScheduleTable rows={schedule} onOpenBooking={open} />
+      <Suspense fallback={<div className="min-h-[32rem] rounded-xl bg-surface-sunken" aria-hidden />}>
+        <DemoCalendar
+          rows={[]}
+          now={now}
+          today={today}
+          nowMinutes={nowMinutes}
+          extraEvents={events}
+          legend={LEGEND}
+          viewsInHeader
+          actions={
+            <Suspense fallback={<Button type="button" variant="ghost" iconLeft="plus" disabled>Book</Button>}>
+              <BookButton
+                today={today}
+                last={last}
+                slots={slots}
+                clients={clients}
+                team={team}
+                openTasks={openTasks}
+                draft={draft}
+                onDraftChange={setDraft}
+              />
+            </Suspense>
+          }
+          aside={
+            <>
+              <div className="shrink-0">
+                <Panel boxed title="Discovery requests">
+                  {requests.length > 0 ? (
+                    <DiscoveryInbox requests={requests} onOpen={open} />
+                  ) : (
+                    <EmptyState compact title="No discovery requests" description="When a lead books a discovery call, it shows here for you to confirm." />
+                  )}
+                </Panel>
+              </div>
+              <ComingUp className="min-h-0 flex-1" items={agenda} review={null} onOpenBooking={open} />
+            </>
+          }
+          onSlotClick={(day, minute) => {
+            setSelectedId(null);
+            setDraft({ date: day, time: timeFromMinute(minute) });
+          }}
+          onEventClick={(event) => {
+            open(event.id);
+            return true;
+          }}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ScheduleTable rows={schedule} onOpenBooking={open} />
+      </Suspense>
       {selectedId && discovery && (
         <Suspense fallback={null}>
           <DiscoveryDetail

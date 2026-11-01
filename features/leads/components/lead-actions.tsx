@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
@@ -14,7 +14,8 @@ import { cx } from "@/lib/cx";
 import { assignLeadToMe, deleteLead, saveLeadStep, setLeadPaused } from "../actions";
 import { LEAD_ATTACHMENT_ACCEPT, acceptLeadAttachment } from "../attachment";
 import { LEAD_EVENT_LIMIT, PIPELINE_STEP, type LeadDetail } from "../contract";
-import { ConvertDialog } from "./convert-dialog";
+
+const ConvertDialog = lazy(() => import("./convert-dialog").then((module) => ({ default: module.ConvertDialog })));
 
 type Dialog = "step" | "junk" | "convert" | "pause" | "delete" | null;
 
@@ -110,7 +111,11 @@ export function LeadActions({ lead, viewerId, canDelete, editing, audience = "ad
           blocked={lead.status === "converted" ? "This lead is already a client, so it can't be marked as junk." : lead.disabledAt ? "Enable this lead before marking it as junk." : undefined}
         />
       )}
-      {dialog === "convert" && <ConvertDialog lead={lead} onClose={close} />}
+      {dialog === "convert" && (
+        <Suspense fallback={null}>
+          <ConvertDialog lead={lead} onClose={close} />
+        </Suspense>
+      )}
       {dialog === "pause" && <ConfirmDialog leadId={lead.id} disabled={!lead.disabledAt} onClose={close} />}
       {dialog === "delete" && <DeleteDialog leadId={lead.id} onClose={close} />}
     </>

@@ -5,6 +5,7 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { appRoutes } from "@/content/routes";
 import { leadProfileTab } from "@/features/leads/contract";
+import { LeadActions } from "@/features/leads/components/lead-actions";
 import { LeadProfile } from "@/features/leads/components/lead-profile";
 import { getLead, listLeadEvents } from "@/features/leads/dal";
 import { listLeadBookings } from "@/features/meetings/booking-dal";
@@ -41,7 +42,14 @@ async function AdminLead({ params, searchParams }: Pick<PageProps<"/admin/leads/
         />
       }
     >
-      <LeadProfile lead={lead} events={events} meetings={meetings} viewerId={user.id} tab={leadProfileTab(query.tab)} editing={editing} />
+      <LeadProfile
+        lead={lead}
+        events={events}
+        meetings={meetings}
+        tab={leadProfileTab(query.tab)}
+        editing={editing}
+        actions={<LeadActions lead={lead} viewerId={user.id} canDelete={lead.status === "new" && events.length === 0} editing={editing} />}
+      />
     </Workspace>
   );
 }

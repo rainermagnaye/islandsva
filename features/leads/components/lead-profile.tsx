@@ -1,17 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AttachmentPreview } from "@/components/ui/attachment-preview";
-import { ToastProvider } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { adminLeadHref, appRoutes, leadgenLeadHref } from "@/content/routes";
+import { adminLeadHref, leadgenLeadHref } from "@/content/routes";
 import type { Booking } from "@/features/meetings/contract";
 import type { LeadDetail, LeadEvent, LeadProfileTab } from "../contract";
-import { LeadActions } from "./lead-actions";
-import { LeadProfileForm } from "./lead-profile-form";
-import { LeadTimeline } from "./lead-timeline";
+import { LeadProfilePanes } from "./lead-profile-panes";
 import { LeadStatusBadge, packageName } from "./lead-status";
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
@@ -27,9 +24,24 @@ function withWebsiteSource(lead: LeadDetail, meetings: readonly Booking[]): Lead
 }
 
 /** The lead's own page. A dash is a detail this lead does not have yet. */
-export function LeadProfile({ lead, events, meetings, viewerId, tab, editing, audience = "admin" }: { lead: LeadDetail; events: readonly LeadEvent[]; meetings: readonly Booking[]; viewerId: string; tab: LeadProfileTab; editing: boolean; audience?: "admin" | "closer" }) {
+export function LeadProfile({
+  lead,
+  events,
+  meetings,
+  tab,
+  editing,
+  audience = "admin",
+  actions,
+}: {
+  lead: LeadDetail;
+  events: readonly LeadEvent[];
+  meetings: readonly Booking[];
+  tab: LeadProfileTab;
+  editing: boolean;
+  audience?: "admin" | "closer";
+  actions: ReactNode;
+}) {
   const shown = withWebsiteSource(lead, meetings);
-  const canDelete = shown.status === "new" && events.length === 0;
   const leadHref = audience === "closer" ? leadgenLeadHref : adminLeadHref;
 
   return (
@@ -44,12 +56,20 @@ export function LeadProfile({ lead, events, meetings, viewerId, tab, editing, au
           <LeadStatusBadge status={shown.status} />
           {shown.disabledAt && <Badge tone="neutral" size="sm" dot>Disabled</Badge>}
         </div>
-        <LeadActions lead={shown} viewerId={viewerId} canDelete={canDelete} editing={editing} audience={audience} />
+        {actions}
       </Card>
 
       <ProfileTabs id={shown.id} tab={tab} leadHref={leadHref} />
 
-      {editing ? <LeadProfileForm lead={shown} /> : tab === "timeline" ? <ToastProvider><LeadTimeline lead={shown} events={events} meetings={meetings} canAddNote={audience === "admin"} canManage={audience === "admin"} clientsHref={audience === "closer" ? appRoutes.leadgenClients : appRoutes.adminClients} /></ToastProvider> : <LeadOverview lead={shown} events={events} showFiles={audience === "admin"} />}
+      <LeadProfilePanes
+        lead={shown}
+        events={events}
+        meetings={meetings}
+        tab={tab}
+        editing={editing}
+        audience={audience}
+        overview={<LeadOverview lead={shown} events={events} showFiles={audience === "admin"} />}
+      />
     </div>
   );
 }

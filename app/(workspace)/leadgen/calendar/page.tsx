@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/layout/workspace";
-import { Panel } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
-import { EmptyState } from "@/components/ui/empty-state";
 import { minutesOf, todayIn, wallClockIn } from "@/components/ui/date-math";
 import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import { ToastProvider } from "@/components/ui/toast";
@@ -12,7 +10,6 @@ import { DEMO_LIMITS, manilaDate } from "@/features/demos/contract";
 import { busyFrom } from "@/features/demos/slot-times";
 import { agenda, closerAgendaSources } from "@/features/meetings/agenda";
 import { listBookings } from "@/features/meetings/booking-dal";
-import { DiscoveryInbox } from "@/features/meetings/components/discovery-inbox";
 import { BOOKING_TIME_ZONE, type Booking } from "@/features/meetings/contract";
 import { listDiscoveryInbox } from "@/features/meetings/dal";
 import { scheduleRows, type ScheduleRow } from "@/features/meetings/schedule";
@@ -110,15 +107,6 @@ async function LeadgenCalendar() {
             offered: [],
             windows: [],
           }}
-          tools={
-            <Panel boxed title="Discovery requests">
-              {requests.length > 0 ? (
-                <DiscoveryInbox requests={requests} heading={false} />
-              ) : (
-                <EmptyState compact title="No discovery requests" description="When a lead books a discovery call, it shows here for you to confirm." />
-              )}
-            </Panel>
-          }
         />
       </ToastProvider>
     </Container>
