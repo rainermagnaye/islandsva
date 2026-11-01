@@ -1373,6 +1373,61 @@ describe("client onboarding", () => {
     await expect(asServer("select public.issue_client_onboarding_link($1, $2, $3)", [row.id, `${token.slice(0, 42)}Z`, hash])).rejects.toThrow(/client is disabled/);
   });
 
+  it("creates the link only for the client's creator or an active admin of its agency (20261101160538_client_link_actor)", async () => {
+    const FAR_ADMIN = "00000000-0000-0000-0000-0000000001a1";
+    const GONE_ADMIN = "00000000-0000-0000-0000-0000000001a2";
+    const [{ id: far }] = await asServer<{ id: string }>("insert into public.tenants (name, slug) values ('Link agency', 'link-agency') returning id");
+    await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${FAR_ADMIN}', 'link-far@x.co'), ('${GONE_ADMIN}', 'link-gone@x.co')`);
+    await asServer("update public.profiles set tenant_id = $1 where id = $2", [far, FAR_ADMIN]);
+    await asServer(`insert into public.roles (user_id, role) values ('${FAR_ADMIN}', 'admin'), ('${GONE_ADMIN}', 'admin')`);
+    await asServer("update public.profiles set status = 'inactive' where id = $1", [GONE_ADMIN]);
+
+    const issue = (client: string, n: string, actor: string) =>
+      asServer("select public.issue_client_onboarding_link($1, $2, $3, $4)", [client, `${"L".repeat(42)}${n}`, `a${n}`.padEnd(64, "1"), actor]);
+    const pending = async (name: string) =>
+      (
+        await asServer<{ id: string }>("insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'Nia', $2, $3) returning id", [
+          name,
+          `${name.toLowerCase().replace(/\s+/g, "")}@link.co`,
+          CLOSER,
+        ])
+      )[0].id;
+    const stageOf = async (client: string) => (await asServer<{ s: string }>("select onboarding_status::text as s from public.clients where id = $1", [client]))[0].s;
+
+    // Signed-in users and visitors still can't call it.
+    const sql = "select public.issue_client_onboarding_link($1, $2, $3, $4)";
+    await expect(asUser(asAdmin, sql, [clientId, token, hash, ADMIN])).rejects.toThrow(/permission denied/);
+    await expect(asUser(asCloser, sql, [clientId, token, hash, CLOSER])).rejects.toThrow(/permission denied/);
+    await expect(as("anon", {}, sql, [clientId, token, hash, ADMIN])).rejects.toThrow(/permission denied/);
+    await expect(issue("00000000-0000-0000-0000-0000000001a9", "1", ADMIN)).rejects.toMatchObject({ code: "IVA06" });
+
+    // Another Lead Gen of the agency, a VA, an admin elsewhere and a deactivated admin: refused, nothing stored.
+    const refused = await pending("Link Refused");
+    for (const actor of [CLOSER2, VA, FAR_ADMIN, GONE_ADMIN]) {
+      await expect(issue(refused, "2", actor)).rejects.toMatchObject({ code: "IVA14" });
+    }
+    expect(await stageOf(refused)).toBe("ready");
+    expect(await asServer("select 1 from public.client_packets where client_id = $1", [refused])).toEqual([]);
+
+    // The Lead Gen who created the client, and an admin of the agency, may.
+    await issue(refused, "3", CLOSER);
+    expect(await stageOf(refused)).toBe("pending_customer");
+    const byAdmin = await pending("Link Admin");
+    await issue(byAdmin, "4", ADMIN);
+    expect(await stageOf(byAdmin)).toBe("pending_customer");
+    await expect(issue(byAdmin, "5", ADMIN)).rejects.toMatchObject({ code: "IVA07" });
+
+    // A deactivated creator can't either.
+    const gone = await pending("Link Gone");
+    const [{ status }] = await asServer<{ status: string }>("select status::text from public.profiles where id = $1", [CLOSER]);
+    await asServer("update public.profiles set status = 'inactive' where id = $1", [CLOSER]);
+    try {
+      await expect(issue(gone, "6", CLOSER)).rejects.toMatchObject({ code: "IVA14" });
+    } finally {
+      await asServer("update public.profiles set status = $2::public.account_status where id = $1", [CLOSER, status]);
+    }
+  });
+
   it("keeps review marks until every section is clear, then links the login", async () => {
     await expect(asUser(asAdmin, "select public.accept_client_review($1)", [clientId])).rejects.toThrow(/permission denied/);
     await expect(asServer("select public.accept_client_review($1)", ["00000000-0000-0000-0000-000000000099"])).rejects.toThrow(/client not found/);

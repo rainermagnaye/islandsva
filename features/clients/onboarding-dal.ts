@@ -70,15 +70,18 @@ export async function getClientPaymentProof(clientId: string) {
 /**
  * Stores the link and moves the client to pending customer.
  * Secret key: the packet table is not granted to authenticated. The caller has already checked the role
- * and that this admin can see the client.
+ * and that this user may see the link; the function checks the actor again (the client's creator, or an
+ * admin of its agency) and refuses anyone else as not found.
  */
-export async function issueClientOnboardingLink(clientId: string, token: string, tokenHash: string) {
+export async function issueClientOnboardingLink(clientId: string, token: string, tokenHash: string, actor: string) {
   const { error } = await createAdminClient().rpc("issue_client_onboarding_link", {
     client_id: clientId,
     token,
     token_hash: tokenHash,
+    issued_by: actor,
   });
   if (error) {
+    if (error.code === "IVA14") return { ok: false as const, reason: "not_found" as const };
     const refusal = packetRefusal(error.code);
     if (refusal) return { ok: false as const, reason: refusal };
     throw new UpstreamError("supabase", `Creating a registration link for ${clientId} failed: ${error.message}`, { cause: error });

@@ -59,7 +59,7 @@ export async function openOnboardingLink(clientId: string) {
   if (!user || !canSeeRegistrationLink(user, client)) return { ok: false as const, reason: "not_found" as const };
   if (client.onboardingStatus !== "ready") return { ok: false as const, reason: "exists" as const };
   const token = createOnboardingToken();
-  const stored = await issueClientOnboardingLink(clientId, token, onboardingTokenHash(token));
+  const stored = await issueClientOnboardingLink(clientId, token, onboardingTokenHash(token), user.id);
   if (!stored.ok) return stored;
   return { ok: true as const, url: onboardingUrl(token, await registrationOrigin()) };
 }
