@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
-import { ChangePasswordButton } from "@/features/auth/components/change-password-button";
 import { ProfileMenu } from "@/features/auth/components/profile-menu";
 import { EMPLOYEE_LIMITS, TIME_FORMATS, TIME_FORMAT_LABELS, type MyProfileField, type TimeFormat } from "../contract";
 import { saveMyProfile } from "../actions";
+
+const ChangePasswordButton = lazy(() => import("@/features/auth/components/change-password-button").then((module) => ({ default: module.ChangePasswordButton })));
 
 const PHOTO_TOO_LARGE = "Keep the profile picture under 512 KB.";
 const SAVE_FAILED = "We couldn't save the profile. Check your connection and try again.";
@@ -80,7 +81,9 @@ export function MyProfile({
           <Button variant="ghost" iconLeft="mail" type="button">
             Change email
           </Button>
-          <ChangePasswordButton />
+          <Suspense fallback={null}>
+            <ChangePasswordButton />
+          </Suspense>
           <ProfileMenu editing={editing} onEdit={() => setEditing(true)} />
         </div>
       </div>

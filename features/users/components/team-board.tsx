@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -10,8 +10,9 @@ import { Modal } from "@/components/ui/modal";
 import { SearchField } from "@/components/ui/search-field";
 import { ROLE_LABELS } from "@/lib/auth/roles";
 import { STATUS_LABELS, type AccountStatus, type UserSummary } from "../contract";
-import { InviteEmployeeForm } from "./invite-employee-form";
 import { UsersTable } from "./users-table";
+
+const InviteEmployeeForm = lazy(() => import("./invite-employee-form").then((module) => ({ default: module.InviteEmployeeForm })));
 
 const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as AccountStatus[]).map((value) => ({ value, label: STATUS_LABELS[value] }));
 
@@ -93,7 +94,11 @@ export function TeamBoard({ users, total, initialQuery = "" }: { users: readonly
         title="Invite a team member"
         description="They'll get an email to choose a password. Admins also set up two-factor sign-in."
       >
-        {inviteOpen ? <InviteEmployeeForm key={formKey} /> : null}
+        {inviteOpen ? (
+          <Suspense fallback={null}>
+            <InviteEmployeeForm key={formKey} />
+          </Suspense>
+        ) : null}
       </Modal>
     </Container>
   );
