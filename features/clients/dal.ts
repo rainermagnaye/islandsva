@@ -1,14 +1,14 @@
 import "server-only";
 import { timezoneForCountry } from "@/content/timezones";
 import { createClient } from "@/lib/supabase/server";
-import { createVisibleClient, forTenant } from "@/lib/supabase/visible";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import { clientBusinessFrom, clientBusinessToJson, type ClientBusiness, type ClientDetail, type ClientPage, type ClientStatus } from "./contract";
 import type { ClientDetailsInput } from "./validation";
 
-// Writes use the signed-in session (RLS: a Closer still edits only clients they created). List and
-// detail reads go through createVisibleClient so a Lead Gen sees every client in their agency.
+// Reads use the signed-in user's session, so RLS decides what they see: all clients in the agency for an admin
+// with two-factor sign-in or a Lead Gen, a VA only their assigned ones. Writes stay owner-scoped: a Lead Gen
+// edits only clients they created.
 
 const PAGE_SIZE = 25;
 
@@ -18,8 +18,8 @@ export async function countClients(status?: ClientStatus) {
 }
 
 async function countMatching(status?: ClientStatus, search?: string, disabled = false) {
-  const { supabase, tenantId } = await createVisibleClient();
-  let query = forTenant(supabase.from("clients").select("id", { count: "exact", head: true }), tenantId);
+  const supabase = await createClient();
+  let query = supabase.from("clients").select("id", { count: "exact", head: true });
   if (status && !disabled) query = query.eq("status", status);
   if (search) query = query.or(clientSearch(search));
   query = disabled ? query.not("disabled_at", "is", null) : query.is("disabled_at", null);
@@ -46,14 +46,11 @@ export async function listClients({
   disabled = false,
   pageSize = PAGE_SIZE,
 }: { page?: number; status?: ClientStatus; search?: string; disabled?: boolean; pageSize?: number } = {}): Promise<ClientPage> {
-  const { supabase, tenantId } = await createVisibleClient();
+  const supabase = await createClient();
   const from = (page - 1) * pageSize;
-  let query = forTenant(
-    supabase
-      .from("clients")
-      .select("id, company_name, contact_name, contact_email, status, onboarding_status, disabled_at, created_at, creator:profiles!clients_created_by_fkey(full_name, email)", { count: "exact" }),
-    tenantId,
-  );
+  let query = supabase
+    .from("clients")
+    .select("id, company_name, contact_name, contact_email, status, onboarding_status, disabled_at, created_at, creator:profiles!clients_created_by_fkey(full_name, email)", { count: "exact" });
   if (status && !disabled) query = query.eq("status", status);
   if (search) query = query.or(clientSearch(search));
   const { data, error, count } = await (disabled ? query.not("disabled_at", "is", null) : query.is("disabled_at", null))
@@ -102,8 +99,8 @@ export async function getOwnClientId(userId: string) {
 /** One client for the profile, or null when the id is unknown or not visible. */
 export async function getClient(id: string): Promise<ClientDetail | null> {
   if (!isUuid(id)) return null;
-  const { supabase, tenantId } = await createVisibleClient();
-  const { data, error } = await forTenant(supabase.from("clients").select(DETAIL_COLUMNS).eq("id", id), tenantId).maybeSingle();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("clients").select(DETAIL_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading client ${id} failed: ${error.message}`, { cause: error });
   if (!data) return null;
   return {
