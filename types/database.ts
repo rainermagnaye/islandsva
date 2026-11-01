@@ -691,7 +691,11 @@ export type Database = {
         Returns: string;
       };
       activate_client: { Args: { client_id: string; user_id: string; activated_by: string }; Returns: undefined };
-      issue_client_onboarding_link: { Args: { client_id: string; token: string; token_hash: string }; Returns: undefined };
+      // The three-argument form has no app caller since 20261101160538_client_link_actor; a contract migration drops it.
+      issue_client_onboarding_link: {
+        Args: { client_id: string; token: string; token_hash: string } | { client_id: string; token: string; token_hash: string; issued_by: string };
+        Returns: undefined;
+      };
       save_client_review: { Args: { client_id: string; issues: string[]; note: string }; Returns: undefined };
       accept_client_review: { Args: { client_id: string }; Returns: undefined };
       record_client_invite: { Args: { client_id: string; user_id: string }; Returns: undefined };

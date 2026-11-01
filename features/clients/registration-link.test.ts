@@ -65,5 +65,7 @@ describe("openOnboardingLink", () => {
     const result = await openOnboardingLink("c1");
     expect(result).toMatchObject({ ok: true, url: expect.stringMatching(/^https:\/\/app\.test\/register\/[A-Za-z0-9_-]{43}$/) });
     expect(onboarding.issueClientOnboardingLink).toHaveBeenCalledOnce();
+    // The database checks the actor again, so the signed-in user is passed through.
+    expect(onboarding.issueClientOnboardingLink.mock.calls[0][3]).toBe("closer-1");
   });
 });
