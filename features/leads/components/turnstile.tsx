@@ -7,6 +7,8 @@ type TurnstileProps = {
   siteKey: string;
   /** Receives the widget id once rendered, so the form can reset this widget after a failed submit. */
   onRender?: (widgetId: string | null) => void;
+  /** Whether the form holds a valid token now: true once passed, false when it expires or fails. */
+  onPassedChange?: (passed: boolean) => void;
 };
 
 /**
@@ -14,7 +16,7 @@ type TurnstileProps = {
  * first loads — after a client-side navigation back to the form the widget would never appear and every
  * submit would fail verification. The token lands in a hidden `cf-turnstile-response` input in the form.
  */
-export function Turnstile({ siteKey, onRender }: TurnstileProps) {
+export function Turnstile({ siteKey, onRender, onPassedChange }: TurnstileProps) {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
 
@@ -25,9 +27,12 @@ export function Turnstile({ siteKey, onRender }: TurnstileProps) {
       sitekey: siteKey,
       appearance: "interaction-only",
       theme: "auto",
+      callback: () => onPassedChange?.(true),
+      "expired-callback": () => onPassedChange?.(false),
+      "error-callback": () => onPassedChange?.(false),
     }) ?? null;
     onRender?.(widgetId.current);
-  }, [siteKey, onRender]);
+  }, [siteKey, onRender, onPassedChange]);
 
   useEffect(() => {
     // Script already loaded (client-side navigation): onReady may not fire again, so render on mount too.
