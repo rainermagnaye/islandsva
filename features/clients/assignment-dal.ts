@@ -1,23 +1,24 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { createVisibleClient, forTenant } from "@/lib/supabase/visible";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import type { AssignedClient } from "./contract";
 
-// A client's VAs. List reads go through createVisibleClient so a Lead Gen sees assignments across the agency.
-// An admin with 2FA ends one assignment. Creating one happens when the client accepts a shortlist.
+// A client's VAs. Read with the signed-in session. An admin with 2FA ends one assignment. Creating one happens
+// when the client accepts a shortlist. Several VAs may be active. The name on the row is a snapshot.
 
 export type VaAssignment = { id: string; vaId: string; vaName: string; startedAt: string };
 
 /** Active assignments for one client. The name is the snapshot on the row, so a client can read it. */
 export async function listActiveAssignments(clientId: string): Promise<VaAssignment[]> {
   if (!isUuid(clientId)) return [];
-  const { supabase, tenantId } = await createVisibleClient();
-  const { data, error } = await forTenant(
-    supabase.from("client_va_assignments").select("id, va_id, va_first_name, started_at").eq("client_id", clientId).eq("status", "active"),
-    tenantId,
-  ).order("started_at", { ascending: true });
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("client_va_assignments")
+    .select("id, va_id, va_first_name, started_at")
+    .eq("client_id", clientId)
+    .eq("status", "active")
+    .order("started_at", { ascending: true });
   if (error) throw new UpstreamError("supabase", `Reading assignments for ${clientId} failed (${error.code})`);
   return data.map((row) => ({ id: row.id, vaId: row.va_id, vaName: row.va_first_name, startedAt: row.started_at }));
 }

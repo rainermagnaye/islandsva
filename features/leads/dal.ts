@@ -1,8 +1,8 @@
 import "server-only";
 import { cache } from "react";
+import { getSessionUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { createVisibleClient, forTenant } from "@/lib/supabase/visible";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import { leadProfileFrom, leadProfileToJson, type LeadDetail, type LeadEvent, type LeadPage, type LeadStatus, type LeadSummary } from "./contract";
@@ -93,9 +93,9 @@ export async function markLeadNotified(id: string) {
   if (error) throw new UpstreamError("supabase", `Marking lead ${id} notified failed: ${error.message}`, { cause: error });
 }
 
-// Writes below use the signed-in session, so RLS still limits who may change a row. List and detail reads
-// go through createVisibleClient: a Lead Gen sees every lead in their agency (secret key, tenant-scoped)
-// until the closer_tenant_read policy is live; admins stay on the session so two-factor RLS still applies.
+// Reads and writes below use the signed-in session (not the secret key), so the database's own rules apply a
+// second time: admins with two-factor sign-in and Lead Gens read every lead in their agency; writes stay
+// owner-scoped. Only the names in closerNames reach past RLS.
 
 const PAGE_SIZE = 25;
 
@@ -124,14 +124,31 @@ const toSummary = (row: SummaryRow, closerName: string | null): LeadSummary => (
   createdAt: row.created_at,
 });
 
-/** Names for the closers on this page. One read; a missing profile (deactivated, other tenant) stays unnamed. */
+/**
+ * Names for the closers and timeline authors on this page; a profile in another tenant stays unnamed (a
+ * deactivated one keeps its name). Admins read profiles on the session. RLS lets a Lead Gen read only their own profile, so the other
+ * names come from the narrow secret-key read below.
+ */
 async function closerNames(ids: readonly string[]) {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map<string, string>();
-  const { supabase, tenantId } = await createVisibleClient();
-  const { data, error } = await forTenant(supabase.from("profiles").select("id, full_name").in("id", unique), tenantId);
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("profiles").select("id, full_name").in("id", unique);
   if (error) throw new UpstreamError("supabase", `Reading closer names failed: ${error.message}`, { cause: error });
-  return new Map(data.map((row) => [row.id, row.full_name]));
+  const names = new Map(data.map((row) => [row.id, row.full_name]));
+  const missing = unique.filter((id) => !names.has(id));
+  const user = await getSessionUser();
+  if (missing.length === 0 || !user?.roles.includes("closer") || user.roles.includes("admin")) return names;
+
+  const own = await supabase.from("profiles").select("tenant_id").eq("id", user.id).maybeSingle();
+  if (own.error) throw new UpstreamError("supabase", `Reading the Lead Gen's agency failed: ${own.error.message}`, { cause: own.error });
+  if (!own.data) return names;
+  // Secret key, after the page's requireRole(["closer"]): only id and full_name, only ids from rows RLS has just
+  // returned to this Lead Gen, and only profiles in their own agency.
+  const others = await createAdminClient().from("profiles").select("id, full_name").in("id", missing).eq("tenant_id", own.data.tenant_id);
+  if (others.error) throw new UpstreamError("supabase", `Reading Lead Gen names failed: ${others.error.message}`, { cause: others.error });
+  for (const row of others.data) names.set(row.id, row.full_name);
+  return names;
 }
 
 async function withClosers(rows: readonly SummaryRow[]) {
@@ -151,9 +168,9 @@ export async function listLeads({
   disabled = false,
   pageSize = PAGE_SIZE,
 }: { page?: number; status?: LeadStatus; search?: string; disabled?: boolean; pageSize?: number } = {}): Promise<LeadPage> {
-  const { supabase, tenantId } = await createVisibleClient();
+  const supabase = await createClient();
   const from = (page - 1) * pageSize;
-  let query = forTenant(supabase.from("leads").select(SUMMARY_COLUMNS, { count: "exact" }), tenantId);
+  let query = supabase.from("leads").select(SUMMARY_COLUMNS, { count: "exact" });
   if (status && !disabled) query = query.eq("status", status);
   if (search) {
     const pattern = `%${search}%`;
@@ -176,12 +193,12 @@ export async function listLeads({
 
 /** A few leads matching a name, email, or company, newest first. Hidden leads stay out. */
 export async function searchLeads(search: string, limit: number) {
-  const { supabase, tenantId } = await createVisibleClient();
+  const supabase = await createClient();
   const pattern = `%${search}%`;
-  const { data, error } = await forTenant(
-    supabase.from("leads").select("id, full_name, email, company_name").is("disabled_at", null),
-    tenantId,
-  )
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, full_name, email, company_name")
+    .is("disabled_at", null)
     .or(`full_name.ilike."${pattern}",email.ilike."${pattern}",company_name.ilike."${pattern}"`)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -197,8 +214,8 @@ export async function searchLeads(search: string, limit: number) {
 /** One lead with its message, or null if it doesn't exist (or isn't visible to the caller). */
 export async function getLead(id: string): Promise<LeadDetail | null> {
   if (!isUuid(id)) return null;
-  const { supabase, tenantId } = await createVisibleClient();
-  const { data, error } = await forTenant(supabase.from("leads").select(`${SUMMARY_COLUMNS}, industry, country, message, updated_at, disabled_at, profile`).eq("id", id), tenantId).maybeSingle();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("leads").select(`${SUMMARY_COLUMNS}, industry, country, message, updated_at, disabled_at, profile`).eq("id", id).maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading lead ${id} failed: ${error.message}`, { cause: error });
   if (!data) return null;
   const names = await closerNames(data.closer_id ? [data.closer_id] : []);
@@ -217,11 +234,8 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
 /** Timeline rows, newest first, with the author's name when this admin can read the profile. */
 export async function listLeadEvents(leadId: string): Promise<LeadEvent[]> {
   if (!isUuid(leadId)) return [];
-  const { supabase, tenantId } = await createVisibleClient();
-  const { data, error } = await forTenant(
-    supabase.from("lead_events").select("id, kind, body, author_id, created_at, attachment_name, attachment_type").eq("lead_id", leadId),
-    tenantId,
-  ).order("created_at", { ascending: false });
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("lead_events").select("id, kind, body, author_id, created_at, attachment_name, attachment_type").eq("lead_id", leadId).order("created_at", { ascending: false });
   if (error) throw new UpstreamError("supabase", `Reading the timeline for ${leadId} failed: ${error.message}`, { cause: error });
   const names = await closerNames(data.map((row) => row.author_id));
   return data.map((row) => ({
@@ -240,8 +254,8 @@ export async function listLeadEvents(leadId: string): Promise<LeadEvent[]> {
  * badge and the overview both count new leads on the same render.
  */
 const countLeadsWith = cache(async (status?: LeadStatus, search?: string, disabled = false) => {
-  const { supabase, tenantId } = await createVisibleClient();
-  let query = forTenant(supabase.from("leads").select("id", { count: "exact", head: true }), tenantId);
+  const supabase = await createClient();
+  let query = supabase.from("leads").select("id", { count: "exact", head: true });
   if (status && !disabled) query = query.eq("status", status);
   if (search) {
     const pattern = `%${search}%`;

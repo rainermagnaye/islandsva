@@ -2,13 +2,12 @@ import "server-only";
 import { timezoneForCountry } from "@/content/timezones";
 import { decodeBytea } from "@/lib/bytea";
 import { createClient } from "@/lib/supabase/server";
-import { createVisibleClient, forTenant } from "@/lib/supabase/visible";
 import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import type { Booking, BookingChoice, BookingEvent, BookingEventKind, BookingGuest, BookingStatus } from "./contract";
 
-// List reads go through createVisibleClient so a Lead Gen sees every meeting in their agency. Meeting history
-// is loaded only for those ids.
+// Reading meetings for the calendars and a lead's page: always as the signed-in user, so RLS decides who sees
+// which meeting and its history.
 
 const LIST_LIMIT = 200;
 
@@ -63,15 +62,12 @@ export function listLeadBookings(leadId: string): Promise<Booking[]> {
 }
 
 async function loadBookings(leadId?: string): Promise<Booking[]> {
-  const { supabase, tenantId } = await createVisibleClient();
-  let query = forTenant(
-    supabase
-      .from("meetings")
-      .select("id, kind, title, lead_id, status, starts_at, ends_at, client_id, client_name, staff_id, staff_name, client_ids, staff_ids, client_names, staff_names, creator_name, created_by")
-      .in("kind", ["manual", "discovery"])
-      .in("status", ["requested", "scheduled", "cancelled", "done"]),
-    tenantId,
-  )
+  const supabase = await createClient();
+  let query = supabase
+    .from("meetings")
+    .select("id, kind, title, lead_id, status, starts_at, ends_at, client_id, client_name, staff_id, staff_name, client_ids, staff_ids, client_names, staff_names, creator_name, created_by")
+    .in("kind", ["manual", "discovery"])
+    .in("status", ["requested", "scheduled", "cancelled", "done"])
     .order("starts_at", { ascending: false })
     .limit(LIST_LIMIT);
   if (leadId) query = query.eq("lead_id", leadId);
@@ -81,13 +77,11 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
   const ids = rows.map((row) => row.id);
   const events = new Map<string, BookingEvent[]>();
   if (ids.length > 0) {
-    const history = await forTenant(
-      supabase
-        .from("meeting_events")
-        .select("id, meeting_id, kind, body, actor_name, created_at, attachment_name, attachment_type")
-        .in("meeting_id", ids),
-      tenantId,
-    ).order("created_at", { ascending: true });
+    const history = await supabase
+      .from("meeting_events")
+      .select("id, meeting_id, kind, body, actor_name, created_at, attachment_name, attachment_type")
+      .in("meeting_id", ids)
+      .order("created_at", { ascending: true });
     if (history.error) throw new UpstreamError("supabase", `Listing booking history failed: ${history.error.message}`, { cause: history.error });
     for (const event of (history.data ?? []) as EventRow[]) {
       const list = events.get(event.meeting_id) ?? [];
@@ -106,7 +100,7 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
   const leadIds = rows.flatMap((row) => (row.lead_id ? [row.lead_id] : []));
   const names = new Map<string, { company_name: string | null; full_name: string; country: string | null }>();
   if (leadIds.length > 0) {
-    const leads = await forTenant(supabase.from("leads").select("id, company_name, full_name, country").in("id", leadIds), tenantId);
+    const leads = await supabase.from("leads").select("id, company_name, full_name, country").in("id", leadIds);
     if (leads.error) throw new UpstreamError("supabase", `Listing discovery leads failed: ${leads.error.message}`, { cause: leads.error });
     for (const lead of leads.data ?? []) names.set(lead.id, lead);
   }
@@ -191,11 +185,12 @@ export async function listBookingChoices(userId: string): Promise<{ clients: Boo
 /** One file on a history row the caller is already allowed to read. */
 export async function getBookingAttachment(eventId: string) {
   if (!isUuid(eventId)) return null;
-  const { supabase, tenantId } = await createVisibleClient();
-  const { data, error } = await forTenant(
-    supabase.from("meeting_events").select("attachment_name, attachment_type, attachment_bytes").eq("id", eventId),
-    tenantId,
-  ).maybeSingle();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("meeting_events")
+    .select("attachment_name, attachment_type, attachment_bytes")
+    .eq("id", eventId)
+    .maybeSingle();
   if (error) throw new UpstreamError("supabase", `Reading a booking attachment failed: ${error.message}`, { cause: error });
   if (!data?.attachment_name || !data.attachment_type || !data.attachment_bytes) return null;
   return { name: data.attachment_name, type: data.attachment_type, bytes: decodeBytea(data.attachment_bytes) };
