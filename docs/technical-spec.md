@@ -23,7 +23,10 @@ The domain model, status flows and integrations. Stack, layers, folder map and c
 | timesheet_days | One VA × client × Manila day once the month is over: status (pending, approved, disputed), client's note, decided by, decided at; an admin's resolution | New (M14) |
 | audit_log | Append-only who-did-what: actor (user or system; Google sync in M9), action, record type + id, owning Lead Gen / client, changed fields (values only for safe columns), at | Built (M8; rules in `supabase/CLAUDE.md`) |
 | demo_slots · demo_bookings | Client ↔ VA demo calls | Built; replaced by `meetings` (intro calls), drop in M10 |
-| client_onboarding_links · payments | Replaced by the registration packet | Drop |
+| client_subscriptions | A client's package terms over time: package, hours per week, term, monthly cents, currency, effective from (first billing day), until; one current row per client. Seeded from `clients` at activation | New (M15) |
+| invoices · invoice_lines | One invoice per client per billing month: number, period, issued on, due on, status, totals; lines are the package fee and admin adjustments, each with a reason. Locked once issued | New (M15) |
+| payments | Manual payments: today the registration payment; from M15 each row settles an invoice (`invoice_id`) | Built; kept and extended in M15 |
+| client_onboarding_links | Replaced by the registration packet | Drop |
 
 ## Registration link (three steps)
 
@@ -74,6 +77,25 @@ One model for every call; one Google integration; one history.
 - **Weekends:** Saturday and Sunday have no target and no daily cap; every hour worked counts toward that week's and month's hours used.
 - **Every client shows hours and remaining balance.** The package is set at conversion (`clients_package_complete`), so active clients have `hours_per_week`; an older client without it shows hours worked and "No package set" for the balance until an admin sets the package.
 
+## Billing (M15)
+
+Lead-to-cash ends at "paid": validated hours show what the package delivered, invoices show what the client owes. Payment stays manual (bank transfer and proof, checked by an admin); Stripe stays after launch.
+
+- **Subscription:** `client_subscriptions` holds the package terms with an effective date, so a change never rewrites the past. Activation copies the client's package (`package_code`, `hours_per_week`, `term_months`, `monthly_cents`, `currency`, `starts_on`) into the first row. M14 reads the target and balances for a day from the row in effect that day, not from `clients`. Admins with 2FA change it; the change takes effect from the next billing month (no proration). The terms on `clients` stay as the agreed snapshot that `client_agreements` signed.
+- **Billing month:** from `starts_on`'s day of month, capped at the 28th (31 Jan start → billed on the 28th), in Asia/Manila. All terms bill monthly at that term's monthly price; 6 and 12 months are a commitment, not a prepayment.
+- **Invoice:** `pg_cron` issues each client's invoice on its billing day (actor System), like discovery expiry: the subscription in effect that day → one package line. Due 7 days after issue. The first invoice is the registration payment: `approve_client_payment` creates invoice 1 already paid, so the client's history starts complete.
+- **Numbering:** per agency and year, `INV-2026-0001`, gapless — a counter row per tenant and year, locked in the issuing transaction. A number is never reused or deleted.
+- **Locked once issued:** lines, totals and number never change. A mistake is fixed with a credit note (a negative invoice pointing at the original) or by voiding an unpaid invoice with a reason, then issuing a new one. A draft exists only when an admin adds an adjustment line before issue.
+- **Payment:** the client uploads proof on the invoice (one file, ≤ 2 MB, the registration packet's file checks). An admin verifies it as at registration: amount, fee, date and bank reference (unique per agency, `IVA41`/`IVA42`'s rule) → a `payments` row with `invoice_id`. Paid when payments ≥ total; a short payment leaves it part-paid.
+- **Overdue and reminders:** overdue is computed (unpaid after `due_on`), never stored. Emails (plain text, fixed content, amounts and the invoice link, sent after the `pg_cron` run through a signed internal endpoint like discovery expiry): issued, 3 days before due, on the due date, 7 days after. At 14 days overdue the client is flagged "on hold" for an admin; nothing is suspended automatically.
+- **Renewal:** at term end the subscription continues on the same package, monthly price of the 1-month term unless an admin renews the term. A notice goes to the client and admins 30 days before term end.
+- **Ending:** an admin ends the subscription from a date; the last invoice is the month already issued (no refunds in the app). The client becomes inactive when no subscription is in effect.
+- **Access:** a client reads their own invoices, lines and payments and uploads proof; admins with 2FA read and act on all; VAs and Lead Gens none (a Lead Gen sees only "paid / overdue" on the clients they own). All writes go through functions with the actor checked; audited (amounts, statuses, dates and ids keep values).
+- **Invoice document:** a printable page (print CSS, "Save as PDF" in the browser) — no PDF dependency. Seller details from the tenant; client billing details from `clients.billing`.
+- **Out of scope here:** tax and withholding (pending legal review, `TODO(legal)`), currencies other than the client's, hourly or overage billing (hours above the target are never charged, `docs/prd.md`), refunds, card payments.
+
+Slices: 1 `db/` subscriptions (and M14 reading them) · 2 `db/` invoices, numbering, issuing job, credit and void · 3 invoice payments (proof, verification, links registration payment as invoice 1) · 4 client and admin invoice screens and the printable invoice · 5 reminder and renewal emails · 6 sales page from invoices (receivables by age, collected per month).
+
 ## Status flows
 
 - **Lead:** request (stored as an unowned `new` lead with an open discovery request; shown only in the Lead Gens' inbox, not in leads lists or pipeline counts) → new (call confirmed, owner set) → contacted → qualified → won (client created) · closed (a rejected request closes as junk and never shows as a lead).
@@ -82,6 +104,7 @@ One model for every call; one Google integration; one history.
 - **Shortlist:** offered → accepted (creates the assignment) | declined.
 - **Task:** todo → in_progress → done; overdue = not done after its deadline (computed, not stored).
 - **Timesheet day:** pending → approved | disputed → approved (an admin resolves); pending → approved automatically 5 days after month end.
+- **Invoice (M15):** draft (only with an admin adjustment) → issued → part_paid → paid · issued | part_paid → void (unpaid amount only, with a reason); overdue is computed. A credit note is its own invoice with a negative total.
 - **Account:** invited → active → inactive.
 
 ## Discovery-call booking
@@ -147,6 +170,7 @@ A folder is created when its milestone starts, then moves into the `CLAUDE.md` �
 |---|---|---|
 | M8 | `features/meetings` (started: discovery times in `/admin/settings`; now in the §3 map) · `features/audit` | `api/v1/discovery-slots` (built); Lead Gen inbox, schedule, call history and activity under `closer/` |
 | M14 | `features/timesheets` (removes the task timer from `features/tasks`) | VA timer and hours under `va/`; client hours and month review under `client/`; admin hours, disputes and corrections under `admin/` |
+| M15 | `features/billing` | client invoices under `client/billing`; admin invoices, verification and receivables under `admin/billing`; `api/v1/internal/billing-run` (signed, `pg_cron`); printable invoice page |
 | M9 | `features/google` | `api/v1/google/calendar-events`; Google connect / callback |
 | M10 | `features/matching` (replaces `features/demos`) | client VA Match; VA working hours |
 | M11 | `features/tasks` | client and VA task pages |
