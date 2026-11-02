@@ -47,7 +47,9 @@ export async function verifyTurnstile(token: string | null, ip: string | null, r
     if (env.isLiveDeployment()) throw new UpstreamError("turnstile", "Turnstile test keys are configured in production");
     return;
   }
-  // A token minted on another site that reuses our site key must not count.
-  const allowedHosts = new Set([requestHost, new URL(site.url).hostname]);
+  // A token minted on another site that reuses our site key must not count. The live deployment accepts only
+  // the site's own domain: it is also reachable on other aliases (*.vercel.app), which must not take enquiries.
+  const siteHost = new URL(site.url).hostname;
+  const allowedHosts = new Set(env.isLiveDeployment() ? [siteHost] : [requestHost, siteHost]);
   if (!result.hostname || !allowedHosts.has(result.hostname)) throw failed();
 }
