@@ -5,10 +5,10 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FORM_ERROR, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { BookingField, BookingNoteField, DiscoveryOutcomeField, DiscoveryRejectField, DiscoveryTimesField } from "./contract";
+import { CONFIRMATION_NOTICE, type BookingField, type BookingNoteField, type ConfirmationOutcome, type ConfirmResult, type DiscoveryOutcomeField, type DiscoveryRejectField, type DiscoveryTimesField } from "./contract";
 import { saveDiscoveryTimes, type DiscoveryTimesRefusal } from "./dal";
 import { bookingEntries, fileFrom, noteEntries } from "./form-data";
-import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createBooking, editBookingNote, moveDiscoveryCall, rejectDiscoveryCall, removeBookingNote, saveDiscoveryOutcome, updateBooking } from "./service";
+import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createBooking, editBookingNote, moveDiscoveryCall, rejectDiscoveryCall, removeBookingNote, saveDiscoveryOutcome, sendConfirmation, updateBooking } from "./service";
 import { parseBooking, parseBookingEventId, parseBookingId, parseBookingNote, parseBookingNoteEdit, parseDiscoveryMove, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes } from "./validation";
 
 const REFUSAL_MESSAGES: Record<DiscoveryTimesRefusal, string> = {
@@ -171,9 +171,23 @@ export async function deleteBookingNoteAction(formData: FormData): Promise<Submi
   return { ok: true };
 }
 
-/** An admin or Lead Gen claims a requested discovery call. */
-export async function confirmDiscoveryAction(formData: FormData): Promise<SubmitResult<"meetingId">> {
-  await requireRole(["admin", "closer"]);
+/** Emails the visitor; an outage counts as a failed send, so the confirm itself still stands. */
+async function emailVisitor(meetingId: string, actorId: string): Promise<ConfirmationOutcome> {
+  try {
+    return await sendConfirmation(meetingId, actorId);
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Discovery confirmation email failed", { service: error.service, meetingId });
+    return "failed";
+  }
+}
+
+/**
+ * An admin or Lead Gen claims a requested discovery call, then the visitor is emailed. The email is sent here, not in
+ * after(), so the result can say whether it went out; a failed email still returns ok (the call is confirmed).
+ */
+export async function confirmDiscoveryAction(formData: FormData): Promise<ConfirmResult> {
+  const user = await requireRole(["admin", "closer"]);
   const parsed = parseBookingId(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   try {
@@ -184,8 +198,20 @@ export async function confirmDiscoveryAction(formData: FormData): Promise<Submit
     console.error("Discovery confirm failed", { service: error.service, error });
     return { ok: false, message: "We couldn't confirm this call just now. Please try again in a moment." };
   }
+  const outcome = await emailVisitor(parsed.value.meetingId, user.id);
   refresh();
-  return { ok: true };
+  return { ok: true, notice: `Meeting confirmed. ${CONFIRMATION_NOTICE[outcome]}` };
+}
+
+/** The Send confirmation email button: after a failed send, or with the new time after a reschedule. */
+export async function sendDiscoveryConfirmationAction(formData: FormData): Promise<ConfirmResult> {
+  const user = await requireRole(["admin", "closer"]);
+  const parsed = parseBookingId(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  const outcome = await emailVisitor(parsed.value.meetingId, user.id);
+  refresh();
+  if (outcome === "sent" || outcome === "already_sent") return { ok: true, notice: CONFIRMATION_NOTICE[outcome] };
+  return { ok: false, message: CONFIRMATION_NOTICE[outcome] };
 }
 
 /** An admin or Lead Gen moves a discovery call to another time. */

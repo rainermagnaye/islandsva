@@ -152,6 +152,9 @@ type MeetingRow = {
   client_names: string[];
   staff_names: string[];
   creator_name: string | null;
+  /** When the visitor's confirmation email was claimed, and for which start (server-only writes). */
+  confirmation_sent_at: string | null;
+  confirmation_sent_for: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -832,6 +835,11 @@ export type Database = {
         Returns: Json;
       };
       record_discovery_outcome: { Args: { meeting_id: string; actor: string; outcome: "done" | "no_show"; note: string | null }; Returns: undefined };
+      claim_discovery_confirmation: {
+        Args: { meeting_id: string; actor: string };
+        Returns: { email: string; starts_at: string; country: string | null; claimed_at: string }[];
+      };
+      release_discovery_confirmation: { Args: { meeting_id: string; claimed_at: string }; Returns: undefined };
       // VA Match: signed in as a client; rows only for VAs offered to the caller's own company. Work details only.
       offered_va_profiles: {
         Args: Record<PropertyKey, never>;

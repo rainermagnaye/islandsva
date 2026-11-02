@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COUNTRIES } from "./countries";
-import { timezoneForCountry } from "./timezones";
+import { callTimeLines, timezoneForCountry } from "./timezones";
 
 describe("country time zones", () => {
   it("gives every country one real time zone", () => {
@@ -13,5 +13,19 @@ describe("country time zones", () => {
     expect(timezoneForCountry("Philippines")).toEqual({ value: "Asia/Manila", label: "Philippines — Manila" });
     expect(timezoneForCountry("United States")?.value).toBe("America/New_York");
     expect(timezoneForCountry("")).toBeNull();
+  });
+});
+
+describe("callTimeLines", () => {
+  const startsAt = "2026-11-10T01:30:00.000Z";
+
+  it("shows the visitor's clock, then Philippine time", () => {
+    expect(callTimeLines("United States", startsAt)).toEqual(["Nov 9, 2026, 8:30 PM New York", "Nov 10, 2026, 9:30 AM PHT"]);
+  });
+
+  it("shows Philippine time alone for the Philippines or an unknown country", () => {
+    expect(callTimeLines("Philippines", startsAt)).toEqual(["Nov 10, 2026, 9:30 AM PHT"]);
+    expect(callTimeLines("Atlantis", startsAt)).toEqual(["Nov 10, 2026, 9:30 AM PHT"]);
+    expect(callTimeLines(null, startsAt)).toEqual(["Nov 10, 2026, 9:30 AM PHT"]);
   });
 });

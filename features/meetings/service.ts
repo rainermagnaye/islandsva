@@ -1,8 +1,12 @@
 import "server-only";
+import { env } from "@/lib/env";
 import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertBooking, insertBookingNote, recordDiscoveryOutcome, rejectDiscovery, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
 import { answerVaMeetingRow, cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
 import { cancelCloserMeetingRow, cancelVaMeetingRow, insertCloserMeeting, insertVaMeeting, listVaTeam } from "./va-dal";
 import { listBookings } from "./booking-dal";
+import { claimConfirmation, releaseConfirmation } from "./confirmation-dal";
+import type { ConfirmationOutcome } from "./contract";
+import { sendDiscoveryConfirmation } from "./email";
 import type { BookingFile as FileInput } from "./form-data";
 import type { BookingInput, BookingNoteInput, VaMeetingInput } from "./validation";
 
@@ -120,4 +124,20 @@ export function cancelCloserMeeting(meetingId: string) {
 /** Staff a Lead Gen can invite. Call only after requireRole(["closer"]). */
 export function listTeamForCloser(closerId: string) {
   return listVaTeam(closerId);
+}
+
+/**
+ * Emails the visitor that their discovery call is confirmed, at most once per start: claim (stamps the call),
+ * send, and release the claim if the send failed so the Lead Gen can try again. Only the live site sends: staging,
+ * previews and local development share the production database, so they would email real visitors.
+ */
+export async function sendConfirmation(meetingId: string, actorId: string): Promise<ConfirmationOutcome> {
+  if (!env.isLiveDeployment()) return "skipped";
+  const claim = await claimConfirmation(meetingId, actorId);
+  if (!claim.ok) return claim.reason;
+  if (!claim.call) return "already_sent";
+  const sent = await sendDiscoveryConfirmation({ meetingId, email: claim.call.email, startsAt: claim.call.startsAt, country: claim.call.country });
+  if (sent) return "sent";
+  await releaseConfirmation(meetingId, claim.call.claimedAt);
+  return "failed";
 }

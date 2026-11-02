@@ -205,3 +205,17 @@ export function timezoneForCountry(country: string): CountryTimeZone | null {
   if (!zone) return null;
   return { value: zone[0], label: `${name} — ${zone[1]}` };
 }
+
+const callTime = (startsAt: string, timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(startsAt));
+
+/**
+ * A discovery call's start for an email: the visitor's country's clock first (with its city), then Philippine time.
+ * Philippine time alone when the country is empty, unknown or the Philippines.
+ */
+export function callTimeLines(country: string | null, startsAt: string): string[] {
+  const pht = `${callTime(startsAt, "Asia/Manila")} PHT`;
+  const zone = country ? timezoneForCountry(country) : null;
+  if (!zone || zone.value === "Asia/Manila") return [pht];
+  return [`${callTime(startsAt, zone.value)} ${zone.label.split(" — ")[1]}`, pht];
+}

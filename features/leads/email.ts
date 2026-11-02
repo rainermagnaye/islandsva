@@ -1,17 +1,14 @@
 import "server-only";
 import { packages } from "@/content/packages";
-import { timezoneForCountry } from "@/content/timezones";
+import { callTimeLines } from "@/content/timezones";
 import { sendPlainEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import type { LeadInput } from "./validation";
 
 function discoveryLines(country: string, startsAt?: string) {
   if (!startsAt) return [];
-  const pht = `${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }).format(new Date(startsAt))} PHT`;
-  const zone = timezoneForCountry(country);
-  if (!zone || zone.value === "Asia/Manila") return [`Discovery call: ${pht}`];
-  const local = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: zone.value }).format(new Date(startsAt));
-  return [`Discovery call: ${local} ${zone.label.split(" — ")[1]}`, pht];
+  const [first, ...rest] = callTimeLines(country, startsAt);
+  return [`Discovery call: ${first}`, ...rest];
 }
 
 /** Notifies the team of a new enquiry. Returns false (and logs) when email isn't configured or doesn't go out. */

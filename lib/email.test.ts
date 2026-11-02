@@ -23,6 +23,15 @@ describe("sendPlainEmail", () => {
     expect(body).not.toHaveProperty("html");
   });
 
+  it("sends an idempotency key only when one is given", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    await sendPlainEmail("Test email", message, "discovery-confirmation/m1");
+    await sendPlainEmail("Test email", message);
+    expect(new Headers(fetch.mock.calls[0][1]?.headers).get("Idempotency-Key")).toBe("discovery-confirmation/m1");
+    expect(new Headers(fetch.mock.calls[1][1]?.headers).has("Idempotency-Key")).toBe(false);
+  });
+
   it("skips without calling Resend when email isn't configured", async () => {
     vi.stubEnv("RESEND_API_KEY", "");
     const fetch = vi.fn<typeof globalThis.fetch>();

@@ -5,8 +5,10 @@ import { env } from "@/lib/env";
  * One plain-text email via Resend's REST API (no Supabase mailer, so it works before custom SMTP). Plain text, so
  * names and other input are never interpreted as HTML. Returns false — never throws — when email isn't configured,
  * Resend is unreachable or it refuses; logs only `label` and the status, never the address, body or a link.
+ * `idempotencyKey`: Resend sends one email per key (for 24 hours), so a retry after a timeout that Resend did accept
+ * can't send it twice.
  */
-export async function sendPlainEmail(label: string, message: { to: string; subject: string; text: string; replyTo?: string }) {
+export async function sendPlainEmail(label: string, message: { to: string; subject: string; text: string; replyTo?: string }, idempotencyKey?: string) {
   const apiKey = env.resendApiKey();
   const from = env.emailFrom();
   if (!apiKey || !from) {
@@ -16,7 +18,7 @@ export async function sendPlainEmail(label: string, message: { to: string; subje
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...(idempotencyKey && { "Idempotency-Key": idempotencyKey }) },
       signal: AbortSignal.timeout(10000),
       body: JSON.stringify({ from, to: [message.to], subject: message.subject, text: message.text, ...(message.replyTo && { reply_to: message.replyTo }) }),
     });

@@ -29,6 +29,8 @@ type MeetingListRow = {
   staff_names: string[] | null;
   creator_name: string | null;
   created_by: string | null;
+  confirmation_sent_at: string | null;
+  confirmation_sent_for: string | null;
 };
 
 function guestsOf(row: MeetingListRow): BookingGuest[] {
@@ -65,7 +67,7 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
   const supabase = await createClient();
   let query = supabase
     .from("meetings")
-    .select("id, kind, title, lead_id, status, starts_at, ends_at, client_id, client_name, staff_id, staff_name, client_ids, staff_ids, client_names, staff_names, creator_name, created_by")
+    .select("id, kind, title, lead_id, status, starts_at, ends_at, client_id, client_name, staff_id, staff_name, client_ids, staff_ids, client_names, staff_names, creator_name, created_by, confirmation_sent_at, confirmation_sent_for")
     .in("kind", ["manual", "discovery"])
     .in("status", ["requested", "scheduled", "cancelled", "done"])
     .order("starts_at", { ascending: false })
@@ -127,6 +129,8 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
         createdBy: null,
         timeZone: zone?.value ?? null,
         timeZoneCity: zone ? zone.label.split(" — ")[1] : null,
+        confirmationSentAt: row.confirmation_sent_at,
+        confirmationCurrent: Boolean(row.confirmation_sent_for) && Date.parse(row.confirmation_sent_for ?? "") === Date.parse(row.starts_at),
         events: history,
       }];
     }
@@ -148,6 +152,8 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
       createdBy: row.created_by,
       timeZone: null,
       timeZoneCity: null,
+      confirmationSentAt: null,
+      confirmationCurrent: false,
       events: history,
     }];
   });
