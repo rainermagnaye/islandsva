@@ -12,6 +12,8 @@ import {
   BOOKING_LIMITS,
   BOOKING_TIME_ZONE,
   DISCOVERY_LIMITS,
+  confirmationLabel,
+  confirmationState,
   formatBookingWhen,
   type Booking,
   type BookingField,
@@ -19,7 +21,7 @@ import {
   type DiscoveryRejectField,
   type DiscoveryRequest,
 } from "../contract";
-import { confirmDiscoveryAction, recordDiscoveryOutcomeAction, rejectDiscoveryAction, rescheduleDiscoveryAction } from "../actions";
+import { confirmDiscoveryAction, recordDiscoveryOutcomeAction, rejectDiscoveryAction, rescheduleDiscoveryAction, sendDiscoveryConfirmationAction } from "../actions";
 import { clocks, Field, StatusField, useStarted } from "./booking-detail-parts";
 
 type Intent = "view" | "reschedule" | "decline" | "done" | "no_show";
@@ -42,6 +44,8 @@ export function DiscoveryDetail({
 }) {
   const [intent, setIntent] = useState<Intent>("view");
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const [dates, setDates] = useState<{ min: IsoDate; max: IsoDate } | null>(null);
   const title = request ? request.companyName || request.fullName : booking?.title ?? "Discovery call";
   const startsAt = request?.startsAt ?? booking?.startsAt ?? "";
@@ -67,8 +71,19 @@ export function DiscoveryDetail({
     const data = new FormData();
     data.set("meetingId", meetingId);
     const result = await confirmDiscoveryAction(data);
-    if (result.ok) onDone("Meeting confirmed.");
+    if (result.ok) onDone(result.notice ?? "Meeting confirmed.");
     else setClaimError(result.message);
+  }
+
+  async function sendEmail() {
+    setEmailError(null);
+    setSending(true);
+    const data = new FormData();
+    data.set("meetingId", meetingId);
+    const result = await sendDiscoveryConfirmationAction(data);
+    setSending(false);
+    if (result.ok) onDone(result.notice ?? "Confirmation email sent to the visitor.");
+    else setEmailError(result.message);
   }
 
   return (
@@ -115,8 +130,17 @@ export function DiscoveryDetail({
             {booking && !request ? <Field label="Company" value={booking.clientName} /> : null}
             {booking?.staffName ? <Field label="Staff" value={booking.staffName} /> : null}
             <StatusField status={status} />
+            {scheduled && booking ? <Field label="Confirmation email" value={confirmationLabel(booking)} /> : null}
           </dl>
+          {scheduled && booking && !started && confirmationState(booking) !== "sent" && (
+            <div>
+              <Button type="button" variant="secondary" size="sm" loading={sending} onClick={sendEmail}>
+                {confirmationState(booking) === "earlier" ? "Send updated time" : "Send confirmation email"}
+              </Button>
+            </div>
+          )}
           {claimError && <Alert tone="danger" title="Couldn't confirm">{claimError}</Alert>}
+          {emailError && <Alert tone="warning" title="Email not sent">{emailError}</Alert>}
           {scheduled && !started && (
             <p className="m-0 type-caption text-ink-muted">You can mark this once the meeting has started.</p>
           )}

@@ -3102,6 +3102,111 @@ describe("discovery calls", () => {
       expect(stored).toEqual({ status: "done", lead_status: "contacted" });
     });
   });
+
+  describe("confirmation email (20261101171012_discovery_confirmation_email)", () => {
+    const at = (offsetMs: number) => {
+      const start = new Date(aligned(offsetMs));
+      start.setUTCMinutes(30, 0, 0);
+      return start.toISOString();
+    };
+    const claim = (meeting: string, actor: string) =>
+      asServer<{ email: string; starts_at: string; country: string; claimed_at: string }>("select * from public.claim_discovery_confirmation($1, $2)", [meeting, actor]);
+    const release = (meeting: string, claimedAt: string) => asServer("select public.release_discovery_confirmation($1, $2)", [meeting, claimedAt]);
+    const stampOf = async (meeting: string) =>
+      (await asServer<{ sent_at: string | null; sent_for: string | null }>("select confirmation_sent_at as sent_at, confirmation_sent_for as sent_for from public.meetings where id = $1", [meeting]))[0];
+    /** A call confirmed by LG_A for `email`, `offsetMs` ahead. */
+    const scheduledCall = async (email: string, offsetMs: number) => {
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Mia Reyes', $1, 'Reyes Co', 'Legal', 'United States', 'Need help', null, null, null, $2) as id",
+        [email, at(offsetMs)],
+      );
+      const meeting = await meetingOf(row.id);
+      await decide(meeting, LG_A, "scheduled");
+      return { meeting, lead: row.id };
+    };
+
+    it("only the secret key may call claim and release, and signed-in users can't write the stamp", async () => {
+      const { meeting } = await scheduledCall("confirm-grants@disc.co", 12 * DAY + 2 * HOUR);
+      for (const claims of [asLgA, asAdmin]) {
+        await expect(asUser(claims, "select * from public.claim_discovery_confirmation($1, $2)", [meeting, LG_A])).rejects.toThrow(/permission denied/);
+        await expect(asUser(claims, "select public.release_discovery_confirmation($1, now())", [meeting])).rejects.toThrow(/permission denied/);
+        await expect(asUser(claims, "update public.meetings set confirmation_sent_at = now(), confirmation_sent_for = starts_at where id = $1", [meeting])).rejects.toThrow(
+          /permission denied/,
+        );
+      }
+      await expect(as("anon", {}, "select * from public.claim_discovery_confirmation($1, $2)", [meeting, LG_A])).rejects.toThrow(/permission denied/);
+      await expect(as("anon", {}, "select public.release_discovery_confirmation($1, now())", [meeting])).rejects.toThrow(/permission denied/);
+      // Lead Gens see the stamp (not personal data) through their existing read.
+      expect(await asUser(asLgB, "select confirmation_sent_at from public.meetings where id = $1", [meeting])).toEqual([{ confirmation_sent_at: null }]);
+    });
+
+    it("refuses anyone but the call's active Lead Gen or an active admin of its agency, storing nothing", async () => {
+      const { meeting } = await scheduledCall("confirm-actor@disc.co", 12 * DAY + 3 * HOUR);
+      for (const actor of [LG_B, LG_OFF, VA, CLIENT, ADMIN_B, CLOSER_B]) {
+        await expect(claim(meeting, actor)).rejects.toMatchObject({ code: "IVA14" });
+      }
+      expect(await stampOf(meeting)).toEqual({ sent_at: null, sent_for: null });
+      // The organizer, after deactivation, can't either.
+      const [{ status }] = await asServer<{ status: string }>("select status::text from public.profiles where id = $1", [LG_A]);
+      await asServer("update public.profiles set status = 'inactive' where id = $1", [LG_A]);
+      try {
+        await expect(claim(meeting, LG_A)).rejects.toMatchObject({ code: "IVA14" });
+      } finally {
+        await asServer("update public.profiles set status = $2::public.account_status where id = $1", [LG_A, status]);
+      }
+      await expect(claim("00000000-0000-0000-0000-0000000001b9", LG_A)).rejects.toMatchObject({ code: "IVA01" });
+    });
+
+    it("claims once per start for the organizer or an admin, returning the address, and releases only its own claim", async () => {
+      const { meeting } = await scheduledCall("confirm-once@disc.co", 12 * DAY + 4 * HOUR);
+      const [first] = await claim(meeting, LG_A);
+      expect(first).toMatchObject({ email: "confirm-once@disc.co", country: "United States" });
+      const stamped = await stampOf(meeting);
+      expect(iso(stamped.sent_for)).toBe(iso(first.starts_at));
+      expect(await claim(meeting, LG_A)).toEqual([]);
+      expect(await claim(meeting, ADMIN_ONLY)).toEqual([]);
+
+      // A stale release (an earlier claim's time) leaves the claim; its own release clears it.
+      await release(meeting, "2000-01-01T00:00:00Z");
+      expect((await stampOf(meeting)).sent_at).not.toBeNull();
+      await release(meeting, first.claimed_at);
+      expect(await stampOf(meeting)).toEqual({ sent_at: null, sent_for: null });
+      expect(await claim(meeting, ADMIN_ONLY)).toHaveLength(1);
+    });
+
+    it("can claim again with the new time after the call is moved", async () => {
+      const start = at(12 * DAY + 5 * HOUR);
+      const { meeting } = await scheduledCall("confirm-moved@disc.co", 12 * DAY + 5 * HOUR);
+      await claim(meeting, LG_A);
+      const moved = later(start, DAY);
+      await asUser(asLgA, "select public.reschedule_discovery_booking($1, $2)", [meeting, moved]);
+      const [again] = await claim(meeting, LG_A);
+      expect(iso(again.starts_at)).toBe(iso(moved));
+      expect(iso((await stampOf(meeting)).sent_for)).toBe(iso(moved));
+    });
+
+    it("refuses a call that isn't scheduled ahead of now", async () => {
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Mia Reyes', 'confirm-requested@disc.co', 'Reyes Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+        [at(12 * DAY + 6 * HOUR)],
+      );
+      const requested = await meetingOf(row.id);
+      await expect(claim(requested, ADMIN_ONLY)).rejects.toMatchObject({ code: "IVA23" });
+      const { meeting } = await scheduledCall("confirm-started@disc.co", 12 * DAY + 7 * HOUR);
+      await db.query("update public.meetings set starts_at = now() - interval '5 minutes', ends_at = now() + interval '25 minutes' where id = $1", [meeting]);
+      await expect(claim(meeting, LG_A)).rejects.toMatchObject({ code: "IVA23" });
+    });
+
+    it("refuses an address that isn't one plain address (IVA48)", async () => {
+      const { meeting, lead } = await scheduledCall("confirm-address@disc.co", 12 * DAY + 8 * HOUR);
+      // Spaces and control characters already fail leads' own check; these pass it, so the claim must refuse them.
+      for (const bad of [",", ";", "<", ">", '"', "(", ")", "[", "]", "\\"]) {
+        await db.query("update public.leads set email = $1 where id = $2", [`a${bad}b@disc.co`, lead]);
+        await expect(claim(meeting, LG_A), bad).rejects.toMatchObject({ code: "IVA48" });
+      }
+      expect(await stampOf(meeting)).toEqual({ sent_at: null, sent_for: null });
+    });
+  });
 });
 
 describe("tasks", () => {

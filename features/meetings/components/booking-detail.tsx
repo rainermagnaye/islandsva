@@ -17,7 +17,7 @@ import { TextField } from "@/components/ui/text-field";
 import { meetingFileHref } from "@/content/routes";
 import type { SubmitResult } from "@/types/form";
 import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
-import { BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingNoteField } from "../contract";
+import { BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingNoteField, type ConfirmResult } from "../contract";
 import { NoteForm } from "./booking-note-form";
 import { at, useStarted, clocks, guestNames, Field, StatusField, WhenFields } from "./booking-detail-parts";
 
@@ -27,7 +27,7 @@ export type BookingDetailActions = {
   note: (formData: FormData) => Promise<SubmitResult<BookingNoteField>>;
   editNote?: (formData: FormData) => Promise<SubmitResult<BookingNoteField>>;
   deleteNote?: (formData: FormData) => Promise<SubmitResult>;
-  confirmDiscovery?: (formData: FormData) => Promise<SubmitResult>;
+  confirmDiscovery?: (formData: FormData) => Promise<ConfirmResult>;
   rescheduleDiscovery?: (formData: FormData) => Promise<SubmitResult<BookingField>>;
 };
 
@@ -89,7 +89,7 @@ export function BookingDetail({ booking, canManage, actions, banner, description
     const data = new FormData();
     data.set("meetingId", booking.id);
     const result = await actions.confirmDiscovery(data);
-    if (result.ok) onDone("Meeting confirmed.");
+    if (result.ok) onDone(result.notice ?? "Meeting confirmed.");
     else setClaimError(result.message);
   }
 

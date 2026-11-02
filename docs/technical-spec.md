@@ -94,13 +94,13 @@ One model for every call; one Google integration; one history.
 
 ### Visitor emails (slices 4 and 5)
 
-Plain text through `sendPlainEmail`, sent in `after()`, Reply-To the team inbox. Logs carry the meeting id and `service`, never the address or name.
+Plain text through `sendPlainEmail`, Reply-To the team inbox; the automatic ones are sent in `after()`. Logs carry the meeting id and `service`, never the address or name.
 
 | When | Email | Content |
 |---|---|---|
 | Request stored (`POST /api/v1/leads`) | Acknowledgement | Fixed text plus the requested time, formatted by the server from the stored start (PHT and the visitor's zone): received, we'll confirm shortly by email; "If you didn't make this request, ignore this email — we won't contact you unless a call is confirmed." Nothing the visitor typed — no name, company or message — so the form can't be used to send our mail with someone else's words. |
 | Request stored | Agency notification | Fixed text: "New discovery request for [time] — open the inbox." No contact details, so the team mailbox doesn't undo the inbox hiding them. |
-| A Lead Gen confirms | Confirmation | Fixed text plus the time: confirmed, see you then. Until M9 the Lead Gen sends the call link themselves; from M9 Google's invite (Meet link) replaces this email. |
+| A Lead Gen confirms | Confirmation | **Built** (`features/meetings/email.ts`, `sendConfirmation` in `service.ts`; database side in `supabase/CLAUDE.md`). Fixed text plus the time (the visitor's country's clock and PHT): confirmed, see you then. Sent inside the confirm action, not in `after()`, so the result says whether it went out; a failed email never undoes the confirm. The call's details show Sent / Sent for the earlier time / Not sent, with **Send confirmation email** (or **Send updated time** after a reschedule). Once per start, with a Resend idempotency key per meeting and start, so a timeout retry can't send twice. Only the live site sends (`env.isLiveDeployment()`): staging and previews share the database. Until M9 the Lead Gen sends the call link themselves; from M9 Google's invite (Meet link) replaces this email. |
 | A request expires unconfirmed | Expired | Fixed text: we couldn't confirm that time, please pick another, with the contact page link. |
 | Rejected | None | — |
 

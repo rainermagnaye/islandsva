@@ -117,8 +117,43 @@ export type Booking = {
   /** The visitor's zone for a discovery call, so the view can show their clock beside Philippine time. */
   timeZone: string | null;
   timeZoneCity: string | null;
+  /** A discovery call's confirmation email: when it was sent, and whether it named the current start. */
+  confirmationSentAt: string | null;
+  confirmationCurrent: boolean;
   events: BookingEvent[];
 };
+
+/** What happened to the visitor's confirmation email (sendConfirmation in features/meetings/service.ts). */
+export type ConfirmationOutcome = "sent" | "already_sent" | "failed" | "bad_address" | "skipped" | "refused";
+
+export const CONFIRMATION_NOTICE: Record<ConfirmationOutcome, string> = {
+  sent: "Confirmation email sent to the visitor.",
+  already_sent: "The visitor already has the confirmation email for this time.",
+  failed: "The confirmation email didn't go out. Use Send confirmation email to try again.",
+  bad_address: "The visitor's address can't be emailed. Contact them another way.",
+  skipped: "Confirmation emails are sent only from the live site.",
+  refused: "Only the call's Lead Gen or an admin can email its confirmation, before the call starts.",
+};
+
+/** A confirm or send result; `notice` says what happened to the email. */
+export type ConfirmResult = ({ ok: true } | { ok: false; message: string; fieldErrors?: Partial<Record<"meetingId", string>> }) & { notice?: string };
+
+type ConfirmationFields = { confirmationSentAt: string | null; confirmationCurrent: boolean };
+
+/** The confirmation line on a scheduled discovery call. */
+export function confirmationState(booking: ConfirmationFields): "sent" | "earlier" | "none" {
+  if (!booking.confirmationSentAt) return "none";
+  return booking.confirmationCurrent ? "sent" : "earlier";
+}
+
+/** "Sent Nov 2, 10:04 AM PHT", "Sent for the earlier time" or "Not sent". */
+export function confirmationLabel(booking: ConfirmationFields) {
+  const sentAt = booking.confirmationSentAt;
+  if (!sentAt) return "Not sent";
+  if (!booking.confirmationCurrent) return "Sent for the earlier time";
+  const when = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: DISCOVERY_ZONE }).format(new Date(sentAt));
+  return `Sent ${when} PHT`;
+}
 
 export type BookingField = "title" | "startDate" | "startTime" | "endDate" | "endTime" | "clientIds" | "staffIds" | "note";
 export type BookingNoteField = "note";
