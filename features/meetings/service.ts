@@ -1,12 +1,14 @@
 import "server-only";
 import { env } from "@/lib/env";
+import { UpstreamError } from "@/lib/upstream-error";
 import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertAdminMeeting, insertBooking, insertBookingNote, recordDiscoveryOutcome, rejectDiscovery, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
 import { answerVaMeetingRow, cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
 import { cancelCloserMeetingRow, cancelVaMeetingRow, insertCloserMeeting, insertVaMeeting, listVaTeam } from "./va-dal";
 import { listBookings } from "./booking-dal";
 import { claimConfirmation, releaseConfirmation } from "./confirmation-dal";
 import type { ConfirmationOutcome } from "./contract";
-import { sendDiscoveryConfirmation } from "./email";
+import { sendDiscoveryAcknowledgement, sendDiscoveryConfirmation, sendDiscoveryExpired } from "./email";
+import { claimAcknowledgement, claimExpiryNotices } from "./visitor-email-dal";
 import type { BookingFile as FileInput } from "./form-data";
 import type { BookingInput, BookingNoteInput, VaMeetingInput } from "./validation";
 
@@ -161,4 +163,35 @@ export async function sendConfirmation(meetingId: string, actorId: string): Prom
   if (sent) return "sent";
   await releaseConfirmation(meetingId, claim.call.claimedAt);
   return "failed";
+}
+
+/**
+ * Emails the visitor that their discovery request was received, once per request and within the limits the claim
+ * enforces. Runs in after(), so it never throws: the request is already stored, and a failed courtesy email is logged,
+ * not retried. Only the live site sends (see sendConfirmation).
+ */
+export async function sendAcknowledgement(leadId: string) {
+  if (!env.isLiveDeployment()) return;
+  try {
+    const call = await claimAcknowledgement(leadId);
+    if (call) await sendDiscoveryAcknowledgement(call);
+  } catch (error) {
+    console.error("Discovery acknowledgement failed", { leadId, service: error instanceof UpstreamError ? error.service : undefined });
+  }
+}
+
+/**
+ * Emails each visitor whose request expired unconfirmed, once per request. Called from the internal endpoint the
+ * scheduled job hits, in after(), so it never throws; a failed courtesy email is logged, not retried. Only the live site
+ * sends (see sendConfirmation).
+ */
+export async function sendExpiryNotices() {
+  if (!env.isLiveDeployment()) return;
+  try {
+    for (const call of await claimExpiryNotices()) {
+      await sendDiscoveryExpired(call);
+    }
+  } catch (error) {
+    console.error("Discovery expiry notices failed", { service: error instanceof UpstreamError ? error.service : undefined });
+  }
 }

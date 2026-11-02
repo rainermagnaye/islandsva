@@ -13,6 +13,8 @@ export const env = {
   leadsNotifyEmail: () => process.env.LEADS_NOTIFY_EMAIL,
   emailFrom: () => process.env.EMAIL_FROM,
   ipHashSecret: () => process.env.IP_HASH_SECRET,
+  /** Bearer secret the discovery-expiry job sends (the same value is in Supabase Vault). */
+  discoveryExpirySecret: () => process.env.DISCOVERY_EXPIRY_SECRET,
   isProduction: () => process.env.NODE_ENV === "production",
   /** The live site on Vercel — false for preview deployments and local production builds. */
   isLiveDeployment: () => process.env.VERCEL_ENV === "production",

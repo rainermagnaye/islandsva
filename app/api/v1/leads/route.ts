@@ -2,6 +2,7 @@ import { after } from "next/server";
 import type { LeadCreated } from "@/features/leads/contract";
 import { notifyNewLead, submitContactRequest } from "@/features/leads/service";
 import { parseLead } from "@/features/leads/validation";
+import { sendAcknowledgement } from "@/features/meetings/service";
 import { ApiError } from "@/lib/api/errors";
 import { UpstreamError } from "@/lib/upstream-error";
 import { createHandler } from "@/lib/api/handler";
@@ -43,7 +44,10 @@ export const POST = createHandler(options, async ({ req, body, ip }) => {
   }
 
   // Email runs after the response, so the visitor never waits on (or sees) a mail outage.
-  after(() => notifyNewLead(id, parsed.value, parsed.startsAt ?? undefined));
+  after(async () => {
+    await notifyNewLead(id, parsed.value, parsed.startsAt ?? undefined);
+    if (parsed.startsAt) await sendAcknowledgement(id);
+  });
 
   return ok<LeadCreated>({ ok: true }, 201);
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { utcDay } from "./validation";
+import { deliverableEmailField, emailField, utcDay } from "./validation";
 
 describe("utcDay", () => {
   it("reads a calendar day as its UTC midnight", () => {
@@ -13,5 +13,19 @@ describe("utcDay", () => {
     expect(utcDay("2026-04-31")).toBeNull();
     expect(utcDay("")).toBeNull();
     expect(utcDay("not-a-day")).toBeNull();
+  });
+});
+
+describe("deliverableEmailField", () => {
+  it("accepts one plain address, lower-cased", () => {
+    expect(deliverableEmailField().safeParse(" Pat@Example.com ").data).toBe("pat@example.com");
+  });
+
+  it("refuses list separators, brackets, quotes and backslashes that emailField lets through", () => {
+    for (const bad of [",", ";", "<", ">", "\"", "(", ")", "[", "]", "\\"]) {
+      const email = `a${bad}b@example.com`;
+      expect(emailField().safeParse(email).success, bad).toBe(true);
+      expect(deliverableEmailField().safeParse(email).success, bad).toBe(false);
+    }
   });
 });

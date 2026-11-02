@@ -1,4 +1,6 @@
 import "server-only";
+import { routes } from "@/content/routes";
+import { site } from "@/content/site";
 import { callTimeLines } from "@/content/timezones";
 import { sendPlainEmail } from "@/lib/email";
 import { env } from "@/lib/env";
@@ -29,5 +31,62 @@ export function sendDiscoveryConfirmation(call: { meetingId: string; email: stri
       ].join("\n"),
     },
     `discovery-confirmation/${call.meetingId}/${call.startsAt}`,
+  );
+}
+
+const IGNORE_IF_NOT_YOU = "If you didn't make this request, ignore this email — we won't contact you unless a call is confirmed.";
+
+/**
+ * The visitor's "we've received your request" email, right after the contact form. Fixed text plus the time the server
+ * formats from the stored start — nothing the visitor typed (no name, company or message), so the form can't be used to
+ * send our mail with someone else's words. One per request (key per meeting).
+ */
+export function sendDiscoveryAcknowledgement(call: { meetingId: string; email: string; startsAt: string; country: string | null }) {
+  const [when, ...also] = callTimeLines(call.country, call.startsAt);
+  return sendPlainEmail(
+    "Discovery acknowledgement email",
+    {
+      to: call.email,
+      replyTo: env.leadsNotifyEmail() || undefined,
+      subject: "We've received your discovery call request",
+      text: [
+        "Hello,",
+        "",
+        `We've received your request for a discovery call with Islands VA on ${when}.`,
+        ...also.map((line) => `That is ${line}.`),
+        "",
+        "We'll confirm it shortly by email.",
+        "",
+        IGNORE_IF_NOT_YOU,
+        "",
+        "Islands VA",
+      ].join("\n"),
+    },
+    `discovery-acknowledgement/${call.meetingId}`,
+  );
+}
+
+/** The visitor's "we couldn't confirm that time" email, once nobody confirmed the request in time. One per request. */
+export function sendDiscoveryExpired(call: { meetingId: string; email: string; startsAt: string; country: string | null }) {
+  const [when] = callTimeLines(call.country, call.startsAt);
+  return sendPlainEmail(
+    "Discovery expiry email",
+    {
+      to: call.email,
+      replyTo: env.leadsNotifyEmail() || undefined,
+      subject: "Please pick another time for your discovery call",
+      text: [
+        "Hello,",
+        "",
+        `We're sorry — we couldn't confirm your discovery call for ${when}.`,
+        "",
+        `Please pick another time here: ${site.url}${routes.contact}`,
+        "",
+        IGNORE_IF_NOT_YOU,
+        "",
+        "Islands VA",
+      ].join("\n"),
+    },
+    `discovery-expiry/${call.meetingId}`,
   );
 }

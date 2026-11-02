@@ -27,6 +27,17 @@ export function emailField(max = 254) {
     .regex(EMAIL_SHAPE, incomplete);
 }
 
+// List separators, brackets, quotes and backslashes: an address with any of them could name more than one recipient.
+const NOT_ONE_ADDRESS = /[,;<>"()[\]\\]/;
+
+/**
+ * emailField for an address we will email automatically (the contact form): also one plain address only, the rule the
+ * database checks again before any visitor email (claim_discovery_confirmation, claim_discovery_acknowledgement).
+ */
+export function deliverableEmailField(max = 254) {
+  return emailField(max).refine((email) => !NOT_ONE_ADDRESS.test(email), "That email doesn't look complete — try name@company.com.");
+}
+
 export type Parsed<T, Field extends string> =
   | { ok: true; value: T }
   | { ok: false; fieldErrors: Partial<Record<Field, string>> }

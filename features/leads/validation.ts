@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { COUNTRIES } from "@/content/countries";
 import { packages } from "@/content/packages";
-import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong } from "@/lib/validation";
+import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, deliverableEmailField, parseWith, tooLong } from "@/lib/validation";
 import { discoveryInstant } from "@/features/meetings/contract";
 import { BUDGET_RANGES, CONTACT_METHODS, CONTACT_TIMES, HIRING_TIMELINES, INDUSTRIES, LEAD_EVENT_LIMIT, LEAD_LIMITS, LEAD_PROFILE_LIMITS, LEAD_SOURCES, MARKETING_CONSENT, PRIORITIES, STAFF_COUNTS, TIMELINE_KINDS, TRIAGE_STATUSES, YEARS_IN_SERVICE, type LeadField, type LeadPayload, type LeadProfileDetails, type LeadStatusField } from "./contract";
 
@@ -25,7 +25,7 @@ const leadShape = {
     .min(1, "Enter your name.")
     .max(LEAD_LIMITS.name, tooLong("your name", LEAD_LIMITS.name))
     .regex(NO_CONTROL_CHARS, tooLong("your name", LEAD_LIMITS.name)),
-  email: emailField(LEAD_LIMITS.email),
+  email: deliverableEmailField(LEAD_LIMITS.email),
   company: z
     .string({ error: "Enter your company name." })
     .trim()

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const SECRET_KEYS = ["SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY", "TURNSTILE_SECRET_KEY", "RESEND_API_KEY", "IP_HASH_SECRET"];
+const SECRET_KEYS = ["SUPABASE_SECRET_KEY", "SUPABASE_PUBLISHABLE_KEY", "TURNSTILE_SECRET_KEY", "RESEND_API_KEY", "IP_HASH_SECRET", "DISCOVERY_EXPIRY_SECRET"];
 const KEY_LIKE_VALUE = /^(sb_(secret|publishable)_|re_|0x4|eyJ)|^[A-Za-z0-9_-]{32,}$/;
 
 const assignments = readFileSync(fileURLToPath(new URL("../.env", import.meta.url)), "utf8")
