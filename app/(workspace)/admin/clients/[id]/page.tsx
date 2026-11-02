@@ -16,6 +16,7 @@ import { listShortlist } from "@/features/matching/dal";
 import { getClientPacket } from "@/features/clients/onboarding-dal";
 import { agreementReviewFor } from "@/features/clients/service";
 import { listAssignableVas } from "@/features/users/service";
+import { listClientTasks } from "@/features/tasks/dal";
 import { parseClientId } from "@/features/clients/validation";
 import { requireRole } from "@/lib/auth/session";
 
@@ -34,7 +35,7 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (!parseClientId({ clientId: id }).ok) notFound();
   // Independent reads, in parallel; each runs as the signed-in admin, so RLS applies too.
-  const [client, notes, assignments, offers, vas] = await Promise.all([getClient(id), listClientNotes(id), listActiveAssignments(id), listShortlist(id), listAssignableVas()]);
+  const [client, notes, assignments, offers, vas, tasks] = await Promise.all([getClient(id), listClientNotes(id), listActiveAssignments(id), listShortlist(id), listAssignableVas(), listClientTasks(id)]);
   if (!client) notFound();
   // The packet and agreement tables are server-only. Read them only after this admin can see the client;
   // agreementReviewFor checks the admin role again itself.
@@ -68,7 +69,18 @@ async function Client({ params, searchParams }: Pick<PageProps<"/admin/clients/[
         />
       }
     >
-      <ClientProfile client={client} notes={notes} packet={packet} review={review} assignments={assignments} offers={offers} vas={vas} tab={clientProfileTab(query.tab)} editing={query.edit === "1"} />
+      <ClientProfile
+        client={client}
+        notes={notes}
+        packet={packet}
+        review={review}
+        assignments={assignments}
+        offers={offers}
+        vas={vas}
+        tasks={tasks.map((task) => ({ vaId: task.vaId, status: task.status }))}
+        tab={clientProfileTab(query.tab)}
+        editing={query.edit === "1"}
+      />
     </Workspace>
   );
 }
