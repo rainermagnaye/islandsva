@@ -5,15 +5,8 @@
 -- Applies after 20261030150000_va_bookings: it re-creates private.guard_task() from that file and
 -- private.assign_tenant() and private.audit_allow() from task_duration_timer, each without the timer.
 --
--- The timer was never live, so no recorded time is lost. The migration stops rather than drop sessions if any exist.
-
-do $$
-begin
-  if exists (select 1 from public.task_work_sessions) then
-    raise exception 'task_work_sessions has rows: recorded time would be lost';
-  end if;
-end
-$$;
+-- The sessions the timer recorded live are discarded with the table, not archived (product decision, 2026-11-02):
+-- task-level time measured the wrong thing, and M14's per-client sessions start from zero.
 
 -- The guard first: until it is re-created, a task move would still write to task_work_sessions.
 -- As 20261030150000_va_bookings, without the duration (default, frozen, VA-proof) and without ending the
