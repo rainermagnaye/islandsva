@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clientBadge, clientProfileTab, onboardingAccess } from "./contract";
-import { clientRegistrationSteps, clientReviewSections, stepRevisionMessage } from "./registration";
+import { clientOnboardingComplete, clientRegistrationSteps, clientReviewSections, stepRevisionMessage } from "./registration";
 
 describe("client registration progress", () => {
   const base = { onboardingStatus: "pending_customer" as const, accountStatus: "pending" as const };
@@ -38,6 +38,13 @@ describe("client registration progress", () => {
     expect(sent.every((step) => step.done)).toBe(true);
     expect(sent.find((step) => step.current)?.id).toBe("completed");
   });
+
+  it("treats an invite or an active account as onboarding finished", () => {
+    expect(clientOnboardingComplete(base)).toBe(false);
+    expect(clientOnboardingComplete({ onboardingStatus: "approved", accountStatus: "pending" })).toBe(false);
+    expect(clientOnboardingComplete({ onboardingStatus: "invite_sent", accountStatus: "pending" })).toBe(true);
+    expect(clientOnboardingComplete({ onboardingStatus: "ready", accountStatus: "active" })).toBe(true);
+  });
 });
 
 describe("client status badge", () => {
@@ -73,8 +80,9 @@ describe("registration sent back", () => {
 });
 
 describe("client profile tabs", () => {
-  it("keeps overview unless the tab is consents or invoices", () => {
+  it("keeps overview unless the tab is a known section", () => {
     expect(clientProfileTab(undefined)).toBe("overview");
+    expect(clientProfileTab("assistants")).toBe("assistants");
     expect(clientProfileTab("notes")).toBe("notes");
     expect(clientProfileTab("consents")).toBe("consents");
     expect(clientProfileTab(["invoices"])).toBe("invoices");

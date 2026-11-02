@@ -107,6 +107,15 @@ export async function listActiveVas(clientId: string): Promise<ActiveVa[]> {
   return data.map((row) => ({ id: row.va_id, firstName: row.va_first_name }));
 }
 
+/** Tasks for one client, soonest deadline first, at most 500. RLS still limits the rows to the caller. */
+export async function listClientTasks(clientId: string): Promise<Task[]> {
+  if (!isUuid(clientId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("tasks").select(TASK_COLUMNS).eq("client_id", clientId).order("deadline", { ascending: true }).limit(LIST_CAP);
+  if (error) throw new UpstreamError("supabase", `Listing tasks for ${clientId} failed (${error.code})`);
+  return sortTasks(data.map((row) => toTask(row)));
+}
+
 /** Open tasks first (soonest deadline), then done, at most 500. RLS limits the rows to the caller. */
 export async function listTasks(): Promise<Task[]> {
   const supabase = await createClient();

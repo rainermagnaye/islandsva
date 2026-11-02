@@ -73,6 +73,9 @@ export const adminUserHref = (id: string) => `${appRoutes.adminUsers}/${id}`;
 /** One client profile. The id is a random UUID, so the URL carries no personal data. */
 export const adminClientHref = (id: string) => `${appRoutes.adminClients}/${id}`;
 
+/** One VA on a client's Assistants tab. Both ids are random UUIDs. */
+export const adminClientVaHref = (clientId: string, vaId: string) => `${adminClientHref(clientId)}/vas/${vaId}`;
+
 /** One task. The id is a random UUID, so the URL carries no personal data. */
 export const clientTaskHref = (id: string) => `${appRoutes.clientTasks}/${id}`;
 

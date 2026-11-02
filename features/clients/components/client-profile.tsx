@@ -6,23 +6,25 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { adminClientHref } from "@/content/routes";
+import { adminClientHref, adminClientVaHref } from "@/content/routes";
+import { cx } from "@/lib/cx";
 import { CLIENT_PROFILE_TABS, clientBadge, type ClientDetail, type ClientNote, type ClientPacketSummary, type ClientProfileTab, type ClientReviewParts } from "../contract";
-import { clientRegistrationSteps, reviewIssueLabels } from "../registration";
+import { clientOnboardingComplete, clientRegistrationSteps, reviewIssueLabels } from "../registration";
 import { OnboardingLinkCard } from "./onboarding-link";
 import { SendActivation } from "./client-activation";
 import { ClientReviewActions } from "./client-review-actions";
 import { ClientActions } from "./client-actions";
 import { ClientInvoices, ClientProfileView, ClientStepper } from "./client-profile-view";
 import type { ShortlistEntry } from "@/features/matching/contract";
+import type { TaskStatus } from "@/features/tasks/contract";
 
 // The editor opens only after "Edit": loaded then, so the profile page doesn't ship it (or its package and time-zone
-// data) up front. Notes and the shortlist stay off first load for the same reason.
+// data) up front. Notes and assistants stay off first load for the same reason.
 const ClientCompanyForm = lazy(() => import("./client-company-form").then((m) => ({ default: m.ClientCompanyForm })));
 const ClientNotes = lazy(() => import("./client-notes").then((m) => ({ default: m.ClientNotes })));
-const ShortlistAdmin = lazy(() => import("@/features/matching/components/shortlist-admin").then((m) => ({ default: m.ShortlistAdmin })));
+const ClientAssistantsPanel = lazy(() => import("./client-assistants-panel").then((m) => ({ default: m.ClientAssistantsPanel })));
 
-/** The client profile: registration progress, then overview, notes, consents, or invoices. */
+/** The client profile: registration progress while it is open, then overview, assistants, notes, consents, or invoices. */
 export function ClientProfile({
   client,
   notes,
@@ -31,6 +33,7 @@ export function ClientProfile({
   assignments,
   offers,
   vas,
+  tasks,
   tab,
   editing,
 }: {
@@ -41,6 +44,7 @@ export function ClientProfile({
   assignments: readonly { id: string; vaId: string; vaName: string; startedAt: string }[];
   offers: readonly ShortlistEntry[];
   vas: readonly { id: string; fullName: string }[];
+  tasks: readonly { vaId: string; status: TaskStatus }[];
   tab: ClientProfileTab;
   editing: boolean;
 }) {
@@ -94,14 +98,23 @@ export function ClientProfile({
           {sentBackText}
         </Alert>
       )}
-      <ClientStepper steps={steps} />
-      <Suspense fallback={null}>
-        <ShortlistAdmin clientId={client.id} assignments={assignments} offers={offers} vas={vas} />
-      </Suspense>
+      {!clientOnboardingComplete({ onboardingStatus: client.onboardingStatus, accountStatus: client.status }) && <ClientStepper steps={steps} />}
       <ProfileTabs id={client.id} tab={tab} />
       {showEditor ? (
         <Suspense fallback={null}>
           <ClientCompanyForm client={client} onClose={() => router.push(adminClientHref(client.id))} />
+        </Suspense>
+      ) : tab === "assistants" ? (
+        <Suspense fallback={null}>
+          <ClientAssistantsPanel
+            clientId={client.id}
+            assignments={assignments}
+            offers={offers}
+            vas={vas}
+            tasks={tasks}
+            hoursPerWeek={client.hoursPerWeek}
+            hrefFor={(vaId) => adminClientVaHref(client.id, vaId)}
+          />
         </Suspense>
       ) : tab === "notes" ? (
         <Suspense fallback={null}>
@@ -118,7 +131,7 @@ export function ClientProfile({
   );
 }
 
-/** Pill tabs, so a note, consent or invoice list can be shared. */
+/** Underline tabs, the same treatment as the meetings status filter. Each section keeps its own URL. */
 function ProfileTabs({ id, tab }: { id: string; tab: ClientProfileTab }) {
   const tabs = (Object.keys(CLIENT_PROFILE_TABS) as ClientProfileTab[]).map((key) => ({
     id: key,
@@ -127,20 +140,20 @@ function ProfileTabs({ id, tab }: { id: string; tab: ClientProfileTab }) {
   }));
 
   return (
-    <nav aria-label="Client profile" className="max-w-full overflow-x-auto [scrollbar-width:none]">
-      <ul className="m-0 inline-flex list-none gap-1 rounded-pill bg-surface-sunken p-1">
-        {tabs.map((item) => (
-          <li key={item.id}>
-            <Link
-              href={item.href}
-              aria-current={item.id === tab ? "page" : undefined}
-              className="inline-flex min-h-9 items-center rounded-pill px-4 type-label whitespace-nowrap text-ink-muted no-underline transition-colors hover:bg-action-ghost-hover hover:text-ink aria-[current=page]:bg-surface-card aria-[current=page]:text-action-secondary aria-[current=page]:elevation-sm"
-            >
-              {item.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <nav aria-label="Client profile" className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
+      {tabs.map((item) => (
+        <Link
+          key={item.id}
+          href={item.href}
+          aria-current={item.id === tab ? "page" : undefined}
+          className={cx(
+            "flex min-h-11 shrink-0 items-center px-3 type-menu whitespace-nowrap no-underline",
+            item.id === tab ? "text-action-secondary shadow-[inset_0_-2px_0_var(--color-action-secondary)]" : "text-ink-muted hover:text-ink",
+          )}
+        >
+          {item.label}
+        </Link>
+      ))}
     </nav>
   );
 }

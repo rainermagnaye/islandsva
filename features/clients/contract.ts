@@ -192,13 +192,19 @@ export const PAYMENT_RECEIVED_LIMITS = { reference: 200, maxAmountCents: 100_000
 export type PaymentReceivedField = "amount" | "fee" | "paidOn" | "reference";
 
 /** Sections of a client's profile. Overview is the default; a tampered `?tab=` falls back to it. */
-export const CLIENT_PROFILE_TABS = { overview: "Overview", notes: "Notes", consents: "Consents", invoices: "Invoices" } as const;
+export const CLIENT_PROFILE_TABS = {
+  overview: "Overview",
+  assistants: "Assistants",
+  notes: "Notes",
+  consents: "Consents",
+  invoices: "Invoices",
+} as const;
 
 export type ClientProfileTab = keyof typeof CLIENT_PROFILE_TABS;
 
 export function clientProfileTab(value: string | string[] | undefined): ClientProfileTab {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === "notes" || raw === "consents" || raw === "invoices") return raw;
+  if (raw === "assistants" || raw === "notes" || raw === "consents" || raw === "invoices") return raw;
   return "overview";
 }
 

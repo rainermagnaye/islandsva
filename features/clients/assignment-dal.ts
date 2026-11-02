@@ -58,18 +58,19 @@ export async function listActiveAssignmentLoads(): Promise<ActiveAssignmentLoad[
   throw new UpstreamError("supabase", "Reading VA load exceeded 20 pages");
 }
 
-/** Ends one active assignment. History stays. */
+/** Ends one active assignment. History stays. Returns the client so the admin can go back to Assistants. */
 export async function endAssignment(assignmentId: string) {
-  if (!isUuid(assignmentId)) return false;
+  if (!isUuid(assignmentId)) return null;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("client_va_assignments")
     .update({ status: "ended", ended_at: new Date().toISOString() })
     .eq("id", assignmentId)
     .eq("status", "active")
-    .select("id");
+    .select("id, client_id");
   if (error) throw new UpstreamError("supabase", `Ending assignment ${assignmentId} failed (${error.code})`);
-  return data.length > 0;
+  const row = data[0];
+  return row ? { id: row.id, clientId: row.client_id } : null;
 }
 
 /**

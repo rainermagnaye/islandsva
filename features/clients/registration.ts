@@ -134,6 +134,11 @@ export function clientRegistrationSteps(progress: {
   }));
 }
 
+/** The invite is sent (or the account is already active): the admin stepper has nothing left to show. */
+export function clientOnboardingComplete(progress: { onboardingStatus: ClientOnboardingStatus; accountStatus: ClientStatus }) {
+  return clientRegistrationSteps(progress).every((step) => step.done);
+}
+
 export type RegistrationView = "closed" | "steps" | "receipt" | "complete" | "processing";
 
 /**
