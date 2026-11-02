@@ -42,7 +42,7 @@ export async function listCalendarDemos(now = new Date()): Promise<DemoCalendarR
   }));
 }
 
-/** Head-only count of requests still waiting for a VA's answer, for the admin overview. */
+/** Head-only count of requests still waiting for a VA's answer, for the admin dashboard. */
 export async function countOpenRequests() {
   const supabase = await createClient();
   const { count, error } = await supabase

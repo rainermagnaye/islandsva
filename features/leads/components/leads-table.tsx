@@ -49,7 +49,7 @@ function summaryColumns(hrefFor: (id: string) => string): Column<LeadSummary>[] 
   ];
 }
 
-/** Admin lead list. `summary` is the short table on the overview; the lead page uses the full columns. */
+/** Admin lead list. `summary` is the short table on the dashboard; the lead page uses the full columns. */
 export function LeadsTable({
   leads,
   caption = "Contact-form leads",

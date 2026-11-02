@@ -17,7 +17,7 @@ import { listBookings } from "@/features/meetings/booking-dal";
 import { BOOKING_TIME_ZONE } from "@/features/meetings/contract";
 import { listDiscoveryInbox } from "@/features/meetings/dal";
 import { requireRole } from "@/lib/auth/session";
-import { ThisWeekCard } from "./_components/dashboard-side";
+import { ThisWeekCard } from "@/features/meetings/components/this-week-card";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -113,7 +113,7 @@ async function LeadgenHome() {
           </Panel>
         </div>
         <aside aria-label="This week" className="grid min-w-0 flex-[1_1_18rem] gap-5 lg:max-w-[23.75rem]">
-          <ThisWeekCard items={coming} today={todayIn(BOOKING_TIME_ZONE, now)} />
+          <ThisWeekCard items={coming} today={todayIn(BOOKING_TIME_ZONE, now)} calendarHref={appRoutes.leadgenCalendar} />
         </aside>
       </div>
     </Workspace>

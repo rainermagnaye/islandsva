@@ -1,6 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
-import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertBooking, insertBookingNote, recordDiscoveryOutcome, rejectDiscovery, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
+import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertAdminMeeting, insertBooking, insertBookingNote, recordDiscoveryOutcome, rejectDiscovery, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
 import { answerVaMeetingRow, cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
 import { cancelCloserMeetingRow, cancelVaMeetingRow, insertCloserMeeting, insertVaMeeting, listVaTeam } from "./va-dal";
 import { listBookings } from "./booking-dal";
@@ -12,6 +12,27 @@ import type { BookingInput, BookingNoteInput, VaMeetingInput } from "./validatio
 
 export function createBooking(input: BookingInput, file: FileInput) {
   return insertBooking(input, file);
+}
+
+/** A meeting an admin books from the calendar: with a client (it waits if they have a login) or with the team only. */
+export function createAdminMeeting(input: VaMeetingInput) {
+  return insertAdminMeeting(input);
+}
+
+/** One 30-minute team meeting per start, from the admin calendar's "Demo slots" grid. */
+export async function createAdminSlotMeetings(startsAt: readonly string[]) {
+  for (const start of startsAt) {
+    const result = await insertAdminMeeting({
+      title: "Meeting",
+      clientId: null,
+      staffIds: [],
+      note: "",
+      startsAt: start,
+      endsAt: new Date(Date.parse(start) + 30 * 60_000).toISOString(),
+    });
+    if (!result.ok) return result;
+  }
+  return { ok: true as const };
 }
 
 export function updateBooking(input: BookingInput, meetingId: string) {

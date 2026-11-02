@@ -36,7 +36,7 @@ export function PackageMix({ rows }: { rows: readonly PackageSlice[] }) {
 }
 
 const vaColumns: Column<VaLoadRow>[] = [
-  { key: "va", label: "VA", render: (row) => row.firstName },
+  { key: "va", label: "Assistants", render: (row) => row.firstName },
   { key: "clients", label: "Clients", align: "end", render: (row) => figure(String(row.clients)) },
   { key: "hours", label: "Hours / week", align: "end", render: (row) => figure(String(row.hoursPerWeek)) },
   { key: "done", label: "Tasks done", align: "end", render: (row) => figure(String(row.done)) },
@@ -47,14 +47,14 @@ const vaColumns: Column<VaLoadRow>[] = [
 /** Open VAs, the clients they carry, and their task figures. A blank on-time rate means nothing is done yet. */
 export function VaLoad({ rows }: { rows: readonly VaLoadRow[] }) {
   return (
-    <Panel title="VA load">
+    <Panel title="Assistants">
       <DataTable
-        caption="VA load"
+        caption="Assistants"
         columns={vaColumns}
         rows={rows}
         rowKey={(row) => row.vaId}
         selectable={false}
-        empty={<EmptyState compact headingLevel={3} title="No open VAs" description="VAs appear here once their portal is open." />}
+        empty={<EmptyState compact headingLevel={3} title="No assistants yet" description="They appear here once their portal is open." />}
       />
     </Panel>
   );
