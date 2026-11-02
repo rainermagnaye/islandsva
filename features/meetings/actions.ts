@@ -5,11 +5,14 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FORM_ERROR, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import { CONFIRMATION_NOTICE, type BookingField, type BookingNoteField, type ConfirmationOutcome, type ConfirmResult, type DiscoveryOutcomeField, type DiscoveryRejectField, type DiscoveryTimesField } from "./contract";
+import type { SlotField } from "@/features/demos/contract";
+import { parseNewSlots } from "@/features/demos/validation";
+import type { VaTaskField } from "@/features/tasks/contract";
+import { CONFIRMATION_NOTICE, type BookingField, type BookingNoteField, type ConfirmationOutcome, type ConfirmResult, type DiscoveryOutcomeField, type DiscoveryRejectField, type DiscoveryTimesField, type VaMeetingField } from "./contract";
 import { saveDiscoveryTimes, type DiscoveryTimesRefusal } from "./dal";
 import { bookingEntries, fileFrom, noteEntries } from "./form-data";
-import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createBooking, editBookingNote, moveDiscoveryCall, rejectDiscoveryCall, removeBookingNote, saveDiscoveryOutcome, sendConfirmation, updateBooking } from "./service";
-import { parseBooking, parseBookingEventId, parseBookingId, parseBookingNote, parseBookingNoteEdit, parseDiscoveryMove, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes } from "./validation";
+import { addBookingNote, cancelBooking, completeBooking, confirmDiscoveryCall, createAdminMeeting, createAdminSlotMeetings, createBooking, editBookingNote, moveDiscoveryCall, rejectDiscoveryCall, removeBookingNote, saveDiscoveryOutcome, sendConfirmation, updateBooking } from "./service";
+import { parseBooking, parseBookingEventId, parseBookingId, parseBookingNote, parseBookingNoteEdit, parseDiscoveryMove, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes, parseVaMeeting } from "./validation";
 
 const REFUSAL_MESSAGES: Record<DiscoveryTimesRefusal, string> = {
   not_allowed: "Your two-factor sign-in has expired. Sign in again, then save.",
@@ -34,6 +37,48 @@ export async function saveDiscoveryTimesAction(formData: FormData): Promise<Subm
   }
   refresh();
   return { ok: true };
+}
+
+/** The admin calendar's New meeting: date, Manila start, length, optional client — same as a VA or Lead Gen. */
+export async function addAdminMeeting(formData: FormData): Promise<SubmitResult<VaMeetingField>> {
+  await requireRole(["admin"]);
+  const entries = formEntries(formData);
+  entries.staffIds = formData.getAll("staffIds").filter((item): item is string => typeof item === "string" && item.length > 0);
+  const parsed = parseVaMeeting(entries);
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await createAdminMeeting(parsed.value);
+    if (!result.ok) return { ok: false, message: result.message };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Admin meeting create failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't book this meeting just now. Please try again in a moment." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+/** "Book › Demo slots" on the admin calendar: each picked half hour becomes a 30-minute team meeting. */
+export async function addAdminSlots(formData: FormData): Promise<SubmitResult<SlotField>> {
+  await requireRole(["admin"]);
+  const parsed = parseNewSlots({ ...formEntries(formData), times: formData.getAll("times") });
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await createAdminSlotMeetings(parsed.value.startsAt);
+    if (!result.ok) return { ok: false, message: result.message };
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Admin meeting slots failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't add those times just now. Please try again in a moment." };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function addAdminTask(formData: FormData): Promise<SubmitResult<VaTaskField>> {
+  await requireRole(["admin"]);
+  void formData;
+  return { ok: false, message: "Tasks are booked from the VA calendar." };
 }
 
 /** An admin adds a booking. The signed-in admin is recorded as the creator. */

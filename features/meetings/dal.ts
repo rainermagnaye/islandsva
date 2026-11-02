@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
 import { manilaToIso, type DiscoveryRequest } from "./contract";
-import type { BookingInput, BookingNoteInput } from "./validation";
+import type { BookingInput, BookingNoteInput, VaMeetingInput } from "./validation";
 
 // Discovery times are read and written with the signed-in session: RLS lets only an admin with two-factor
 // sign-in read them, and set_discovery_times (security invoker) checks the same before it replaces them.
@@ -51,6 +51,8 @@ const REFUSAL: Record<string, string> = {
   IVA32: "That note can't be changed. Refresh the page.",
   IVA33: "Invite at most 20 people.",
   IVA34: "You can complete this once the meeting has started.",
+  IVA38: "Choose a start time that hasn't passed yet.",
+  IVA46: "Choose a client from this agency.",
   IVA14: "Only an admin or a lead gen from this agency can change this call.",
   IVA22: "Choose a time on the hour or half hour, from now through the next 14 days.",
   IVA23: "This call can't be changed now. Refresh the page.",
@@ -65,6 +67,25 @@ function refused(error: { code?: string; message: string }) {
 }
 
 type FileInput = { name: string; type: string; base64: string } | null;
+
+/** The admin calendar's New meeting: same shape as a VA or Lead Gen booking. create_admin_meeting needs 2FA. */
+export async function insertAdminMeeting(input: VaMeetingInput) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("create_admin_meeting", {
+    title: input.title,
+    starts_at: input.startsAt,
+    ends_at: input.endsAt,
+    client_id: input.clientId,
+    staff_ids: input.staffIds,
+    note: input.note || null,
+  });
+  if (error) {
+    const message = refused(error);
+    if (message) return { ok: false as const, message };
+    throw new UpstreamError("supabase", `Creating an admin meeting failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const };
+}
 
 export async function insertBooking(input: BookingInput, file: FileInput) {
   const supabase = await createClient();

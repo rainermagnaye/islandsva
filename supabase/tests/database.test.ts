@@ -4901,3 +4901,52 @@ describe("Closer bookings", () => {
     });
   });
 });
+
+describe("Admin bookings", () => {
+  const ahead = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+  const start = ahead(48);
+  const end = ahead(49);
+  const call = async <T = Record<string, unknown>>(claims: Claims, sql: string, params: unknown[] = []) => {
+    await db.exec("savepoint call");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+      await db.exec("set local role authenticated");
+      const rows = (await db.query<T>(sql, params)).rows;
+      await db.exec("reset role");
+      await db.exec("release savepoint call");
+      return rows;
+    } catch (error) {
+      await db.exec("rollback to savepoint call");
+      await db.exec("reset role");
+      throw error;
+    }
+  };
+  const meet = (claims: Claims, client: string | null, staff: string[] = [], from = start, to = end) =>
+    call<{ id: string }>(claims, "select public.create_admin_meeting('Pipeline review', $1, $2, $3, $4, 'Agenda') as id", [from, to, client, staff]);
+  const status = async (id: string) => (await asServer<{ status: string }>("select status::text as status from public.meetings where id = $1", [id]))[0].status;
+
+  it("a meeting with an active client waits; a pending client or team call is booked right away", async () => {
+    await rolledBack(async () => {
+      await db.query("update public.clients set status = 'active', activated_at = now(), disabled_at = null where id = $1", [clientA]);
+      await db.query("update public.profiles set status = 'active' where id = $1", [CLIENT]);
+      const [request] = await meet(asAdmin, clientA);
+      expect(await asServer("select status::text as status, created_by, client_names, staff_ids from public.meetings where id = $1", [request.id])).toEqual([
+        { status: "requested", created_by: ADMIN, client_names: ["Acme"], staff_ids: [ADMIN] },
+      ]);
+      const [pending] = await meet(asAdmin, clientB);
+      expect(await status(pending.id)).toBe("scheduled");
+      const [otherCloser] = await meet(asAdmin, clientC, [VA]);
+      expect(await status(otherCloser.id)).toBe("scheduled");
+      const [team] = await meet(asAdmin, null, [VA]);
+      const [booked] = await asServer<{ status: string; staff_ids: string[] }>("select status::text as status, staff_ids from public.meetings where id = $1", [team.id]);
+      expect(booked.status).toBe("scheduled");
+      expect([...booked.staff_ids].sort()).toEqual([ADMIN, VA].sort());
+      await db.query("update public.clients set disabled_at = now() where id = $1", [clientB]);
+      await expect(meet(asAdmin, clientB)).rejects.toMatchObject({ code: "IVA46" });
+      await expect(meet(asAdmin, clientA, [], ahead(-2), ahead(-1))).rejects.toMatchObject({ code: "IVA38" });
+      await expect(meet(asCloser, null)).rejects.toMatchObject({ code: "42501" });
+      await expect(meet(asVa, null)).rejects.toMatchObject({ code: "42501" });
+      await expect(meet(token(ADMIN, ["admin"], "aal1"), null)).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+});

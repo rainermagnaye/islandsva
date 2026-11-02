@@ -13,7 +13,7 @@ import { addVaMeeting } from "../va-actions";
 import { BOOKING_LIMITS, BOOKING_TIME_ZONE, VA_MEETING_LENGTHS, type BookingChoice, type VaMeetingField } from "../contract";
 import { InviteField } from "./invite-field";
 
-/** A client the VA or Lead Gen works with, and the zone their clock is shown in. */
+/** A client the VA, Lead Gen or admin works with, and the zone their clock is shown in. */
 export type VaMeetingClient = BookingChoice & { timezone: string | null; active?: boolean };
 
 const START_TIMES = Array.from({ length: 48 }, (_, index) => {
@@ -29,8 +29,9 @@ function lengthLabel(minutes: number) {
 }
 
 /**
- * "Book › Meeting" on the VA calendar. With a client it goes in as a request the client accepts or declines; with
- * no client it's a team call, booked right away. Times are Manila; the client's own clock is shown beside them.
+ * "Book › Meeting" on the VA, Lead Gen or admin calendar. With an active client it goes in as a request they accept
+ * or decline; with a pending client or no client it's booked right away. Times are Manila; the client's own clock
+ * is shown beside them.
  */
 export function VaMeetingForm({
   clients,

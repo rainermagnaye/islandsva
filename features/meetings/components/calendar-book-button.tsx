@@ -40,7 +40,7 @@ export type CalendarBookProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-/** "Book" opens one dialog. The kind — demo slots, a meeting or a task — is chosen on the form. */
+/** "Book" opens one dialog. Demo slots, a meeting and a task are always listed so every calendar matches. */
 export function CalendarBookButton({
   today,
   last,
@@ -124,12 +124,7 @@ function BookDialog({
   taskBook?: CalendarBookProps["taskBook"];
   onClose: () => void;
 }) {
-  const kinds = KINDS.filter((item) => {
-    if (item.value === "slots") return Boolean(addSlots);
-    if (item.value === "meeting") return Boolean(meetingBook);
-    return Boolean(taskBook) && openTasks.length > 0;
-  });
-  const [kind, setKind] = useState<Kind>(kinds[0]?.value ?? "meeting");
+  const [kind, setKind] = useState<Kind>("slots");
   const [formKey, setFormKey] = useState(0);
 
   function choose(next: Kind) {
@@ -140,9 +135,9 @@ function BookDialog({
 
   return (
     <div className="grid gap-4">
-      <fieldset className={cx("m-0 grid gap-2 border-0 p-0", kinds.length > 1 && "sm:grid-cols-3")}>
+      <fieldset className="m-0 grid gap-2 border-0 p-0 sm:grid-cols-3">
         <legend className="sr-only">What are you booking?</legend>
-        {kinds.map((item) => (
+        {KINDS.map((item) => (
           <label
             key={item.value}
             className={cx("flex cursor-pointer items-center gap-2.5 rounded-md border p-3", kind === item.value ? "border-action-secondary bg-status-info-bg" : "border-border")}

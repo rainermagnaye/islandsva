@@ -12,7 +12,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="grid min-h-[inherit] md:grid-cols-[76px_minmax(0,1fr)] lg:grid-cols-[264px_minmax(0,1fr)]">
       <WorkspaceNav label="Admin"
         items={[
-          { href: appRoutes.admin, label: "Overview", icon: "home", exact: true },
+          { href: appRoutes.admin, label: "Dashboard", icon: "home", exact: true },
           { href: appRoutes.adminDemos, label: "Calendar", icon: "calendar" },
           {
             href: appRoutes.adminLeads,
@@ -26,7 +26,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           },
           { href: appRoutes.adminClients, label: "Clients", icon: "briefcase" },
           { href: appRoutes.adminSales, label: "Sales", icon: "chart" },
-          { href: appRoutes.adminUsers, label: "Team", icon: "users" },
+          { href: appRoutes.adminUsers, label: "Teams", icon: "users" },
         ]}
         footer={{ href: routes.home, label: "View site", icon: "external" }}
       />

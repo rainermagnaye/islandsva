@@ -160,10 +160,14 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
 }
 
 /** Clients and employees an admin can attach to a booking, plus the signed-in admin's name. */
-export async function listBookingChoices(userId: string): Promise<{ clients: BookingChoice[]; staff: BookingChoice[]; creatorName: string }> {
+export async function listBookingChoices(userId: string): Promise<{
+  clients: Array<BookingChoice & { timezone: string | null; active: boolean }>;
+  staff: BookingChoice[];
+  creatorName: string;
+}> {
   const supabase = await createClient();
   const [clients, roles, me] = await Promise.all([
-    supabase.from("clients").select("id, company_name").is("disabled_at", null).order("company_name").limit(LIST_LIMIT),
+    supabase.from("clients").select("id, company_name, timezone, status").is("disabled_at", null).order("company_name").limit(LIST_LIMIT),
     supabase.from("roles").select("user_id").in("role", ["va", "closer", "admin"]),
     supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
   ]);
@@ -177,12 +181,18 @@ export async function listBookingChoices(userId: string): Promise<{ clients: Boo
     const profiles = await supabase.from("profiles").select("id, full_name, status").in("id", ids).neq("status", "inactive");
     if (profiles.error) throw new UpstreamError("supabase", `Listing staff for a booking failed: ${profiles.error.message}`, { cause: profiles.error });
     staff = (profiles.data ?? [])
+      .filter((row) => row.id !== userId)
       .map((row) => ({ id: row.id, label: row.full_name }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   return {
-    clients: (clients.data ?? []).map((row) => ({ id: row.id, label: row.company_name })),
+    clients: (clients.data ?? []).map((row) => ({
+      id: row.id,
+      label: row.company_name,
+      timezone: row.timezone,
+      active: row.status === "active",
+    })),
     staff,
     creatorName: me.data?.full_name || "You",
   };

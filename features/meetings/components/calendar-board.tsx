@@ -7,13 +7,23 @@ import type { ScheduleEvent, ScheduleGesture } from "@/components/ui/schedule-ev
 import { useToast } from "@/components/ui/toast";
 import { DemoCalendar } from "@/features/demos/components/demo-calendar";
 import type { DemoCalendarRow } from "@/features/demos/calendar";
+import { busyFrom } from "@/features/demos/slot-times";
 import { editBooking, rescheduleDiscoveryAction } from "../actions";
-import { draftFrom, draftOf, MANUAL_GESTURE, type BookingDraft } from "../booking-draft";
+import { draftOf, MANUAL_GESTURE } from "../booking-draft";
 import { BOOKING_TIME_ZONE, type Booking, type BookingChoice } from "../contract";
 import { MeetingsTable } from "./meetings-table";
+import type { VaMeetingClient } from "./va-meeting-form";
 
 const AdminBookingForm = lazy(() => import("./admin-booking-form").then((m) => ({ default: m.AdminBookingForm })));
 const AdminBookingDetail = lazy(() => import("./admin-booking-detail").then((m) => ({ default: m.AdminBookingDetail })));
+const AdminBookButton = lazy(() => import("./admin-book-button").then((m) => ({ default: m.AdminBookButton })));
+
+type CreateDraft = { date: string; time?: string };
+
+function timeFromMinute(minute: number) {
+  const snapped = Math.floor(minute / 30) * 30;
+  return `${String(Math.floor(snapped / 60)).padStart(2, "0")}:${snapped % 60 ? "30" : "00"}`;
+}
 
 function asEvents(bookings: readonly Booking[]): ScheduleEvent[] {
   return bookings.map((booking) => ({
@@ -35,21 +45,25 @@ export function CalendarBoard({
   clients,
   staff,
   creatorName,
+  openTasks,
   now,
   today,
+  last,
   nowMinutes,
 }: {
   rows: readonly DemoCalendarRow[];
   bookings: readonly Booking[];
-  clients: readonly BookingChoice[];
+  clients: readonly VaMeetingClient[];
   staff: readonly BookingChoice[];
   creatorName: string;
+  openTasks: readonly BookingChoice[];
   now: string;
   today: IsoDate;
+  last: IsoDate;
   nowMinutes: number;
 }) {
   const toast = useToast();
-  const [draft, setDraft] = useState<BookingDraft | null>(null);
+  const [createDraft, setCreateDraft] = useState<CreateDraft | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const selected = bookings.find((booking) => booking.id === selectedId) ?? null;
@@ -57,13 +71,13 @@ export function CalendarBoard({
 
   function done(message: string) {
     toast.show({ title: message, tone: "success" });
-    setDraft(null);
+    setCreateDraft(null);
     setEditing(false);
     if (message === "Meeting cancelled.") setSelectedId(null);
   }
 
   function open(id: string) {
-    setDraft(null);
+    setCreateDraft(null);
     setEditing(false);
     setSelectedId(id);
   }
@@ -77,8 +91,25 @@ export function CalendarBoard({
         nowMinutes={nowMinutes}
         extraEvents={asEvents(bookings)}
         viewsInHeader
-        actions={<Button type="button" iconLeft="plus" onClick={() => { setSelectedId(null); setEditing(false); setDraft(draftFrom(today, 9 * 60)); }}>New meeting</Button>}
-        onSlotClick={(day, minute) => { setSelectedId(null); setEditing(false); setDraft(draftFrom(day, minute)); }}
+        actions={
+          <Suspense fallback={<Button type="button" variant="ghost" iconLeft="plus" disabled>Book</Button>}>
+            <AdminBookButton
+              today={today}
+              last={last}
+              slots={{ busy: busyFrom(bookings, []), offered: [], windows: [] }}
+              clients={clients}
+              team={staff}
+              openTasks={openTasks}
+              draft={createDraft}
+              onDraftChange={(draft) => {
+                setSelectedId(null);
+                setEditing(false);
+                setCreateDraft(draft);
+              }}
+            />
+          </Suspense>
+        }
+        onSlotClick={(day, minute) => { setSelectedId(null); setEditing(false); setCreateDraft({ date: day, time: timeFromMinute(minute) }); }}
         eventGesture={(event) => gestureFor(bookings.find((booking) => booking.id === event.id))}
         onEventMove={(event, next) => {
           const booking = bookings.find((item) => item.id === event.id);
@@ -93,19 +124,6 @@ export function CalendarBoard({
       />
       <MeetingsTable bookings={bookings} onOpen={open} />
 
-      {draft && (
-        <Suspense fallback={null}>
-          <AdminBookingForm
-            mode="create"
-            draft={draft}
-            clients={clients}
-            staff={staff}
-            creatorName={creatorName}
-            onClose={() => setDraft(null)}
-            onDone={() => done("Meeting added.")}
-          />
-        </Suspense>
-      )}
       {selected && !editing && (
         <Suspense fallback={null}>
           <AdminBookingDetail
