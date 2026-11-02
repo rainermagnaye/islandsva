@@ -3207,6 +3207,252 @@ describe("discovery calls", () => {
       expect(await stampOf(meeting)).toEqual({ sent_at: null, sent_for: null });
     });
   });
+
+  describe("acknowledgement email (20261102090000_discovery_acknowledgement)", () => {
+    const at = (offsetMs: number) => {
+      const start = new Date(aligned(offsetMs));
+      start.setUTCMinutes(0, 0, 0);
+      return start.toISOString();
+    };
+    const ack = (lead: string) =>
+      asServer<{ meeting_id: string; email: string; starts_at: string; country: string }>("select * from public.claim_discovery_acknowledgement($1)", [lead]);
+    const request = async (email: string, offsetMs: number) =>
+      (
+        await asServer<{ id: string }>(
+          "select public.submit_discovery_request('Mia Reyes', $1, 'Reyes Co', 'Legal', 'United States', 'Need help', null, null, null, $2) as id",
+          [email, at(offsetMs)],
+        )
+      )[0].id;
+    /** Moves every acknowledgement stamp for `email` back by `interval`, so the next request can count it as older. */
+    const age = (email: string, interval: string) =>
+      db.query(
+        `update public.meetings m set ack_sent_at = ack_sent_at - $2::interval from public.leads l where l.id = m.lead_id and l.email = $1 and m.ack_sent_at is not null`,
+        [email, interval],
+      );
+    /** Closes the visitor's open request, so they can book again (one open request per address). */
+    const close = (lead: string) => db.query("update public.meetings set status = 'expired' where lead_id = $1 and status = 'requested'", [lead]);
+
+    it("only the secret key may claim, and signed-in users can't write the stamp", async () => {
+      const lead = await request("ack-grants@disc.co", 13 * DAY + 1 * HOUR);
+      for (const claims of [asLgA, asAdmin]) {
+        await expect(asUser(claims, "select * from public.claim_discovery_acknowledgement($1)", [lead])).rejects.toThrow(/permission denied/);
+        await expect(asUser(claims, "update public.meetings set ack_sent_at = now() where lead_id = $1", [lead])).rejects.toThrow(/permission denied/);
+      }
+      await expect(as("anon", {}, "select * from public.claim_discovery_acknowledgement($1)", [lead])).rejects.toThrow(/permission denied/);
+      await expect(asUser(asLgA, "select private.visitor_emails_sent(tenant_id) from public.meetings limit 1")).rejects.toThrow(/permission denied/);
+    });
+
+    it("claims an open request once, returning where and what to send", async () => {
+      const lead = await request("ack-once@disc.co", 13 * DAY + 2 * HOUR);
+      const [first] = await ack(lead);
+      expect(first).toMatchObject({ meeting_id: await meetingOf(lead), email: "ack-once@disc.co", country: "United States" });
+      expect(await ack(lead)).toEqual([]);
+      await expect(ack("00000000-0000-0000-0000-0000000001ba")).resolves.toEqual([]);
+    });
+
+    it("sends nothing for a request that is no longer open", async () => {
+      const lead = await request("ack-closed@disc.co", 13 * DAY + 3 * HOUR);
+      await close(lead);
+      expect(await ack(lead)).toEqual([]);
+    });
+
+    it("allows 1 per address per 24 hours and 3 per 30 days", async () => {
+      const email = "ack-limits@disc.co";
+      const first = await request(email, 13 * DAY + 4 * HOUR);
+      expect(await ack(first)).toHaveLength(1);
+      await close(first);
+      const second = await request(email, 13 * DAY + 5 * HOUR);
+      expect(await ack(second)).toEqual([]);
+
+      // A day later the address may be emailed again, up to three times in 30 days.
+      await age(email, "25 hours");
+      expect(await ack(second)).toHaveLength(1);
+      await close(second);
+      await age(email, "25 hours");
+      const third = await request(email, 13 * DAY + 6 * HOUR);
+      expect(await ack(third)).toHaveLength(1);
+      await close(third);
+      await age(email, "25 hours");
+      const fourth = await request(email, 13 * DAY + 7 * HOUR);
+      expect(await ack(fourth)).toEqual([]);
+      await close(fourth);
+    });
+
+    it("stops at 40 visitor emails per agency per 24 hours", async () => {
+      await rolledBack(async () => {
+        const lead = await request("ack-cap@disc.co", 13 * DAY + 8 * HOUR);
+        const sentSoFar = async () =>
+          Number((await db.query<{ sent: string }>("select private.visitor_emails_sent(tenant_id)::text as sent from public.leads where id = $1", [lead])).rows[0].sent);
+        // Another visitor's past requests, acknowledged today, fill the agency's count up to one below the cap.
+        const filler = await request("ack-cap-filler@disc.co", 13 * DAY + 11 * HOUR);
+        await close(filler);
+        await db.query(
+          `insert into public.meetings (kind, lead_id, status, starts_at, ends_at, ack_sent_at)
+           select 'discovery', $1, 'expired', now() - make_interval(days => 1, mins => g * 30), now() - make_interval(days => 1, mins => g * 30 - 30), now()
+           from generate_series(1, $2::int) g`,
+          [filler, 39 - (await sentSoFar())],
+        );
+        expect(await sentSoFar()).toBe(39);
+        expect(await ack(lead)).toHaveLength(1);
+        await close(lead);
+        const next = await request("ack-cap-2@disc.co", 13 * DAY + 10 * HOUR);
+        expect(await ack(next)).toEqual([]);
+      });
+    });
+
+    it("sends nothing to an address that isn't one plain address", async () => {
+      const lead = await request("ack-address@disc.co", 13 * DAY + 9 * HOUR);
+      await db.query("update public.leads set email = 'a,b@disc.co' where id = $1", [lead]);
+      expect(await ack(lead)).toEqual([]);
+      await close(lead);
+    });
+
+    it("private.deliverable_address keeps one plain address, lower-cased, and nothing else", async () => {
+      const check = async (email: string | null) =>
+        (await db.query<{ a: string | null }>("select private.deliverable_address($1) as a", [email])).rows[0].a;
+      expect(await check(" Pat@Example.com ")).toBe("pat@example.com");
+      for (const bad of ["a b@x.co", "a\tb@x.co", "a\nb@x.co", "a\u0001b@x.co", "a,b@x.co", "a;b@x.co", "<a@x.co>", '"a"@x.co', "a(b)@x.co", "[a]@x.co", "a\\b@x.co", "a@b@x.co", "no-at", "", null]) {
+        expect(await check(bad), String(bad)).toBeNull();
+      }
+      expect(await check(`${"a".repeat(250)}@x.co`)).toBeNull();
+    });
+  });
+
+  describe("expiry (20261102093000_discovery_expiry)", () => {
+    const at = (offsetMs: number) => {
+      const start = new Date(aligned(offsetMs));
+      start.setUTCMinutes(0, 0, 0);
+      return start.toISOString();
+    };
+    const claimNotices = () =>
+      asServer<{ meeting_id: string; email: string; starts_at: string; country: string }>("select * from public.claim_expiry_notices()");
+    /** An acknowledged request for `email`, then moved to start `minutes` from now (slots are only offered 12 hours ahead). */
+    const acknowledged = async (email: string, offsetMs: number, minutes: number) => {
+      const [{ id: lead }] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Mia Reyes', $1, 'Reyes Co', 'Legal', 'United States', 'Need help', null, null, null, $2) as id",
+        [email, at(offsetMs)],
+      );
+      expect(await asServer("select * from public.claim_discovery_acknowledgement($1)", [lead])).toHaveLength(1);
+      const meeting = await meetingOf(lead);
+      await db.query("update public.meetings set starts_at = now() + make_interval(mins => $2), ends_at = now() + make_interval(mins => $2 + 30) where id = $1", [
+        meeting,
+        minutes,
+      ]);
+      return { lead, meeting };
+    };
+    const statusOf = async (meeting: string) => (await db.query<{ status: string }>("select status::text from public.meetings where id = $1", [meeting])).rows[0].status;
+
+    it("only the secret key may claim notices, and no API role may run the job's functions", async () => {
+      for (const claims of [asLgA, asAdmin]) {
+        await expect(asUser(claims, "select * from public.claim_expiry_notices()")).rejects.toThrow(/permission denied/);
+      }
+      await expect(as("anon", {}, "select * from public.claim_expiry_notices()")).rejects.toThrow(/permission denied/);
+      for (const fn of ["expire_discovery_requests", "run_discovery_expiry"]) {
+        await expect(asServer(`select private.${fn}()`), fn).rejects.toThrow(/permission denied/);
+        await expect(asUser(asAdmin, `select private.${fn}()`), fn).rejects.toThrow(/permission denied/);
+      }
+    });
+
+    // Not rolled back: the refusal it expects would abort the transaction. It leaves its request expired.
+    it("closes a request 2 hours before its start: no confirm or move, not in the inbox", async () => {
+      const { meeting } = await acknowledged("exp-cutoff@disc.co", 12 * DAY + 1 * HOUR, 110);
+      try {
+        await expect(asUser(asLgA, "select public.confirm_discovery_booking($1)", [meeting])).rejects.toMatchObject({ code: "IVA23" });
+        await expect(decide(meeting, LG_A, "scheduled")).rejects.toMatchObject({ code: "IVA23" });
+        await expect(asUser(asLgA, "select public.reschedule_discovery_booking($1, $2)", [meeting, at(12 * DAY + 12 * HOUR)])).rejects.toMatchObject({ code: "IVA23" });
+        expect((await inbox(asLgA)).map((r) => r.meeting_id)).not.toContain(meeting);
+
+        await db.query("update public.meetings set starts_at = now() + interval '130 minutes', ends_at = now() + interval '160 minutes' where id = $1", [meeting]);
+        expect((await inbox(asLgA)).map((r) => r.meeting_id)).toContain(meeting);
+        // Ahead of the cutoff it can still be moved, but not into the window, where it would only expire.
+        const inside = new Date(Math.ceil((Date.now() + 90 * 60_000) / (30 * 60_000)) * 30 * 60_000).toISOString();
+        await expect(asUser(asLgA, "select public.reschedule_discovery_booking($1, $2)", [meeting, inside])).rejects.toMatchObject({ code: "IVA22" });
+      } finally {
+        await db.query("update public.meetings set status = 'expired', expiry_notice_sent_at = now() where id = $1", [meeting]);
+      }
+    });
+
+    it("expires only requests past the cutoff, as System", async () => {
+      await rolledBack(async () => {
+        const due = await acknowledged("exp-due@disc.co", 12 * DAY + 2 * HOUR, 90);
+        const open = await acknowledged("exp-open@disc.co", 12 * DAY + 3 * HOUR, 180);
+        await db.query("select private.expire_discovery_requests()");
+        expect(await statusOf(due.meeting)).toBe("expired");
+        expect(await statusOf(open.meeting)).toBe("requested");
+        const events = (await db.query<{ kind: string; actor_id: string | null }>("select kind::text, actor_id from public.meeting_events where meeting_id = $1 order by created_at", [due.meeting])).rows;
+        expect(events.at(-1)).toEqual({ kind: "expired", actor_id: null });
+      });
+    });
+
+    it("claims each due notice once, only where an acknowledgement went", async () => {
+      await rolledBack(async () => {
+        const due = await acknowledged("exp-once@disc.co", 12 * DAY + 4 * HOUR, 60);
+        const [{ id: silent }] = await asServer<{ id: string }>(
+          "select public.submit_discovery_request('Mia Reyes', 'exp-silent@disc.co', 'Reyes Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+          [at(12 * DAY + 5 * HOUR)],
+        );
+        await db.query("update public.meetings set starts_at = now() + interval '64 minutes', ends_at = now() + interval '94 minutes' where lead_id = $1", [silent]);
+        await db.query("select private.expire_discovery_requests()");
+
+        const claimed = await claimNotices();
+        expect(claimed.map((r) => r.meeting_id)).toEqual([due.meeting]);
+        expect(claimed[0]).toMatchObject({ email: "exp-once@disc.co", country: "United States" });
+        expect(await claimNotices()).toEqual([]);
+      });
+    });
+
+    it("sends no notice about a time more than a day gone", async () => {
+      await rolledBack(async () => {
+        const stale = await acknowledged("exp-stale@disc.co", 12 * DAY + 10 * HOUR, 65);
+        await db.query("select private.expire_discovery_requests()");
+        await db.query("update public.meetings set starts_at = now() - interval '25 hours', ends_at = now() - interval '24 hours 30 minutes' where id = $1", [stale.meeting]);
+        expect(await claimNotices()).toEqual([]);
+      });
+    });
+
+    it("a visitor's next request settles their own past-cutoff request", async () => {
+      await rolledBack(async () => {
+        const earlier = await acknowledged("exp-settle@disc.co", 12 * DAY + 12 * HOUR, 67);
+        await asServer(
+          "select public.request_discovery_call('Mia Reyes', 'exp-settle@disc.co', 'Reyes Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1)",
+          [(await asServer<{ s: string }>("select s from public.open_discovery_slots() as t(s) order by s desc limit 1"))[0].s],
+        );
+        expect(await statusOf(earlier.meeting)).toBe("expired");
+      });
+    });
+
+    it("sends no notice for a closed or paused lead, or to a visitor who booked again", async () => {
+      await rolledBack(async () => {
+        const closed = await acknowledged("exp-closed@disc.co", 12 * DAY + 6 * HOUR, 61);
+        const paused = await acknowledged("exp-paused@disc.co", 12 * DAY + 7 * HOUR, 62);
+        const rebooked = await acknowledged("exp-rebooked@disc.co", 12 * DAY + 8 * HOUR, 63);
+        await db.query("select private.expire_discovery_requests()");
+        await db.query("update public.leads set status = 'closed' where id = $1", [closed.lead]);
+        await db.query("update public.leads set disabled_at = now() where id = $1", [paused.lead]);
+        await asServer(
+          "select public.submit_discovery_request('Mia Reyes', 'exp-rebooked@disc.co', 'Reyes Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1)",
+          [at(12 * DAY + 9 * HOUR)],
+        );
+        expect(await claimNotices()).toEqual([]);
+        expect(rebooked.meeting).toBeTruthy();
+      });
+    });
+
+    it("shares the agency's 40 visitor emails a day with acknowledgements", async () => {
+      await rolledBack(async () => {
+        const due = await acknowledged("exp-cap@disc.co", 12 * DAY + 10 * HOUR, 60);
+        await db.query("select private.expire_discovery_requests()");
+        const [{ sent }] = (await db.query<{ sent: string }>("select private.visitor_emails_sent(tenant_id)::text as sent from public.meetings where id = $1", [due.meeting])).rows;
+        await db.query(
+          `insert into public.meetings (kind, lead_id, status, starts_at, ends_at, ack_sent_at)
+           select 'discovery', $1, 'expired', now() - make_interval(days => 3, mins => g * 30), now() - make_interval(days => 3, mins => g * 30 - 30), now()
+           from generate_series(1, $2::int) g`,
+          [due.lead, 40 - Number(sent)],
+        );
+        expect(await claimNotices()).toEqual([]);
+      });
+    });
+  });
 });
 
 describe("tasks", () => {
@@ -4281,6 +4527,21 @@ describe("audit log", () => {
       await asServer("update public.leads set notified_at = now() where id = $1", [lead]);
       await asServer("update public.leads set status = status where id = $1", [lead]);
       expect(await entries("leads", lead)).toHaveLength(1);
+    });
+
+    it("the visitor-email stamps on a meeting are bookkeeping too", async () => {
+      const start = new Date(Math.floor((Date.now() + 13 * 24 * 3600_000 + 12 * 3600_000) / 3600_000) * 3600_000).toISOString();
+      const [{ id: lead }] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Ana Cruz', 'stamps@audit.co', 'Cruz Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
+        [start],
+      );
+      const [{ id: meeting }] = await asServer<{ id: string }>("select id from public.meetings where lead_id = $1", [lead]);
+      const before = (await entries("meetings", meeting)).length;
+      for (const set of ["ack_sent_at = now()", "confirmation_sent_at = now(), confirmation_sent_for = starts_at", "expiry_notice_sent_at = now()"]) {
+        await asServer(`update public.meetings set ${set} where id = $1`, [meeting]);
+      }
+      expect(await entries("meetings", meeting)).toHaveLength(before);
+      await asServer("update public.meetings set status = 'expired' where id = $1", [meeting]);
     });
 
     it("a delete is recorded with the admin as actor", async () => {

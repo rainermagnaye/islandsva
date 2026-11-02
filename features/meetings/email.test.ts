@@ -6,7 +6,7 @@ const sendPlainEmail = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () 
 vi.mock("@/lib/email", () => ({ sendPlainEmail: (...args: unknown[]) => sendPlainEmail(...args) }));
 vi.mock("@/lib/env", () => ({ env: { leadsNotifyEmail: () => "team@example.com" } }));
 
-const { sendDiscoveryConfirmation } = await import("./email");
+const { sendDiscoveryAcknowledgement, sendDiscoveryConfirmation, sendDiscoveryExpired } = await import("./email");
 
 beforeEach(() => sendPlainEmail.mockClear());
 
@@ -27,5 +27,31 @@ describe("sendDiscoveryConfirmation", () => {
     await sendDiscoveryConfirmation({ meetingId: "m1", email: "v@example.com", startsAt: "2026-11-10T01:30:00.000Z", country: null });
     await sendDiscoveryConfirmation({ meetingId: "m1", email: "v@example.com", startsAt: "2026-11-11T01:30:00.000Z", country: null });
     expect(sendPlainEmail.mock.calls[0][2]).not.toBe(sendPlainEmail.mock.calls[1][2]);
+  });
+});
+
+type Sent = [string, { to: string; replyTo: string; subject: string; text: string }, string];
+const call = { meetingId: "m2", email: "visitor@example.com", startsAt: "2026-11-10T01:30:00.000Z", country: "United States" };
+
+describe("sendDiscoveryAcknowledgement", () => {
+  it("sends fixed text with the requested time, Reply-To the team, once per request", async () => {
+    await sendDiscoveryAcknowledgement(call);
+    const [, message, key] = sendPlainEmail.mock.calls[0] as Sent;
+    expect(message).toMatchObject({ to: "visitor@example.com", replyTo: "team@example.com", subject: "We've received your discovery call request" });
+    expect(message.text).toContain("on Nov 9, 2026, 8:30");
+    expect(message.text).toContain("PHT");
+    expect(message.text).toContain("ignore this email");
+    expect(key).toBe("discovery-acknowledgement/m2");
+  });
+});
+
+describe("sendDiscoveryExpired", () => {
+  it("asks the visitor to pick another time on the contact page, once per request", async () => {
+    await sendDiscoveryExpired(call);
+    const [, message, key] = sendPlainEmail.mock.calls[0] as Sent;
+    expect(message).toMatchObject({ to: "visitor@example.com", replyTo: "team@example.com" });
+    expect(message.text).toContain("couldn't confirm your discovery call for Nov 9, 2026, 8:30");
+    expect(message.text).toMatch(/https?:\/\/\S+\/contact$/m);
+    expect(key).toBe("discovery-expiry/m2");
   });
 });

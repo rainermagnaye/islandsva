@@ -104,14 +104,18 @@ Reset or invite emails: "We couldn't send the reset email" is Supabase answering
 - **Secrets:** GitHub environment `staging` holds `VERCEL_TOKEN` (a Vercel token scoped to the Islands VA team). Team and project ids are in the workflow; they aren't secret.
 - **Supabase (when the staging project is created):** apply every migration, enable `custom_access_token_hook`, set Site URL to the staging URL and add `https://islandsva-staging.vercel.app/auth/confirm` (and `/accept-invite` while the temporary invite flow exists) to the redirect URLs.
 
-## Discovery-call emails (planned, M8 slices 4–5)
+## Discovery-call emails (M8 slices 4–5)
 
-How they work: `docs/technical-spec.md` → Visitor emails. Before the acknowledgement goes live, a person:
+How they work: `docs/technical-spec.md` → Visitor emails. Before the acknowledgement goes live (after applying `20261102090000_discovery_acknowledgement` and `20261102093000_discovery_expiry`), a person:
 
 1. **Resend:** verifies SPF, DKIM and DMARC for the sending domain; moves to Pro ($20/month, no daily cap) or keeps the free tier with the 40-a-day visitor cap well under its 100; watches bounces and complaints.
 2. **Vercel Firewall:** rate-limits `POST /api/v1/leads` (e.g. 5 per 10 minutes per IP) and `GET /api/v1/discovery-slots`; `/api/v1/internal/*` is not under that rule.
 3. **Secret:** generates one random secret for the expiry endpoint; adds it to Vercel as a Sensitive env var for **Production only** (rebuild to apply) and to Supabase Vault.
-4. **Supabase:** enables `pg_cron` and `pg_net`, then schedules the 15-minute job (expire requests, then call `https://<production domain>/api/v1/internal/discovery-expiry` with the Vault secret). **Production URL only** — staging shares the database and never sends expiry emails.
+4. **Supabase:** enables `pg_cron` and `pg_net` (Database → Extensions); in Vault adds `discovery_expiry_url` = `https://<production domain>/api/v1/internal/discovery-expiry` (**production URL only** — staging shares the database and never sends expiry emails) and `discovery_expiry_secret` = the secret from step 3; then, in the SQL editor:
+   ```sql
+   select cron.schedule('discovery-expiry', '*/15 * * * *', 'select private.run_discovery_expiry()');
+   ```
+   Until then requests still close at the cutoff (the inbox and confirm refuse them), but they stay `requested` and no one is emailed. Runs show in `cron.job_run_details`, calls in `net._http_response`.
 5. **Rotating the secret:** set the new value in Vercel (rebuild), then in Vault; calls in between get `404` and the next run catches up, since notices are claimed only when sent.
 6. **Privacy Policy and FAQ:** say we email the address given when a request is received, confirmed or expires (not when declined), that we keep the requested time and a hashed IP for abuse prevention, and how long unconfirmed requests are kept (`TODO(legal)` retention).
 

@@ -155,6 +155,10 @@ type MeetingRow = {
   /** When the visitor's confirmation email was claimed, and for which start (server-only writes). */
   confirmation_sent_at: string | null;
   confirmation_sent_for: string | null;
+  /** When the visitor's acknowledgement email was claimed (server-only writes). */
+  ack_sent_at: string | null;
+  /** When the visitor's expiry notice was claimed (server-only writes). */
+  expiry_notice_sent_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -844,6 +848,14 @@ export type Database = {
         Returns: { email: string; starts_at: string; country: string | null; claimed_at: string }[];
       };
       release_discovery_confirmation: { Args: { meeting_id: string; claimed_at: string }; Returns: undefined };
+      claim_discovery_acknowledgement: {
+        Args: { lead_id: string };
+        Returns: { meeting_id: string; email: string; starts_at: string; country: string | null }[];
+      };
+      claim_expiry_notices: {
+        Args: Record<PropertyKey, never>;
+        Returns: { meeting_id: string; email: string; starts_at: string; country: string | null }[];
+      };
       // VA Match: signed in as a client; rows only for VAs offered to the caller's own company. Work details only.
       offered_va_profiles: {
         Args: Record<PropertyKey, never>;
