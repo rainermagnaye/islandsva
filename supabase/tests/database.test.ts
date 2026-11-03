@@ -3070,6 +3070,23 @@ describe("discovery calls", () => {
       expect(new Date(stored.starts_at).toISOString()).toBe(new Date(moved).toISOString());
     });
 
+    it("books 12 hours to 90 days ahead and moves within 90 days, refusing sooner and later starts", async () => {
+      const submit = (email: string, start: string) =>
+        asServer<{ id: string }>(
+          "select public.submit_discovery_request('Gia Tan', $1, 'Tan Co', 'Legal', 'Philippines', 'Need help', null, null, null, $2) as id",
+          [email, start],
+        );
+      for (const start of [new Date(Date.now() - HOUR).toISOString(), halfPast(6 * HOUR), halfPast(91 * DAY)]) {
+        await expect(submit("gia-window@disc.co", start)).rejects.toMatchObject({ code: "IVA22" });
+      }
+      const [row] = await submit("gia-window@disc.co", halfPast(60 * DAY));
+      const meetingId = await meetingOf(row.id);
+      await expect(asUser(asLgA, "select public.reschedule_discovery_booking($1, $2)", [meetingId, halfPast(91 * DAY)])).rejects.toMatchObject({ code: "IVA22" });
+      await asUser(asLgA, "select public.reschedule_discovery_booking($1, $2)", [meetingId, halfPast(89 * DAY)]);
+      const [stored] = await asServer<{ starts_at: string }>("select starts_at from public.meetings where id = $1", [meetingId]);
+      expect(new Date(stored.starts_at).toISOString()).toBe(new Date(halfPast(89 * DAY)).toISOString());
+    });
+
     it("lets an admin note a discovery call, and still refuses everyone else", async () => {
       const [row] = await asServer<{ id: string }>(
         "select public.submit_discovery_request('Dina Cruz', 'dina-form@disc.co', 'Cruz Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",

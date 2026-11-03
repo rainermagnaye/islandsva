@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { addDays, todayIn } from "@/components/ui/date-math";
 import { Form } from "@/components/ui/form";
 import { TextField } from "@/components/ui/text-field";
-import { BOOKING_TIME_ZONE, DISCOVERY_LIMITS, type BookingField, type DiscoveryRejectField } from "../contract";
+import { BOOKING_TIME_ZONE, DISCOVERY_LIMITS, DISCOVERY_WINDOW_DAYS, type BookingField, type DiscoveryRejectField } from "../contract";
 import { confirmDiscoveryAction, rejectDiscoveryAction, rescheduleDiscoveryAction } from "../actions";
 
 /** Claim a requested discovery call, decline it, or move it to another time. */
@@ -64,7 +64,7 @@ export function DiscoveryActions({ meetingId, canConfirm, onDone }: { meetingId:
             <input type="hidden" name="meetingId" value={meetingId} />
             <p className="m-0 type-label">Reschedule</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField label="Meeting date" name="startDate" type="date" required min={earliest} max={addDays(earliest, 14)} error={fieldErrors.startDate} />
+              <TextField label="Meeting date" name="startDate" type="date" required min={earliest} max={addDays(earliest, DISCOVERY_WINDOW_DAYS)} error={fieldErrors.startDate} />
               <TextField label="Meeting time" name="startTime" type="time" required hint="Philippine time, on the hour or half hour." error={fieldErrors.startTime} />
             </div>
             <div className="flex justify-end">

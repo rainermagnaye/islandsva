@@ -24,17 +24,6 @@ const DISCOVERY_REFUSAL: Record<string, string> = {
   "23505": "That time was just taken. Choose another.",
 };
 
-/**
- * The open discovery-call starts, as UTC ISO instants in order. Public: the contact form shows them to anyone.
- * Secret key because `open_discovery_slots` is granted to the server only; it takes no input and returns only
- * times, never who booked them.
- */
-export async function listOpenDiscoverySlots(): Promise<string[]> {
-  const { data, error } = await createAdminClient().rpc("open_discovery_slots");
-  if (error) throw new UpstreamError("supabase", `Listing discovery slots failed: ${error.message}`, { cause: error });
-  return (data ?? []).map((start) => new Date(start).toISOString());
-}
-
 /** The visitor's message for a refused discovery request, or null when the failure is an outage. */
 export function discoveryRefusal(code: string | undefined): string | null {
   return code && Object.hasOwn(DISCOVERY_REFUSAL, code) ? DISCOVERY_REFUSAL[code] : null;
@@ -42,8 +31,9 @@ export function discoveryRefusal(code: string | undefined): string | null {
 
 /** The contact form: one lead and its requested discovery call. Secret key, after the route's checks. */
 export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
-  // request_discovery_call books only a start that open_discovery_slots lists (IVA22), and stores the source.
-  const { data, error } = await createAdminClient().rpc("request_discovery_call", {
+  // submit_discovery_request books any start from 12 hours to 90 days ahead that no open call holds (IVA22, or 23505
+  // when someone requested that start first) and stores the source Website.
+  const { data, error } = await createAdminClient().rpc("submit_discovery_request", {
     full_name: lead.name,
     email: lead.email,
     company_name: lead.company,
@@ -63,14 +53,12 @@ export async function insertDiscoveryRequest(lead: NewLead, startsAt: string): P
   return { ok: true, id: data };
 }
 
-/** `fromWebsite`: the contact form's plain enquiry, stored with the lead source Website like a booked call. */
-export async function insertLead(lead: NewLead, { fromWebsite = false, closerId = null }: { fromWebsite?: boolean; closerId?: string | null } = {}): Promise<string> {
+export async function insertLead(lead: NewLead, { closerId = null }: { closerId?: string | null } = {}): Promise<string> {
   // closerId is set only after the action has checked the caller is that closer. Authenticated users cannot
   // insert leads, so this stays on the secret key.
   const { data, error } = await createAdminClient()
     .from("leads")
     .insert({
-      ...(fromWebsite ? { profile: { source: "Website" } } : {}),
       ...(closerId ? { closer_id: closerId } : {}),
       full_name: lead.name,
       email: lead.email,
