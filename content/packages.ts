@@ -20,32 +20,13 @@ export type Package = {
   featured?: boolean;
 };
 
-/** Every package is billed at one fixed hourly rate, in US cents. */
-export const HOURLY_RATE_CENTS = 900;
-/** A month averages 52 weeks / 12 months (about 4.33 weeks). */
-export const WEEKS_PER_MONTH = 52 / 12;
-/** Percent off the month-to-month price for a longer commitment. */
-const TERM_DISCOUNT: Record<SubscriptionTerm, number> = { 1: 0, 6: 5, 12: 10 };
-
 export const terms: { months: SubscriptionTerm; label: string; note: string }[] = [
   { months: 1, label: "Monthly", note: "Billed monthly" },
-  { months: 6, label: "6 months", note: `Save ${TERM_DISCOUNT[6]}%` },
-  { months: 12, label: "12 months", note: `Save ${TERM_DISCOUNT[12]}%` },
+  { months: 6, label: "6 months", note: "Save 5%" },
+  { months: 12, label: "12 months", note: "Save 10%" },
 ];
 
-/**
- * Monthly price in US cents for weekly hours on a term: hours a week x $9 x 52/12 weeks, less the term's discount.
- * 20 h is $780 a month, 40 h $1,560 and 80 h $3,120, before discounts.
- */
-export function monthlyPriceFor(weeklyHours: number, months: SubscriptionTerm) {
-  return Math.round(weeklyHours * HOURLY_RATE_CENTS * WEEKS_PER_MONTH * (1 - TERM_DISCOUNT[months] / 100));
-}
-
-function pricesFor(weeklyHours: number): Record<SubscriptionTerm, number> {
-  return { 1: monthlyPriceFor(weeklyHours, 1), 6: monthlyPriceFor(weeklyHours, 6), 12: monthlyPriceFor(weeklyHours, 12) };
-}
-
-// TODO(content): confirm package names and inclusions before launch.
+// TODO(content): confirm package names, inclusions and prices before launch.
 export const packages: Package[] = [
   {
     id: "essentials",
@@ -63,7 +44,7 @@ export const packages: Package[] = [
       "Data entry and document prep",
       "Weekly check-in with your VA",
     ],
-    monthlyPrice: pricesFor(20),
+    monthlyPrice: { 1: 90000, 6: 85500, 12: 81000 },
     currency: "USD",
   },
   {
@@ -82,7 +63,7 @@ export const packages: Package[] = [
       "Travel, expenses and vendor coordination",
       "Up to 3 active projects",
     ],
-    monthlyPrice: pricesFor(40),
+    monthlyPrice: { 1: 160000, 6: 152000, 12: 144000 },
     currency: "USD",
     featured: true,
   },
@@ -102,7 +83,7 @@ export const packages: Package[] = [
       "Extended-hours customer coverage",
       "Monthly performance review",
     ],
-    monthlyPrice: pricesFor(80),
+    monthlyPrice: { 1: 300000, 6: 285000, 12: 270000 },
     currency: "USD",
   },
 ];
