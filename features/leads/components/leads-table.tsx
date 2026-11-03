@@ -33,8 +33,8 @@ function listColumns(hrefFor: (id: string) => string): Column<LeadSummary>[] {
   return [
     nameColumn(hrefFor),
     { key: "email", label: "Email Address", render: (lead) => clipped(lead.email) },
-    { key: "company", label: "Company", render: (lead) => (lead.companyName ? clipped(lead.companyName) : "—") },
-    { key: "closer", label: "Assigned Lead", render: (lead) => (lead.closerName ? clipped(lead.closerName) : "—") },
+    { key: "company", label: "Company", render: (lead) => (lead.companyName ? clipped(lead.companyName) : "Not set") },
+    { key: "closer", label: "Assigned Lead", render: (lead) => (lead.closerName ? clipped(lead.closerName) : "Unassigned") },
     { key: "status", label: "Status", nowrap: true, render: (lead) => <LeadStatusBadge status={lead.status} /> },
   ];
 }
@@ -42,7 +42,7 @@ function listColumns(hrefFor: (id: string) => string): Column<LeadSummary>[] {
 function summaryColumns(hrefFor: (id: string) => string): Column<LeadSummary>[] {
   return [
     nameColumn(hrefFor),
-    { key: "company", label: "Company", render: (lead) => (lead.companyName ? clipped(lead.companyName) : "—") },
+    { key: "company", label: "Company", render: (lead) => (lead.companyName ? clipped(lead.companyName) : "Not set") },
     { key: "package", label: "Package", render: (lead) => packageName(lead.packageCode) },
     { key: "status", label: "Status", nowrap: true, render: (lead) => <LeadStatusBadge status={lead.status} /> },
     { key: "received", label: "Received", render: (lead) => <span className="whitespace-nowrap text-ink-muted">{received.format(new Date(lead.createdAt))}</span> },

@@ -33,7 +33,7 @@ function OnTime({ percent, href }: { percent: number | null; href?: string }) {
         </span>
         <p className="m-0 flex-1 type-label text-ink-muted">On-time rate</p>
       </div>
-      <p className="m-0 type-stat text-ink">—</p>
+      <p className="m-0 type-stat text-ink">N/A</p>
     </>
   );
   return href ? (

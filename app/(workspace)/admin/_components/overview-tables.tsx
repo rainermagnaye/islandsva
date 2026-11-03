@@ -10,7 +10,7 @@ import { money } from "@/features/sales/contract";
 const figure = (value: string) => <span className="block text-right tabular-nums">{value}</span>;
 
 function rate(value: number | null) {
-  return value === null ? "—" : `${Math.round(value * 100)}%`;
+  return value === null ? "N/A" : `${Math.round(value * 100)}%`;
 }
 
 const packageColumns: Column<PackageSlice>[] = [

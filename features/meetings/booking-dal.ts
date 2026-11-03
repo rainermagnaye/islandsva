@@ -128,7 +128,7 @@ async function loadBookings(leadId?: string): Promise<Booking[]> {
         creatorName: "Website",
         createdBy: null,
         timeZone: zone?.value ?? null,
-        timeZoneCity: zone ? zone.label.split(" — ")[1] : null,
+        timeZoneCity: zone ? zone.city : null,
         confirmationSentAt: row.confirmation_sent_at,
         confirmationCurrent: Boolean(row.confirmation_sent_for) && Date.parse(row.confirmation_sent_for ?? "") === Date.parse(row.starts_at),
         events: history,

@@ -89,7 +89,7 @@ export function ClientProfile({
 
       {client.status === "pending" && !client.disabledAt && <OnboardingLinkCard clientId={client.id} url={packet.url} />}
       {canActivate && (
-        <Alert tone="warning" title="Payment verified — invite not sent">
+        <Alert tone="warning" title="Payment verified, invite not sent">
           Use Send activation to email {client.contactEmail} a link to set a password.
         </Alert>
       )}

@@ -60,7 +60,7 @@ export function PricingTable() {
       </Grid>
 
       <p className="m-0 max-w-(--container-prose) type-body-sm text-ink-muted">
-        Prices in US dollars, billed monthly. 6- and 12-month terms are billed monthly at the lower rate for the length of the
+        Every package is $9 an hour. Prices in US dollars, billed monthly. 6- and 12-month terms are billed monthly at the lower rate for the length of the
         term. Taxes may apply.
       </p>
     </div>

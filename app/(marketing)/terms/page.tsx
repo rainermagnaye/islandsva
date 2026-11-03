@@ -31,7 +31,7 @@ export default function TermsPage() {
 
           <h2>Using the site</h2>
           <p>
-            Don&apos;t misuse the site — for example by attempting to break its security, overload it or send spam through the
+            Don&apos;t misuse the site, for example by attempting to break its security, overload it or send spam through the
             contact form.
           </p>
 

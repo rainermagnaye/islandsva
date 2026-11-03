@@ -15,8 +15,8 @@ const columns: Column<AssignedClient>[] = [
       </a>
     ),
   },
-  { key: "timezone", label: "Time zone", render: (client) => client.timezone ?? "—" },
-  { key: "hours", label: "Hours", render: (client) => (client.hoursPerWeek ? `${client.hoursPerWeek} h/week` : "—") },
+  { key: "timezone", label: "Time zone", render: (client) => client.timezone ?? "Not set" },
+  { key: "hours", label: "Hours", render: (client) => (client.hoursPerWeek ? `${client.hoursPerWeek} h/week` : "Not set") },
   { key: "since", label: "Since", render: (client) => <span className="whitespace-nowrap text-ink-muted">{day.format(new Date(client.startedAt))}</span> },
 ];
 

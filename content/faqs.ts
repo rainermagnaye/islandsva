@@ -90,7 +90,7 @@ export const aboutFaqs: Faq[] = [
   {
     question: "Where are your virtual assistants based?",
     answer:
-      "In the Philippines. They're fluent in English, experienced with international clients, and can work your business hours — or nights, if that's when you need them.",
+      "In the Philippines. They're fluent in English, experienced with international clients, and can work your business hours, or nights if that's when you need them.",
   },
   {
     question: "How do you choose an assistant?",

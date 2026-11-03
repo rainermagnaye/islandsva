@@ -14,7 +14,7 @@ const AdminBookingDetail = lazy(() => import("@/features/meetings/components/adm
 
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
 const stamp = (iso: string) => `${when.format(new Date(iso))} UTC`;
-const EMPTY = "—";
+const EMPTY = "Not set";
 
 type Row = {
   key: string;

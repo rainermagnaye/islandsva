@@ -11,7 +11,7 @@ export type PackageField = "package" | "hoursPerWeek" | "termMonths" | "startsOn
 const HOUR_OPTIONS = packages.map((item) => ({ value: String(item.weeklyHours), label: item.hoursPerWeek }));
 const TERM_OPTIONS = terms.map((term) => ({
   value: String(term.months),
-  label: term.months === 1 ? term.label : `${term.label} — ${term.note}`,
+  label: term.months === 1 ? term.label : `${term.label} (${term.note})`,
 }));
 const TIMEZONE_OPTIONS = PACKAGE_TIMEZONES.map((zone) => ({ value: zone.value, label: zone.label }));
 

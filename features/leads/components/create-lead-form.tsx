@@ -35,7 +35,7 @@ export function CreateLeadForm({ onAdded }: { onAdded: () => void }) {
             label="Package"
             name="package"
             optional
-            options={[{ value: "", label: "Not sure yet" }, ...packages.map((item) => ({ value: item.slug, label: `${item.name} — ${item.hoursPerWeek}` }))]}
+            options={[{ value: "", label: "Not sure yet" }, ...packages.map((item) => ({ value: item.slug, label: `${item.name}, ${item.hoursPerWeek}` }))]}
             error={fieldErrors.package}
           />
           <TextField label="How can we help?" name="message" multiline rows={4} required maxLength={LEAD_LIMITS.message} error={fieldErrors.message} />

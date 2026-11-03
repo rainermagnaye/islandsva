@@ -256,17 +256,17 @@ export type LeadStatusField = "status";
 
 /** The time zones a package can be staffed in. Mirrored by the check on clients.timezone. */
 export const PACKAGE_TIMEZONES = [
-  { value: "America/Los_Angeles", label: "Pacific — Los Angeles" },
-  { value: "America/Denver", label: "Mountain — Denver" },
-  { value: "America/Chicago", label: "Central — Chicago" },
-  { value: "America/New_York", label: "Eastern — New York" },
-  { value: "Europe/London", label: "United Kingdom — London" },
-  { value: "Europe/Paris", label: "Central Europe — Paris" },
-  { value: "Asia/Dubai", label: "Gulf — Dubai" },
+  { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
+  { value: "America/Denver", label: "Mountain (Denver)" },
+  { value: "America/Chicago", label: "Central (Chicago)" },
+  { value: "America/New_York", label: "Eastern (New York)" },
+  { value: "Europe/London", label: "United Kingdom (London)" },
+  { value: "Europe/Paris", label: "Central Europe (Paris)" },
+  { value: "Asia/Dubai", label: "Gulf (Dubai)" },
   { value: "Asia/Singapore", label: "Singapore" },
-  { value: "Asia/Manila", label: "Philippines — Manila" },
-  { value: "Australia/Sydney", label: "Australia — Sydney" },
-  { value: "Pacific/Auckland", label: "New Zealand — Auckland" },
+  { value: "Asia/Manila", label: "Philippines (Manila)" },
+  { value: "Australia/Sydney", label: "Australia (Sydney)" },
+  { value: "Pacific/Auckland", label: "New Zealand (Auckland)" },
 ] as const;
 
 /** Limits for "Convert to client" — mirrored by CHECK constraints on clients. */

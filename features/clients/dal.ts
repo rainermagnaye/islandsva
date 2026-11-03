@@ -75,7 +75,7 @@ export async function listClients({
       onboardingStatus: row.onboarding_status,
       disabledAt: row.disabled_at,
       // The creator's profile is always readable by an admin; "—" covers callers who can't see it.
-      createdBy: row.creator?.full_name || row.creator?.email || "—",
+      createdBy: row.creator?.full_name || row.creator?.email || "Unknown",
       createdAt: row.created_at,
     })),
     total,
@@ -112,7 +112,7 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
     status: data.status,
     onboardingStatus: data.onboarding_status,
     createdById: data.created_by,
-    createdBy: data.creator?.full_name || data.creator?.email || "—",
+    createdBy: data.creator?.full_name || data.creator?.email || "Unknown",
     createdAt: data.created_at,
     packageCode: data.package_code,
     hoursPerWeek: data.hours_per_week,

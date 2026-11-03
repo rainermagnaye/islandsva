@@ -17,7 +17,7 @@ export const tooLong = (what: string, max: number) => `Keep ${what} under ${max}
 
 /** Trimmed, lower-cased email address (254 is the RFC 5321 maximum). */
 export function emailField(max = 254) {
-  const incomplete = "That email doesn't look complete — try name@company.com.";
+  const incomplete = "That email doesn't look complete. Try name@company.com.";
   return z
     .string({ error: "Enter your email address." })
     .trim()
@@ -35,7 +35,7 @@ const NOT_ONE_ADDRESS = /[,;<>"()[\]\\]/;
  * database checks again before any visitor email (claim_discovery_confirmation, claim_discovery_acknowledgement).
  */
 export function deliverableEmailField(max = 254) {
-  return emailField(max).refine((email) => !NOT_ONE_ADDRESS.test(email), "That email doesn't look complete — try name@company.com.");
+  return emailField(max).refine((email) => !NOT_ONE_ADDRESS.test(email), "That email doesn't look complete. Try name@company.com.");
 }
 
 export type Parsed<T, Field extends string> =

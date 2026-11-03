@@ -15,7 +15,7 @@ const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: 
 
 const stamp = (iso: string) => `${when.format(new Date(iso))} UTC`;
 
-const EMPTY = "—";
+const EMPTY = "Not set";
 
 /** A website enquiry stores no source until the form sets it. A discovery call is that signal. */
 function withWebsiteSource(lead: LeadDetail, meetings: readonly Booking[]): LeadDetail {

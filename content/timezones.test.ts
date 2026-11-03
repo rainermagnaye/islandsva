@@ -9,8 +9,8 @@ describe("country time zones", () => {
       expect(zone, name).not.toBeNull();
       expect(() => new Intl.DateTimeFormat("en-US", { timeZone: zone?.value }).format(0)).not.toThrow();
     }
-    expect(timezoneForCountry("Australia")).toEqual({ value: "Australia/Sydney", label: "Australia — Sydney" });
-    expect(timezoneForCountry("Philippines")).toEqual({ value: "Asia/Manila", label: "Philippines — Manila" });
+    expect(timezoneForCountry("Australia")).toEqual({ value: "Australia/Sydney", label: "Australia (Sydney)", city: "Sydney" });
+    expect(timezoneForCountry("Philippines")).toEqual({ value: "Asia/Manila", label: "Philippines (Manila)", city: "Manila" });
     expect(timezoneForCountry("United States")?.value).toBe("America/New_York");
     expect(timezoneForCountry("")).toBeNull();
   });

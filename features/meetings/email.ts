@@ -34,7 +34,7 @@ export function sendDiscoveryConfirmation(call: { meetingId: string; email: stri
   );
 }
 
-const IGNORE_IF_NOT_YOU = "If you didn't make this request, ignore this email — we won't contact you unless a call is confirmed.";
+const IGNORE_IF_NOT_YOU = "If you didn't make this request, ignore this email. We won't contact you unless a call is confirmed.";
 
 /**
  * The visitor's "we've received your request" email, right after the contact form. Fixed text plus the time the server
@@ -78,7 +78,7 @@ export function sendDiscoveryExpired(call: { meetingId: string; email: string; s
       text: [
         "Hello,",
         "",
-        `We're sorry — we couldn't confirm your discovery call for ${when}.`,
+        `We're sorry, we couldn't confirm your discovery call for ${when}.`,
         "",
         `Please pick another time here: ${site.url}${routes.contact}`,
         "",

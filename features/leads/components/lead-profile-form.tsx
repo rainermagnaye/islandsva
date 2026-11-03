@@ -57,7 +57,7 @@ export function LeadProfileForm({ lead }: { lead: LeadDetail }) {
               <Select compact label="Industry" name="industry" required placeholder="Choose an industry" defaultValue={lead.industry ?? ""} options={[...INDUSTRIES]} error={fieldErrors.industry} />
               <Select compact label="Lead source" name="source" optional placeholder="Choose a lead source" defaultValue={profile.source} options={withCurrent(LEAD_SOURCES, profile.source)} error={fieldErrors.source} />
               <ReadOnly label="Date created" value={stamp(lead.createdAt)} />
-              <ReadOnly label="Assigned closer" value={lead.closerName ?? "—"} />
+              <ReadOnly label="Assigned closer" value={lead.closerName ?? "Unassigned"} />
               <ReadOnly label="Last updated" value={stamp(lead.updatedAt)} />
               <Wide>
                 <TextField compact label="Discovery notes" name="message" multiline required placeholder="Enter discovery notes" maxLength={LEAD_LIMITS.message} defaultValue={lead.message} error={fieldErrors.message} />

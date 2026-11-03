@@ -4,7 +4,7 @@ import { cacheLife } from "next/cache";
 import { ImageResponse } from "next/og";
 import { site } from "@/content/site";
 
-export const alt = `${site.name} — ${site.tagline}`;
+export const alt = `${site.name}: ${site.tagline}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -49,7 +49,7 @@ export default async function OpenGraphImage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05 }}>Your business, handled while you sleep</div>
-          <div style={{ fontSize: 32, color: "#b9d3cf" }}>{`Dedicated virtual assistants — ${site.tagline.toLowerCase()}`}</div>
+          <div style={{ fontSize: 32, color: "#b9d3cf" }}>{`Dedicated virtual assistants for ${site.tagline.toLowerCase()}`}</div>
         </div>
         <div style={{ display: "flex", height: 12, width: "100%", borderRadius: 999, background: "linear-gradient(90deg, #7dd3c9, #ffb662)" }} />
       </div>

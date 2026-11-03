@@ -19,11 +19,15 @@ export default function BrandsPage() {
       <PageHeader
         eyebrow="Brands"
         title="Trusted behind the scenes"
-        lead="Our assistants work quietly inside growing businesses — answering customers, running calendars and keeping operations moving."
+        lead="Our assistants work quietly inside growing businesses, answering customers, running calendars and keeping operations moving."
       />
 
       {brands.length > 0 && (
-        <Section id="clients" title="Brands we support">
+        <Section
+          id="clients"
+          title="Where our VAs got their start"
+          lead={<span className="block type-caption">Our team&apos;s previous experience. Company names are listed for reference only.</span>}
+        >
           <ul className="reveal-stagger m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3">
             {brands.map((brand) => (
               <Card as="li" lift key={brand.id} className="reveal grid content-center justify-items-center gap-4 py-8 text-center">

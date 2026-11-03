@@ -65,12 +65,42 @@ assign(["Bangladesh"], "BDT", COUNTRY_CURRENCY);
 assign(["Sri Lanka"], "LKR", COUNTRY_CURRENCY);
 assign(["Nepal"], "NPR", COUNTRY_CURRENCY);
 
-/** ISO currency for a country name. Unknown countries stay on US dollars. */
+/**
+ * Units of each currency per 1 US dollar. Fixed, approximate rates (moneyexchangerate.org, 3 November 2026); update them
+ * now and then. Packages are priced in US dollars, so a converted price is always shown next to the USD amount.
+ */
+export const RATES_AS_OF = "2026-11-03";
+const USD_RATES: Record<string, number> = {
+  USD: 1, EUR: 0.8938, GBP: 0.7459, AUD: 1.4289, NZD: 1.78, CAD: 1.3985, CHF: 0.819, JPY: 157.91, CNY: 6.6479,
+  HKD: 7.8464, TWD: 32.607, SGD: 1.2791, INR: 94.684, PHP: 63.306, KRW: 1345.57, THB: 33.72, MYR: 4.0721,
+  IDR: 18130.7, VND: 25773.2, AED: 3.6729, SAR: 3.7644, QAR: 3.6539, KWD: 0.3114, BHD: 0.3773, OMR: 0.3845,
+  ZAR: 16.615, NGN: 1340.93, KES: 129.95, GHS: 11.653, EGP: 55.349, MAD: 9.8284, BRL: 5.4372, MXN: 18.584,
+  ARS: 1545.22, CLP: 980.39, COP: 3199.39, PEN: 3.467, SEK: 9.7866, NOK: 9.317, DKK: 6.6796, PLN: 3.947,
+  CZK: 21.75, HUF: 325.66, RON: 4.7697, TRY: 49.989, ILS: 3.1405, PKR: 276.5, BDT: 124.34, LKR: 332.31, NPR: 151.7,
+};
+
+/** ISO currency for a country name. Unknown countries, and currencies without a rate, stay on US dollars. */
 export function currencyForCountry(country: string) {
-  return COUNTRY_CURRENCY[country.trim()] ?? "USD";
+  const currency = COUNTRY_CURRENCY[country.trim()];
+  return currency && USD_RATES[currency] ? currency : "USD";
 }
 
-/** The catalogue amount, labelled with the ISO code of the chosen country's currency. */
+/** A US cent amount in another currency's minor units (x100), at the fixed rate above. */
+export function convertFromUsd(usdCents: number, currency: string) {
+  return Math.round(usdCents * (USD_RATES[currency] ?? 1));
+}
+
+/** The price in the country's currency, e.g. "PHP 98,757". US dollars where there is no rate. */
+export function formatLocalPrice(usdCents: number, country: string) {
+  const currency = currencyForCountry(country);
+  return formatPrice(convertFromUsd(usdCents, currency), currency, "code");
+}
+
+/**
+ * A catalogue price for a country: converted, with the US dollar amount it comes from, e.g. "PHP 98,757 (USD 1,560)".
+ * Just "USD 1,560" for countries that use US dollars.
+ */
 export function formatPackagePrice(usdCents: number, country: string) {
-  return formatPrice(usdCents, currencyForCountry(country), "code");
+  const usd = formatPrice(usdCents, "USD", "code");
+  return currencyForCountry(country) === "USD" ? usd : `${formatLocalPrice(usdCents, country)} (${usd})`;
 }
