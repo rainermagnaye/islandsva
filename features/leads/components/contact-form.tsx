@@ -26,16 +26,8 @@ const DiscoveryTimeStep = dynamic(() => import("./discovery-time-step").then((mo
   loading: () => <Skeleton variant="rect" height={280} />,
 });
 
-/** Month to month package prices in the chosen country's currency. */
-type LocalPrices = { currency: string; bySlug: Record<string, string> };
-
-function priceHint(prices: LocalPrices | null) {
-  if (!prices) return "Choose your country to see prices in your currency.";
-  const terms = "Save 5% on a 6 month term or 10% on 12 months.";
-  return prices.currency === "USD"
-    ? `Month to month prices at $9 an hour. ${terms}`
-    : `Month to month prices in ${prices.currency} at an approximate exchange rate; packages are billed at $9 (USD) an hour. ${terms}`;
-}
+/** Package prices in the chosen country's currency (content/currencies.ts, loaded on choice). */
+type LocalPrices = { bySlug: Record<string, string>; hint: string };
 
 const STEPS = [{ label: "Your details" }, { label: "Pick a time" }] as const;
 
@@ -82,15 +74,12 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
   // Loaded on choice, not with the page, so the zone and rate tables stay off the first-load script.
   async function chooseCountry(value: string) {
     setCountry(value);
-    const [{ timezoneForCountry }, { currencyForCountry, formatPackagePrice }] = await Promise.all([
+    const [{ timezoneForCountry }, { localPackagePrices }] = await Promise.all([
       import("@/content/timezones"),
       import("@/content/currencies"),
     ]);
     setZone(timezoneForCountry(value)?.value ?? null);
-    setPrices({
-      currency: currencyForCountry(value),
-      bySlug: Object.fromEntries(packages.map((p) => [p.slug, formatPackagePrice(p.monthlyPrice[1], value)])),
-    });
+    setPrices(localPackagePrices(value));
   }
 
   function next() {
@@ -180,7 +169,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
               name="package"
               optional
               defaultValue={defaultPackage}
-              hint={priceHint(prices)}
+              hint={prices?.hint ?? "Choose your country to see prices in your currency."}
               options={[
                 { value: "", label: "Not sure yet" },
                 ...packages.map((p) => ({
