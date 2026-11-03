@@ -91,12 +91,10 @@ export default function PrivacyPage() {
           </p>
 
           <h2>Who processes your data</h2>
-          <ul>
-            <li>Vercel (website and portal hosting; our servers run in Singapore)</li>
-            <li>Supabase (database, sign-in and file storage, hosted in Singapore)</li>
-            <li>Resend (email delivery)</li>
-            <li>Cloudflare Turnstile (spam protection on the contact form)</li>
-          </ul>
+          <p>
+            We use trusted service providers for hosting, sign-in, email delivery and spam protection. Your data may be
+            stored and processed outside your country.
+          </p>
           {/* TODO(legal): international transfers (data is stored in Singapore; clients may be elsewhere). */}
 
           <h2>Who can see it</h2>
