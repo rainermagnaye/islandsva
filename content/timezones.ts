@@ -196,14 +196,14 @@ const ZONES: Record<string, readonly [string, string]> = {
   Zimbabwe: ["Africa/Harare", "Harare"],
 };
 
-export type CountryTimeZone = { value: string; label: string };
+export type CountryTimeZone = { value: string; label: string; city: string };
 
 /** The time zone for a country name, or null when the country is empty or unknown. */
 export function timezoneForCountry(country: string): CountryTimeZone | null {
   const name = country.trim();
   const zone = ZONES[name];
   if (!zone) return null;
-  return { value: zone[0], label: `${name} — ${zone[1]}` };
+  return { value: zone[0], label: `${name} (${zone[1]})`, city: zone[1] };
 }
 
 const callTime = (startsAt: string, timeZone: string) =>
@@ -217,5 +217,5 @@ export function callTimeLines(country: string | null, startsAt: string): string[
   const pht = `${callTime(startsAt, "Asia/Manila")} PHT`;
   const zone = country ? timezoneForCountry(country) : null;
   if (!zone || zone.value === "Asia/Manila") return [pht];
-  return [`${callTime(startsAt, zone.value)} ${zone.label.split(" — ")[1]}`, pht];
+  return [`${callTime(startsAt, zone.value)} ${zone.city}`, pht];
 }

@@ -24,13 +24,13 @@ const COLUMNS: Column<UserSummary>[] = [
     label: "Name",
     render: (user) => (
       <Link href={adminUserHref(user.id)} className="row-link" title={user.fullName || undefined}>
-        {user.fullName || "—"}
+        {user.fullName || "Not set"}
       </Link>
     ),
   },
   { key: "email", label: "Email Address", render: (user) => clipped(user.email) },
-  { key: "phone", label: "Phone Number", render: (user) => (user.phone ? clipped(user.phone) : "—") },
-  { key: "roles", label: "Roles", render: (user) => user.roles.map((role) => ROLE_LABELS[role]).join(", ") || "—" },
+  { key: "phone", label: "Phone Number", render: (user) => (user.phone ? clipped(user.phone) : "Not set") },
+  { key: "roles", label: "Roles", render: (user) => user.roles.map((role) => ROLE_LABELS[role]).join(", ") || "None" },
   {
     key: "status",
     label: "Status",

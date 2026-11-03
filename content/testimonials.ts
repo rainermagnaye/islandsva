@@ -10,7 +10,31 @@ export type Testimonial = {
 
 // Real client quotes only, with the client's permission.
 // Example: { id: "maria-acme", quote: "…", author: "Maria Santos", role: "Founder", company: "Acme Co." }
-const realTestimonials: Testimonial[] = [];
+const realTestimonials: Testimonial[] = [
+  {
+    id: "kelsey-nectar",
+    quote:
+      "She had an intuitive ability to let a little fun shine through in her responses perfectly aligning with our brand's voice and making customers feel truly valued.",
+    author: "Kelsey Stansbury",
+    role: "Customer Relations Manager",
+    company: "Nectar Life",
+  },
+  {
+    id: "hope-digifox",
+    quote:
+      "Helps us service our customers during our normal out of office hours and sometimes over the weekend as well. She does a fantastic job taking care of our customers and supporting our team.",
+    author: "Hope Anderson (Szymanski)",
+    role: "Head of Ops",
+    company: "Digifox",
+  },
+  {
+    id: "alexander-crossfi",
+    quote: "Support is one of the most valuable assets of our company.",
+    author: "Alexander Mamasidikov",
+    role: "Founder",
+    company: "CrossFi",
+  },
+];
 
 // TODO(content): replace with real quotes. Shown, with a Sample badge, until then — including on the
 // deployed site — so the page is not an empty state. A real quote replaces this whole list.

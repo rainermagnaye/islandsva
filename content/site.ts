@@ -4,7 +4,7 @@ export const site = {
   name: "Islands VA",
   tagline: "Support, day and night",
   description:
-    "Dedicated virtual assistants from the Philippines who handle your inbox, calendar, customer replies and admin — day and night.",
+    "Dedicated virtual assistants from the Philippines who handle your inbox, calendar, customer replies and admin, day and night.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://islandsva.com",
   // TODO(content): public contact email and location shown on the Contact page and footer.
   email: undefined as string | undefined,

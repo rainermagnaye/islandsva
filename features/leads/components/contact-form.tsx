@@ -26,6 +26,9 @@ const DiscoveryTimeStep = dynamic(() => import("./discovery-time-step").then((mo
   loading: () => <Skeleton variant="rect" height={280} />,
 });
 
+/** Package prices in the chosen country's currency (content/currencies.ts, loaded on choice). */
+type LocalPrices = { bySlug: Record<string, string>; hint: string };
+
 const STEPS = [{ label: "Your details" }, { label: "Pick a time" }] as const;
 
 /** Fields on step 1: a server error on one of them sends the visitor back there. */
@@ -62,16 +65,21 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
   const [step, setStep] = useState<1 | 2>(1);
   const [country, setCountry] = useState("");
   const [zone, setZone] = useState<string | null>(null);
+  const [prices, setPrices] = useState<LocalPrices | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [noTimes, setNoTimes] = useState(false);
   const [picked, setPicked] = useState(false);
   const [passed, setPassed] = useState(false);
 
-  // Loaded on choice, not with the page, so the zone table stays off the first-load script.
+  // Loaded on choice, not with the page, so the zone and rate tables stay off the first-load script.
   async function chooseCountry(value: string) {
     setCountry(value);
-    const { timezoneForCountry } = await import("@/content/timezones");
+    const [{ timezoneForCountry }, { localPackagePrices }] = await Promise.all([
+      import("@/content/timezones"),
+      import("@/content/currencies"),
+    ]);
     setZone(timezoneForCountry(value)?.value ?? null);
+    setPrices(localPackagePrices(value));
   }
 
   function next() {
@@ -123,7 +131,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
         }
       }}
       success={
-        <FormSuccess title="Got it — thank you">
+        <FormSuccess title="Got it, thank you">
           {noTimes
             ? "We've received your details. We'll email you to set up a time for your discovery call."
             : "We've received your discovery call request. It shows as requested until someone on the team confirms the time by email."}
@@ -161,7 +169,14 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
               name="package"
               optional
               defaultValue={defaultPackage}
-              options={[{ value: "", label: "Not sure yet" }, ...packages.map((p) => ({ value: p.slug, label: `${p.name} — ${p.hoursPerWeek}` }))]}
+              hint={prices?.hint ?? "Choose your country to see prices in your currency."}
+              options={[
+                { value: "", label: "Not sure yet" },
+                ...packages.map((p) => ({
+                  value: p.slug,
+                  label: prices ? `${p.name}, ${p.hoursPerWeek}, ${prices.bySlug[p.slug]} a month` : `${p.name}, ${p.hoursPerWeek}`,
+                })),
+              ]}
               error={fieldErrors.package}
             />
             <TextField

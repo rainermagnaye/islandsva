@@ -36,7 +36,7 @@ function columns(now: Date): Column<AssignedClient>[] {
       label: "Their time",
       width: "18%",
       render: (client) => {
-        if (!client.timezone) return "—";
+        if (!client.timezone) return "Not set";
         const zone = safeTimeZone(client.timezone);
         return <CellTitle title={clockLabel(minutesOf(wallClockIn(now.toISOString(), zone)))} subtitle={zoneCity(zone)} />;
       },

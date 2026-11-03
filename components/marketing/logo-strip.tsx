@@ -6,7 +6,7 @@ export function LogoStrip({ brands }: { brands: readonly Brand[] }) {
   const loop = [...brands, ...brands];
 
   return (
-    <section aria-label="Brands we've worked with" className="brand-marquee-wrap overflow-hidden py-8 motion-reduce:overflow-visible md:py-10">
+    <section aria-label="Where our VAs got their start" className="brand-marquee-wrap overflow-hidden py-8 motion-reduce:overflow-visible md:py-10">
       <ul className="brand-marquee m-0 flex w-max list-none items-center gap-12 px-6 motion-reduce:w-auto motion-reduce:flex-wrap motion-reduce:justify-center">
         {loop.map((brand, index) => {
           const clone = index >= brands.length;
@@ -29,6 +29,9 @@ export function LogoStrip({ brands }: { brands: readonly Brand[] }) {
           );
         })}
       </ul>
+      <p className="m-0 mt-6 px-6 text-center type-caption text-ink-muted">
+        Where our VAs got their start: our team&apos;s previous experience. Company names are listed for reference only.
+      </p>
     </section>
   );
 }

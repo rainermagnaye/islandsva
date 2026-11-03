@@ -67,5 +67,5 @@ export function clientAssistantRows(input: {
 }
 
 export function packageBalanceLabel(hoursPerWeek: number | null) {
-  return hoursPerWeek ? `${hoursPerWeek} h / week` : "—";
+  return hoursPerWeek ? `${hoursPerWeek} h / week` : "Not set";
 }

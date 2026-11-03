@@ -17,7 +17,7 @@ const time = new Intl.DateTimeFormat("en-US", { timeStyle: "short", timeZone: BO
 function names(booking: Booking, kind: "client" | "staff") {
   const invited = booking.guests.filter((guest) => guest.kind === kind).map((guest) => guest.name);
   if (invited.length > 0) return invited.join(", ");
-  return (kind === "client" ? booking.clientName : booking.staffName) ?? "—";
+  return (kind === "client" ? booking.clientName : booking.staffName) ?? "Not set";
 }
 
 function when(booking: Booking) {

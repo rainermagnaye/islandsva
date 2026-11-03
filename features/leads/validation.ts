@@ -93,7 +93,7 @@ export const parseLeadStatus = (input: unknown) => parseWith(statusSchema, input
 
 // Admin: create a lead by hand -----------------------------------------------------------------------
 
-const incompleteEmail = "That email doesn't look complete — try name@company.com.";
+const incompleteEmail = "That email doesn't look complete. Try name@company.com.";
 
 const adminLeadSchema = z
   .strictObject({

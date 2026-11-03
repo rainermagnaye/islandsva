@@ -25,7 +25,7 @@ export function sendDemoRequestEmail(demo: { vaEmail: string; vaName: string; co
       "Confirm or decline it in your dashboard. If it isn't answered before it starts, it expires.",
       new URL(appRoutes.va, site.url).toString(),
       "",
-      `— The ${site.name} team`,
+      `The ${site.name} team`,
     ].join("\n"),
   });
 }
@@ -40,7 +40,7 @@ export function sendDemoCancelledEmail(demo: { vaEmail: string; vaName: string; 
       "",
       `${demo.companyName} cancelled their demo call on ${formatInZone(demo.startsAt, VA_TIME_ZONE)} (your time). The slot is open again.`,
       "",
-      `— The ${site.name} team`,
+      `The ${site.name} team`,
     ].join("\n"),
   });
 }
@@ -74,7 +74,7 @@ export function sendDemoDecisionEmail(demo: {
           ]),
       dashboard,
       "",
-      `— The ${site.name} team`,
+      `The ${site.name} team`,
     ].join("\n"),
   });
 }

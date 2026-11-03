@@ -38,6 +38,6 @@ describe("clientAssistantRows", () => {
 describe("packageBalanceLabel", () => {
   it("shows contracted weekly hours until timesheets exist", () => {
     expect(packageBalanceLabel(20)).toBe("20 h / week");
-    expect(packageBalanceLabel(null)).toBe("—");
+    expect(packageBalanceLabel(null)).toBe("Not set");
   });
 });

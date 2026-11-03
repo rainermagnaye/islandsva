@@ -14,11 +14,11 @@ import { cx } from "@/lib/cx";
 
 export const metadata: Metadata = {
   title: "Packages",
-  description: "Essentials, Executive and Day and night virtual assistant packages — what each includes and who it's for.",
+  description: "Essentials, Executive and Day and night virtual assistant packages: what each includes and who it's for.",
 };
 
 const included = [
-  { icon: "users" as const, text: "A dedicated, vetted VA — not a shared pool" },
+  { icon: "users" as const, text: "A dedicated, vetted VA, not a shared pool" },
   { icon: "shield" as const, text: "Access through accounts you control" },
   { icon: "message" as const, text: "Regular check-ins and a team behind your VA" },
   { icon: "sliders" as const, text: "Change packages as your needs change" },

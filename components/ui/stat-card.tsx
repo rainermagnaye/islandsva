@@ -33,7 +33,7 @@ type StatCardProps = {
  */
 export function StatCard({ label, value, unit, icon, caption, href, delta, help, trend, trendLabels }: StatCardProps) {
   const good = delta ? (delta.good ?? delta.direction === "up") : false;
-  const shown = value === null ? "—" : count.format(value);
+  const shown = value === null ? "N/A" : count.format(value);
   const body = (
     <>
       <div className="flex items-center gap-2">

@@ -34,7 +34,7 @@ export function RouteError({ error, retry, backHref, backLabel }: RouteErrorProp
         </>
       }
     >
-      <p>This page didn&apos;t load properly. Please try again — if it keeps happening, contact us and we&apos;ll look into it.</p>
+      <p>This page didn&apos;t load properly. Please try again. If it keeps happening, contact us and we&apos;ll look into it.</p>
       {error.digest && <p className="type-body-sm">Reference: {error.digest}</p>}
     </StatusPanel>
   );

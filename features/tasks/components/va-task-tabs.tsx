@@ -65,7 +65,7 @@ const columns: Column<VaTaskRow>[] = [
       </span>
     ),
   },
-  { key: "completed", label: "Completed", nowrap: true, render: (task) => task.completed ?? <span className="text-ink-muted">—</span> },
+  { key: "completed", label: "Completed", nowrap: true, render: (task) => task.completed ?? <span className="text-ink-muted">Not yet</span> },
 ];
 
 const matches = (task: VaTaskRow, filter: TaskFilter | undefined) =>

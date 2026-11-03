@@ -10,12 +10,12 @@ import { aboutFaqs } from "@/content/faqs";
 
 export const metadata: Metadata = {
   title: "About",
-  description: "Islands VA connects growing businesses with dedicated virtual assistants from the Philippines — support, day and night.",
+  description: "Islands VA connects growing businesses with dedicated virtual assistants from the Philippines. Support, day and night.",
 };
 
 const values = [
   { icon: "users" as const, title: "People first", body: "We hire assistants for skill and character, and support them so they stay and grow with your business." },
-  { icon: "shield" as const, title: "Trust by default", body: "Clear access rules, accounts you control and honest updates — your business is safe in our hands." },
+  { icon: "shield" as const, title: "Trust by default", body: "Clear access rules, accounts you control and honest updates. Your business is safe in our hands." },
   { icon: "clock" as const, title: "Always on", body: "Day shift, night shift or both. Continuous support is the promise in our name." },
   { icon: "check" as const, title: "Quietly excellent", body: "The best assistance is the kind you stop noticing. Things simply get done." },
 ];
@@ -34,7 +34,7 @@ export default function AboutPage() {
       <PageHeader
         eyebrow="About"
         title="Support, day and night"
-        lead="Islands VA connects growing businesses with dedicated virtual assistants from the Philippines — people who learn how you work and keep things running while you focus on what matters."
+        lead="Islands VA connects growing businesses with dedicated virtual assistants from the Philippines: people who learn how you work and keep things running while you focus on what matters."
       />
 
       <Section id="story" eyebrow="Our story" title="Why we started Islands VA">
@@ -44,7 +44,7 @@ export default function AboutPage() {
             is home to some of the most capable, dedicated assistants in the world.
           </p>
           <p className="m-0">
-            We built Islands VA to bring the two together — properly. We find and vet great assistants, match them with the
+            We built Islands VA to bring the two together, properly. We find and vet great assistants, match them with the
             right clients and stay involved, so every partnership works long after the first week.
           </p>
         </div>

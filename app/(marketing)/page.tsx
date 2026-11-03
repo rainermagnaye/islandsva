@@ -18,7 +18,7 @@ import { services, steps } from "@/content/services";
 import { site } from "@/content/site";
 import { testimonials } from "@/content/testimonials";
 
-const highlights = ["Vetted assistants from the Philippines", "Day, night or both", "Month to month — no lock-in"];
+const highlights = ["Vetted assistants from the Philippines", "Day, night or both", "Month to month, no lock-in"];
 
 export default function HomePage() {
   return (
@@ -28,7 +28,7 @@ export default function HomePage() {
           <Hero
             eyebrow={site.tagline}
             title="Your business, handled while you sleep"
-            lead="A dedicated virtual assistant who learns how you work — then takes your inbox, calendar, customer replies and admin off your plate. Around the clock, if you need it."
+            lead="A dedicated virtual assistant who learns how you work, then takes your inbox, calendar, customer replies and admin off your plate. Around the clock, if you need it."
             primary={site.cta}
             secondary={{ label: "See packages", href: routes.packages }}
             proof={highlights.join(" · ")}
