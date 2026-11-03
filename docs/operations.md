@@ -109,7 +109,7 @@ Reset or invite emails: "We couldn't send the reset email" is Supabase answering
 How they work: `docs/technical-spec.md` → Visitor emails. Before the acknowledgement goes live (after applying `20261102090000_discovery_acknowledgement` and `20261102093000_discovery_expiry`), a person:
 
 1. **Resend:** verifies SPF, DKIM and DMARC for the sending domain; moves to Pro ($20/month, no daily cap) or keeps the free tier with the 40-a-day visitor cap well under its 100; watches bounces and complaints.
-2. **Vercel Firewall:** rate-limits `POST /api/v1/leads` (e.g. 5 per 10 minutes per IP) and `GET /api/v1/discovery-slots`; `/api/v1/internal/*` is not under that rule.
+2. **Vercel Firewall:** rate-limits `POST /api/v1/leads` (e.g. 5 per 10 minutes per IP); `/api/v1/internal/*` is not under that rule.
 3. **Secret:** generates one random secret for the expiry endpoint; adds it to Vercel as a Sensitive env var for **Production only** (rebuild to apply) and to Supabase Vault.
 4. **Supabase:** enables `pg_cron` and `pg_net` (Database → Extensions); in Vault adds `discovery_expiry_url` = `https://<production domain>/api/v1/internal/discovery-expiry` (**production URL only** — staging shares the database and never sends expiry emails) and `discovery_expiry_secret` = the secret from step 3; then, in the SQL editor:
    ```sql

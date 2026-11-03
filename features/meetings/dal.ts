@@ -54,7 +54,7 @@ const REFUSAL: Record<string, string> = {
   IVA38: "Choose a start time that hasn't passed yet.",
   IVA46: "Choose a client from this agency.",
   IVA14: "Only an admin or a lead gen from this agency can change this call.",
-  IVA22: "Choose a time on the hour or half hour, from now through the next 14 days.",
+  IVA22: "Choose a time on the hour or half hour, from now through the next 90 days.",
   IVA23: "This call can't be changed now. Refresh the page.",
   "23505": "That time was just taken. Choose another.",
   "42501": "You need to be signed in as an admin to change a meeting.",

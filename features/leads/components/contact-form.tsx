@@ -66,8 +66,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
   const [country, setCountry] = useState("");
   const [zone, setZone] = useState<string | null>(null);
   const [prices, setPrices] = useState<LocalPrices | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [noTimes, setNoTimes] = useState(false);
+  const [timeKey, setTimeKey] = useState(0);
   const [picked, setPicked] = useState(false);
   const [passed, setPassed] = useState(false);
 
@@ -104,14 +103,9 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
   const handleTurnstileRender = useCallback((id: string | null) => {
     turnstileId.current = id;
   }, []);
-  const handleLoaded = useCallback((count: number) => setNoTimes(count === 0), []);
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-    setPicked(false);
-  }, []);
 
-  // Send stays off until what step 2 needs is there: a time (when any are open) and a passed Turnstile check.
-  const missing = [!noTimes && !picked && "pick a time", TURNSTILE_SITE_KEY && !passed && "finish the security check"].filter(Boolean);
+  // Send stays off until what step 2 needs is there: a time and a passed Turnstile check.
+  const missing = [!picked && "pick a time", TURNSTILE_SITE_KEY && !passed && "finish the security check"].filter(Boolean);
 
   return (
     <Form<LeadField>
@@ -126,15 +120,14 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
           focusError.current = true;
           setStep(1);
         } else if (errors.startsAt) {
-          // The picked time was taken or closed meanwhile: show what is open now.
-          reload();
+          // Someone asked for that time first, or it is now too soon: clear the pick so the visitor chooses again.
+          setTimeKey((key) => key + 1);
+          setPicked(false);
         }
       }}
       success={
         <FormSuccess title="Got it, thank you">
-          {noTimes
-            ? "We've received your details. We'll email you to set up a time for your discovery call."
-            : "We've received your discovery call request. It shows as requested until someone on the team confirms the time by email."}
+          We&apos;ve received your discovery call request. It shows as requested until someone on the team confirms the time by email.
         </FormSuccess>
       }
       className={`${cardSurface} p-6 md:p-8`}
@@ -209,10 +202,8 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
                 Pick a time for your 30-minute call
               </h2>
               <DiscoveryTimeStep
+                key={timeKey}
                 timeZone={zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone}
-                reloadKey={reloadKey}
-                onRetry={reload}
-                onLoaded={handleLoaded}
                 onPickedChange={setPicked}
                 error={fieldErrors.startsAt}
               />
@@ -224,7 +215,7 @@ export function ContactForm({ defaultPackage = "" }: { defaultPackage?: string }
                   Back
                 </Button>
                 <Button type="submit" size="lg" loading={pending} disabled={missing.length > 0} aria-describedby={missing.length > 0 ? "contact-missing" : undefined}>
-                  {pending ? "Sending" : noTimes ? "Send my details" : "Request my discovery call"}
+                  {pending ? "Sending" : "Request my discovery call"}
                 </Button>
               </div>
               {missing.length > 0 && (

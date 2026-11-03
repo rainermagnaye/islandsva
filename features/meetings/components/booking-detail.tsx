@@ -17,7 +17,7 @@ import { TextField } from "@/components/ui/text-field";
 import { meetingFileHref } from "@/content/routes";
 import type { SubmitResult } from "@/types/form";
 import { BOOKING_ATTACHMENT_ACCEPT, acceptBookingAttachment } from "../attachment";
-import { BOOKING_TIME_ZONE, type Booking, type BookingField, type BookingNoteField, type ConfirmResult } from "../contract";
+import { BOOKING_TIME_ZONE, DISCOVERY_WINDOW_DAYS, type Booking, type BookingField, type BookingNoteField, type ConfirmResult } from "../contract";
 import { NoteForm } from "./booking-note-form";
 import { at, useStarted, clocks, guestNames, Field, StatusField, WhenFields } from "./booking-detail-parts";
 
@@ -79,7 +79,7 @@ export function BookingDetail({ booking, canManage, actions, banner, description
 
   function openReschedule() {
     const min = todayIn(BOOKING_TIME_ZONE);
-    setDates({ min, max: addDays(min, 14) });
+    setDates({ min, max: addDays(min, DISCOVERY_WINDOW_DAYS) });
     setRescheduling(true);
   }
 

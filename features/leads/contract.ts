@@ -32,7 +32,7 @@ export type LeadPayload = {
   country: string;
   package: string;
   message: string;
-  /** The picked slot as a UTC instant from GET /api/v1/discovery-slots; "" only when none were open. */
+  /** The chosen start as a UTC instant: a half hour in the visitor's zone, 12 hours to 90 days ahead. */
   startsAt: string;
   /** Honeypot — people leave it empty. */
   website: string;
@@ -47,9 +47,6 @@ export type LeadEditField = LeadField | keyof LeadProfileDetails;
 
 /** `data` of a successful POST /api/v1/leads. Nothing about the stored lead is exposed. */
 export type LeadCreated = { ok: true };
-
-/** `data` of GET /api/v1/discovery-slots: the open discovery-call starts, as UTC instants in order. */
-export type DiscoverySlots = { slots: string[] };
 
 // Admin system --------------------------------------------------------------------------------------------
 

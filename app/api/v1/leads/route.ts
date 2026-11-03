@@ -10,8 +10,7 @@ import { hashIp } from "@/lib/api/ip-hash";
 import { ok } from "@/lib/api/response";
 import { verifyTurnstile } from "@/lib/api/turnstile";
 
-// Contact form submissions: an enquiry with a picked discovery-call slot, or a plain enquiry while none is
-// open. Rate limiting runs before this (Vercel Firewall rule on /api/v1/leads).
+// Contact form submissions: an enquiry with the discovery-call time the visitor chose. Rate limiting runs before this (Vercel Firewall rule on /api/v1/leads).
 const options = {
   maxBytes: 10_000,
   unavailableMessage: "We couldn't send your message just now. Please try again in a moment.",
@@ -45,8 +44,8 @@ export const POST = createHandler(options, async ({ req, body, ip }) => {
 
   // Email runs after the response, so the visitor never waits on (or sees) a mail outage.
   after(async () => {
-    await notifyNewLead(id, parsed.value, parsed.startsAt ?? undefined);
-    if (parsed.startsAt) await sendAcknowledgement(id);
+    await notifyNewLead(id, parsed.value, parsed.startsAt);
+    await sendAcknowledgement(id);
   });
 
   return ok<LeadCreated>({ ok: true }, 201);

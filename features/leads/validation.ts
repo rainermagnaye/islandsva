@@ -51,11 +51,11 @@ const leadShape = {
     .min(1, "Tell us a little about what you need.")
     .max(LEAD_LIMITS.message, tooLong("your message", LEAD_LIMITS.message))
     .regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, tooLong("your message", LEAD_LIMITS.message)),
-  // "" is a plain enquiry, which the service accepts only while no discovery-call time is open.
   startsAt: z
     .string({ error: "Choose a time for your call." })
     .trim()
-    .refine((value) => value === "" || discoveryInstant(value) !== null, "Choose a time from the list."),
+    .min(1, "Choose a time for your call.")
+    .refine((value) => discoveryInstant(value) !== null, "Choose a time at least 12 hours ahead, within the next 90 days."),
   website: z.string().trim().default(""),
   turnstileToken: z.string().trim().max(4096).default(""),
 } satisfies Record<keyof LeadPayload, z.ZodType>;
@@ -64,7 +64,8 @@ const leadShape = {
 // route needs. Empty optional strings become null so the DB stores NULL, not "".
 const leadSchema = z.strictObject(leadShape).transform(({ website, turnstileToken, package: packageSlug, startsAt, ...rest }) => ({
   value: { ...rest, packageSlug: packageSlug || null },
-  startsAt: startsAt === "" ? null : discoveryInstant(startsAt),
+  // The refine above already accepted it, so the fallback never applies.
+  startsAt: discoveryInstant(startsAt) ?? startsAt,
   isBot: website !== "",
   turnstileToken: turnstileToken || null,
 }));

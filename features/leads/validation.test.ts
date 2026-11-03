@@ -5,7 +5,7 @@ import { parseConvert, parseConvertNoted } from "./convert-validation";
 
 const DAY = 24 * 60 * 60 * 1000;
 const HALF_HOUR = 30 * 60 * 1000;
-// A slot as GET /api/v1/discovery-slots sends it: a UTC instant on a half hour, three days ahead.
+// A start as the contact form posts it: a UTC instant on a half hour, three days ahead.
 const slot = new Date(Math.floor((Date.now() + 3 * DAY) / HALF_HOUR) * HALF_HOUR).toISOString();
 
 const valid = {
@@ -46,13 +46,20 @@ describe("parseLead", () => {
     expect(parseLead({ ...valid, startsAt: manila })).toMatchObject({ ok: true, startsAt: slot });
   });
 
-  it("takes no slot as a plain enquiry (the service decides whether one is required)", () => {
-    expect(parseLead({ ...valid, startsAt: "" })).toMatchObject({ ok: true, startsAt: null });
+  it("requires a time", () => {
+    expect(parseLead({ ...valid, startsAt: "" })).toMatchObject({ ok: false, fieldErrors: { startsAt: "Choose a time for your call." } });
   });
 
-  it("refuses a slot that isn't an instant inside the next 14 days", () => {
-    for (const startsAt of ["tomorrow", "2026-11-03T09:00", new Date(Date.now() - HALF_HOUR).toISOString(), new Date(Date.now() + 15 * DAY).toISOString()]) {
-      expect(parseLead({ ...valid, startsAt })).toMatchObject({ ok: false, fieldErrors: { startsAt: "Choose a time from the list." } });
+  it("accepts a quarter-hour start, as a half hour in a zone like Nepal's (UTC+5:45) is", () => {
+    const quarter = new Date(Date.parse(slot) + 15 * 60 * 1000).toISOString();
+    expect(parseLead({ ...valid, startsAt: quarter })).toMatchObject({ ok: true, startsAt: quarter });
+  });
+
+  it("refuses a time that isn't a quarter hour from 12 hours to 90 days ahead", () => {
+    const soon = new Date(Math.ceil((Date.now() + 6 * 60 * 60 * 1000) / HALF_HOUR) * HALF_HOUR).toISOString();
+    const odd = new Date(Date.parse(slot) + 10 * 60 * 1000).toISOString();
+    for (const startsAt of ["tomorrow", "2026-11-03T09:00", soon, odd, new Date(Date.now() - HALF_HOUR).toISOString(), new Date(Date.now() + 91 * DAY).toISOString()]) {
+      expect(parseLead({ ...valid, startsAt })).toMatchObject({ ok: false, fieldErrors: { startsAt: "Choose a time at least 12 hours ahead, within the next 90 days." } });
     }
     expect(parseLead({ ...valid, startsAt: 5 })).toMatchObject({ ok: false, fieldErrors: { startsAt: expect.any(String) } });
   });

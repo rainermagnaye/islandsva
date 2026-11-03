@@ -165,28 +165,39 @@ export function manilaToIso(date: string, time: string) {
   return new Date(`${date}T${time}:00${MANILA_OFFSET}`).toISOString();
 }
 
-const DISCOVERY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+/** How far ahead a discovery call can be booked or moved. Mirrored by submit_discovery_request and reschedule_discovery_booking. */
+export const DISCOVERY_WINDOW_DAYS = 90;
+const DISCOVERY_WINDOW_MS = DISCOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-/** A discovery call is 30 minutes, on the hour or half hour in `timeZone`, from now through 14 days. */
+/** A discovery call is 30 minutes, on the hour or half hour in `timeZone`, from now through 90 days. */
 export function discoveryStart(date: string, time: string, now = Date.now(), timeZone = BOOKING_TIME_ZONE): { ok: true; startsAt: string } | { ok: false; message: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, message: "Choose a date." };
   if (!/^([01]\d|2[0-3]):(00|30)$/.test(time)) return { ok: false, message: "Choose an hour or half hour." };
   const startsAt = timeZone === BOOKING_TIME_ZONE ? manilaToIso(date, time) : instantInZone(date, time, timeZone);
   const start = Date.parse(startsAt);
   if (Number.isNaN(start) || start <= now || start > now + DISCOVERY_WINDOW_MS) {
-    return { ok: false, message: "Choose a time from now through the next 14 days." };
+    return { ok: false, message: "Choose a time from now through the next 90 days." };
   }
   return { ok: true, startsAt };
 }
 
 /**
- * A picked slot (an instant with its offset, "2026-11-03T01:00:00.000Z") inside the booking window, as UTC ISO.
- * Only a first check: the database refuses any start that isn't one of the open slots.
+ * The contact form's earliest start. A request can be confirmed only until 2 hours before it starts, so this
+ * leaves the team time to answer.
+ */
+export const DISCOVERY_NOTICE_MS = 12 * 60 * 60 * 1000;
+
+/** Whether a start is inside the contact form's window: at least 12 hours ahead, at most 90 days. */
+export const inDiscoveryWindow = (start: number, now = Date.now()) => start >= now + DISCOVERY_NOTICE_MS && start <= now + DISCOVERY_WINDOW_MS;
+
+/**
+ * A start the visitor picked (an instant with its offset, "2026-11-03T01:00:00.000Z") as UTC ISO, or null. The
+ * form offers half hours in the visitor's zone, so any whole quarter hour in UTC is accepted (Nepal is UTC+5:45).
  */
 export function discoveryInstant(value: string, now = Date.now()): string | null {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const start = Date.parse(value);
-  if (Number.isNaN(start) || start <= now || start > now + DISCOVERY_WINDOW_MS) return null;
+  if (Number.isNaN(start) || start % (15 * 60 * 1000) !== 0 || !inDiscoveryWindow(start, now)) return null;
   return new Date(start).toISOString();
 }
 

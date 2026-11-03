@@ -11,6 +11,7 @@ import { TextField } from "@/components/ui/text-field";
 import {
   BOOKING_LIMITS,
   BOOKING_TIME_ZONE,
+  DISCOVERY_WINDOW_DAYS,
   DISCOVERY_LIMITS,
   confirmationLabel,
   confirmationState,
@@ -62,7 +63,7 @@ export function DiscoveryDetail({
 
   function openReschedule() {
     const min = todayIn(BOOKING_TIME_ZONE);
-    setDates({ min, max: addDays(min, 14) });
+    setDates({ min, max: addDays(min, DISCOVERY_WINDOW_DAYS) });
     setIntent("reschedule");
   }
 
