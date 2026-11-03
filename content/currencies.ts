@@ -112,7 +112,7 @@ export function localPackagePrices(country: string) {
   return {
     bySlug: Object.fromEntries(packages.map((p) => [p.slug, formatPackagePrice(p.monthlyPrice[1], country)])) as Record<string, string>,
     hint: usd
-      ? `Month to month prices at $9 an hour. ${terms}`
-      : `Month to month prices in ${currencyForCountry(country)} at an approximate exchange rate; packages are billed at $9 (USD) an hour. ${terms}`,
+      ? `Month to month prices in US dollars. ${terms}`
+      : `Month to month prices in ${currencyForCountry(country)} at an approximate exchange rate; packages are priced in US dollars. ${terms}`,
   };
 }
