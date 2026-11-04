@@ -3087,6 +3087,30 @@ describe("discovery calls", () => {
       expect(new Date(stored.starts_at).toISOString()).toBe(new Date(halfPast(89 * DAY)).toISOString());
     });
 
+    it("puts a form request weeks ahead in the Lead Gen's inbox, and their confirm schedules it and frees the email", async () => {
+      const start = halfPast(45 * DAY);
+      const [row] = await asServer<{ id: string }>(
+        "select public.submit_discovery_request('Hana Go', 'hana-later@disc.co', 'Go Co', 'Legal', 'Japan', 'Need help', null, null, null, $1) as id",
+        [start],
+      );
+      const meetingId = await meetingOf(row.id);
+      const listed = (await inbox(asLgA)).find((item) => item.meeting_id === meetingId);
+      expect(listed).toBeDefined();
+      expect(listed).not.toHaveProperty("email");
+
+      await asUser(asLgA, "select public.confirm_discovery_booking($1)", [meetingId]);
+      const [confirmed] = await asServer<{ status: string; organizer_id: string; closer_id: string }>(
+        "select m.status::text as status, m.organizer_id, l.closer_id from public.meetings m join public.leads l on l.id = m.lead_id where m.id = $1",
+        [meetingId],
+      );
+      expect(confirmed).toEqual({ status: "scheduled", organizer_id: LG_A, closer_id: LG_A });
+      expect((await inbox(asLgA)).some((item) => item.meeting_id === meetingId)).toBe(false);
+
+      const [claim] = await asServer<{ email: string; starts_at: string }>("select * from public.claim_discovery_confirmation($1, $2)", [meetingId, LG_A]);
+      expect(claim.email).toBe("hana-later@disc.co");
+      expect(new Date(claim.starts_at).toISOString()).toBe(new Date(start).toISOString());
+    });
+
     it("lets an admin note a discovery call, and still refuses everyone else", async () => {
       const [row] = await asServer<{ id: string }>(
         "select public.submit_discovery_request('Dina Cruz', 'dina-form@disc.co', 'Cruz Co', 'Legal', 'Philippines', 'Need help', null, null, null, $1) as id",
