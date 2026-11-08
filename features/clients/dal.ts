@@ -194,17 +194,31 @@ export async function saveClientDetails(input: ClientDetailsInput) {
   return data.length > 0;
 }
 
-/** A pending client with no package yet. The signed-in admin is the creator, so RLS and the tenant trigger apply. */
-export async function insertPendingClient(input: { companyName: string; contactName: string; contactEmail: string; contactPhone: string | null }, createdBy: string) {
+/**
+ * Sets a pending client's package (all six columns together, as clients_package_complete requires). Runs as the
+ * signed-in user, so RLS decides: any admin of the agency, or the Lead Gen who created the client. Only a pending
+ * client changes; false means it isn't there, isn't theirs, or is already active.
+ */
+export async function saveClientPackage(
+  clientId: string,
+  row: { packageCode: string; hoursPerWeek: number; termMonths: number; monthlyCents: number; startsOn: string; timezone: string },
+) {
   const supabase = await createClient();
-  const { error } = await supabase.from("clients").insert({
-    company_name: input.companyName,
-    contact_name: input.contactName,
-    contact_email: input.contactEmail,
-    contact_phone: input.contactPhone,
-    created_by: createdBy,
-  });
-  if (error) throw new UpstreamError("supabase", `Creating a client failed: ${error.message}`, { cause: error });
+  const { data, error } = await supabase
+    .from("clients")
+    .update({
+      package_code: row.packageCode,
+      hours_per_week: row.hoursPerWeek,
+      term_months: row.termMonths,
+      monthly_cents: row.monthlyCents,
+      starts_on: row.startsOn,
+      timezone: row.timezone,
+    })
+    .eq("id", clientId)
+    .eq("status", "pending")
+    .select("id");
+  if (error) throw new UpstreamError("supabase", `Saving client ${clientId} package failed: ${error.message}`, { cause: error });
+  return data.length > 0;
 }
 
 const OVERVIEW_PAGE = 1000;

@@ -19,11 +19,9 @@ import { VA_TIME_ZONE } from "../contract";
 export type CalendarLegendItem = { tone?: Tone; label: string; done?: boolean };
 
 const LEGEND: readonly CalendarLegendItem[] = [
-  { tone: "sand", label: "Requested" },
-  { tone: "lagoon", label: "Confirmed" },
-  { done: true, label: "Completed" },
-  { tone: "coral", label: "Declined" },
-  { tone: "ocean", label: "Cancelled" },
+  { tone: "lagoon", label: "Meetings" },
+  { tone: "sand", label: "Demo calls" },
+  { tone: "coral", label: "Tasks" },
 ];
 
 const VIEWS = [

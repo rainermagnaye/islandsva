@@ -10,19 +10,25 @@ import { listActiveAssignments } from "./assignment-dal";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { canSeeRegistrationLink } from "./link-access";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
-import { getClient, getOwnClientId, insertClient, insertPendingClient, listClients, saveClientBusiness, saveClientDetails, setClientDisabled } from "./dal";
+import { getClient, getOwnClientId, insertClient, listClients, saveClientBusiness, saveClientDetails, saveClientPackage, setClientDisabled } from "./dal";
 import { recordClientNote } from "./notes-dal";
-import type { ClientDetailsInput, ClientNoteInput, CreateClientInput } from "./validation";
-import type { ClientReviewInput, NewClientInput, PaymentReceivedInput } from "./review-validation";
+import type { ClientDetailsInput, ClientNoteInput } from "./validation";
+import type { ClientPackageInput, ClientReviewInput, NewClientInput, PaymentReceivedInput } from "./review-validation";
 import { agreementMissingTerms, agreementReviewState, renderAgreement, type AgreementTerms } from "./agreement";
 import { agreementHash } from "./agreement-hash";
 import { acceptClientAgreementRow, getAgreementReview, getRegistrationState, saveRegistrationDetailsRow } from "./registration-dal";
 import type { AgreementAcceptanceInput, RegistrationDetailsInput } from "./registration-validation";
 
-/** A pending client added by a Closer. The monthly price comes from the catalogue for the chosen term. */
+/** The catalogue package for these hours. The monthly price always comes from here, never from a form. */
+function catalogue(packageSlug: string, hoursPerWeek: number) {
+  const pkg = packages.find((item) => item.slug === packageSlug && item.weeklyHours === hoursPerWeek);
+  if (!pkg) throw new Error(`Unknown package ${packageSlug} at ${hoursPerWeek} hours`);
+  return pkg;
+}
+
+/** A pending client added by a Lead Gen or an admin, with the agreed package. */
 export async function createClientProfile(input: NewClientInput, createdBy: string) {
-  const pkg = packages.find((item) => item.slug === input.packageSlug && item.weeklyHours === input.hoursPerWeek);
-  if (!pkg) throw new Error(`Unknown package ${input.packageSlug} at ${input.hoursPerWeek} hours`);
+  const pkg = catalogue(input.packageSlug, input.hoursPerWeek);
   return insertClient({
     createdBy,
     companyName: input.companyName,
@@ -38,9 +44,20 @@ export async function createClientProfile(input: NewClientInput, createdBy: stri
   });
 }
 
-/** Adds a pending client from the list. Registration starts later, from the client's profile. */
-export async function createClientRecord(input: CreateClientInput, createdBy: string) {
-  await insertPendingClient(input, createdBy);
+/**
+ * Sets or changes a pending client's package. If they already accepted the agreement, the terms no longer match:
+ * approval stays closed until they accept again (agreementApprovable), so nothing is approved on old terms.
+ */
+export async function updateClientPackage(input: ClientPackageInput) {
+  const pkg = catalogue(input.packageSlug, input.hoursPerWeek);
+  return saveClientPackage(input.clientId, {
+    packageCode: pkg.slug,
+    hoursPerWeek: pkg.weeklyHours,
+    termMonths: input.termMonths,
+    monthlyCents: pkg.monthlyPrice[input.termMonths],
+    startsOn: input.startsOn,
+    timezone: input.timezone,
+  });
 }
 
 /** Copies what the lead already told us onto the new pending client. The registration email comes later. */
@@ -58,6 +75,9 @@ export async function openOnboardingLink(clientId: string) {
   const user = await getSessionUser();
   if (!user || !canSeeRegistrationLink(user, client)) return { ok: false as const, reason: "not_found" as const };
   if (client.onboardingStatus !== "ready") return { ok: false as const, reason: "exists" as const };
+  // Registration saves the client's time zone and builds the agreement from the package, so without one the
+  // customer could not finish step 1 or 2. Set the package first.
+  if (!client.packageCode) return { ok: false as const, reason: "no_package" as const };
   const token = createOnboardingToken();
   const stored = await issueClientOnboardingLink(clientId, token, onboardingTokenHash(token), user.id);
   if (!stored.ok) return stored;

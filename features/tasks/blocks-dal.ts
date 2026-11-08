@@ -4,8 +4,9 @@ import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import type { CalendarBlock } from "./contract";
 
-// A VA's calendar blocks, read and written as the signed-in VA: RLS shows only their own, and the fill trigger
-// sets the owner and checks a task block is on their own open task (IVA47).
+// Calendar blocks, read and written as the signed-in person: RLS shows only their own, and the fill trigger
+// sets the owner and checks a task block is on a VA's own open task (IVA47). A titled to-do may be a VA,
+// Lead Gen, or admin (staff_calendar_blocks).
 
 type BlockRow = {
   id: string;
@@ -40,14 +41,18 @@ export async function listBlocks(vaId: string, since: Date): Promise<CalendarBlo
   }));
 }
 
-export type BlockWrite = { ok: true } | { ok: false; reason: "task" | "not_allowed" };
+export type BlockWrite = { ok: true } | { ok: false; reason: "task" | "not_allowed" | "setup" };
 
 export async function insertBlock(input: { taskId: string | null; title: string | null; startsAt: string; endsAt: string }): Promise<BlockWrite> {
   const supabase = await createClient();
   const { error } = await supabase.from("calendar_blocks").insert({ task_id: input.taskId, title: input.title, starts_at: input.startsAt, ends_at: input.endsAt });
   if (!error) return { ok: true };
   if (error.code === "IVA47") return { ok: false, reason: "task" };
-  if (error.code === "42501" || error.code === "23514") return { ok: false, reason: "not_allowed" };
+  // 42501: insert policy still VA-only. 23514 from enforce_role('va') until staff_calendar_blocks is applied.
+  if (error.code === "42501" || (error.code === "23514" && error.message.includes("is not an active user with the"))) {
+    return { ok: false, reason: "setup" };
+  }
+  if (error.code === "23514") return { ok: false, reason: "not_allowed" };
   throw new UpstreamError("supabase", `Adding a calendar block failed (${error.code})`);
 }
 

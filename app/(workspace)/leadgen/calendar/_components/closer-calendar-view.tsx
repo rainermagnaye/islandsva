@@ -9,9 +9,13 @@ import { useToast } from "@/components/ui/toast";
 import { leadgenClientHref, leadgenLeadHref } from "@/content/routes";
 import type { BusyTime } from "@/features/demos/slot-times";
 import type { AgendaItem } from "@/features/meetings/agenda";
+import { CLOSER_LEGEND } from "@/features/meetings/calendar-legend";
+import { staffGesture } from "@/features/meetings/booking-draft";
 import { ComingUp } from "@/features/meetings/components/coming-up";
 import { DiscoveryInbox } from "@/features/meetings/components/discovery-inbox";
+import { placeStaffBooking } from "@/features/meetings/components/staff-moves";
 import type { Booking, BookingChoice, DiscoveryRequest } from "@/features/meetings/contract";
+import { BLOCK_PREFIX } from "@/features/tasks/contract";
 import type { VaMeetingClient } from "@/features/meetings/components/va-meeting-form";
 import type { ScheduleRow } from "@/features/meetings/schedule";
 
@@ -23,11 +27,7 @@ const BookButton = lazy(() => import("./book-button").then((module) => ({ defaul
 const BookingDetail = lazy(() => import("@/features/meetings/components/booking-detail").then((module) => ({ default: module.BookingDetail })));
 const DiscoveryDetail = lazy(() => import("@/features/meetings/components/discovery-detail").then((module) => ({ default: module.DiscoveryDetail })));
 const CloserMeetingCancel = lazy(() => import("@/features/meetings/components/closer-meeting-cancel").then((module) => ({ default: module.CloserMeetingCancel })));
-
-const LEGEND = [
-  { tone: "lagoon" as const, label: "Meetings" },
-  { tone: "sand" as const, label: "Discovery requests" },
-];
+const RemoveBlockDialog = lazy(() => import("@/features/tasks/components/remove-block-dialog").then((module) => ({ default: module.RemoveBlockDialog })));
 
 function timeFromMinute(minute: number) {
   const snapped = Math.floor(minute / 30) * 30;
@@ -68,20 +68,24 @@ export function CloserCalendarView({
 }) {
   const toast = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [blockId, setBlockId] = useState<string | null>(null);
   const [draft, setDraft] = useState<CloserBookDraft | null>(null);
   const request = requests.find((item) => item.meetingId === selectedId) ?? null;
   const booking = bookings.find((item) => item.id === selectedId) ?? null;
   const discovery = request || booking?.kind === "discovery";
+  const block = events.find((event) => event.id === `${BLOCK_PREFIX}${blockId}`) ?? null;
 
   function open(id: string) {
     if (requests.some((item) => item.meetingId === id) || bookings.some((item) => item.id === id)) {
       setDraft(null);
+      setBlockId(null);
       setSelectedId(id);
     }
   }
 
   function close() {
     setSelectedId(null);
+    setBlockId(null);
   }
 
   function done(message: string) {
@@ -98,7 +102,7 @@ export function CloserCalendarView({
           today={today}
           nowMinutes={nowMinutes}
           extraEvents={events}
-          legend={LEGEND}
+          legend={CLOSER_LEGEND}
           viewsInHeader
           actions={
             <Suspense fallback={<Button type="button" variant="ghost" iconLeft="plus" disabled>Book</Button>}>
@@ -130,9 +134,30 @@ export function CloserCalendarView({
           }
           onSlotClick={(day, minute) => {
             setSelectedId(null);
+            setBlockId(null);
             setDraft({ date: day, time: timeFromMinute(minute) });
           }}
+          eventGesture={(event) => {
+            const booking = bookings.find((item) => item.id === event.id);
+            if (booking) return staffGesture(booking);
+            if (requests.some((item) => item.meetingId === event.id)) return staffGesture({ kind: "discovery", status: "requested" });
+            return null;
+          }}
+          onEventMove={(event, next) => {
+            const tell = (message: string, tone: "success" | "danger") => toast.show({ title: message, tone });
+            const booking = bookings.find((item) => item.id === event.id);
+            if (booking) return placeStaffBooking(booking, next, tell);
+            const request = requests.find((item) => item.meetingId === event.id);
+            if (!request) return false;
+            return placeStaffBooking({ id: request.meetingId, kind: "discovery" }, next, tell);
+          }}
           onEventClick={(event) => {
+            if (event.id.startsWith(BLOCK_PREFIX)) {
+              setSelectedId(null);
+              setDraft(null);
+              setBlockId(event.id.slice(BLOCK_PREFIX.length));
+              return true;
+            }
             open(event.id);
             return true;
           }}
@@ -163,6 +188,11 @@ export function CloserCalendarView({
             onClose={close}
             onDone={() => undefined}
           />
+        </Suspense>
+      )}
+      {block && blockId && (
+        <Suspense fallback={null}>
+          <RemoveBlockDialog blockId={blockId} block={block} onClose={() => setBlockId(null)} />
         </Suspense>
       )}
     </>

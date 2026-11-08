@@ -1,14 +1,14 @@
 import { wallClockIn } from "@/components/ui/date-math";
 import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import type { Tone } from "@/components/ui/tone";
+import { BLOCK_PREFIX } from "@/features/tasks/contract";
 import { deadlineEvent, type DeadlineSource } from "@/features/tasks/deadline-event";
 
 const SLOT_MS = 30 * 60 * 1000;
 
 export type CalendarExtra = { event: ScheduleEvent; href?: string };
 
-/** The id a to-do block has on the calendar, so a click can offer to remove it. */
-export const BLOCK_PREFIX = "block:";
+export { BLOCK_PREFIX };
 
 type Demo = { id: string; status: string; startsAt: string; endsAt: string; companyName: string };
 type Slot = { id: string; startsAt: string; booking: unknown };

@@ -14,6 +14,8 @@ import { BOOKING_TIME_ZONE, type Booking } from "@/features/meetings/contract";
 import { listDiscoveryInbox } from "@/features/meetings/dal";
 import { scheduleRows, type ScheduleRow } from "@/features/meetings/schedule";
 import { listTeamForCloser } from "@/features/meetings/service";
+import { BLOCK_PREFIX } from "@/features/tasks/contract";
+import { listVaBlocks } from "@/features/tasks/service";
 import { requireRole } from "@/lib/auth/session";
 import { CloserCalendarView } from "./_components/closer-calendar-view";
 
@@ -33,11 +35,13 @@ async function LeadgenCalendar() {
   const user = await requireRole(["closer"]);
   const nowDate = new Date();
   const now = nowDate.toISOString();
-  const [requests, bookings, clientsPage, team] = await Promise.all([
+  const dayStart = new Date(`${todayIn(BOOKING_TIME_ZONE, nowDate)}T00:00:00+08:00`);
+  const [requests, bookings, clientsPage, team, blocks] = await Promise.all([
     listDiscoveryInbox(),
     listBookings(),
     listClients({ pageSize: 100 }),
     listTeamForCloser(user.id),
+    listVaBlocks(user.id, dayStart),
   ]);
   const waiting = new Set(requests.map((request) => request.meetingId));
   const visible = bookings.filter((booking) => booking.status !== "cancelled" && !waiting.has(booking.id));
@@ -66,6 +70,14 @@ async function LeadgenCalendar() {
       who: request.fullName,
     })),
     ...visible.map(bookingEvent),
+    ...blocks.map((block) => ({
+      id: `${BLOCK_PREFIX}${block.id}`,
+      title: block.title,
+      start: wallClockIn(block.startsAt, BOOKING_TIME_ZONE),
+      end: wallClockIn(block.endsAt, BOOKING_TIME_ZONE),
+      tone: "coral" as const,
+      who: "To-do",
+    })),
   ];
 
   return (
@@ -119,7 +131,7 @@ function bookingEvent(booking: Booking): ScheduleEvent {
     title: booking.title,
     start: wallClockIn(booking.startsAt, BOOKING_TIME_ZONE),
     end: wallClockIn(booking.endsAt, BOOKING_TIME_ZONE),
-    tone: booking.status === "requested" ? "sand" : "lagoon",
+    tone: booking.kind === "discovery" ? "sand" : "lagoon",
     pending: booking.status === "requested",
     done: booking.status === "done",
     who: booking.clientName ?? undefined,

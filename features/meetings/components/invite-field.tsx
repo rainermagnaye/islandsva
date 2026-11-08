@@ -7,11 +7,12 @@ import { cx } from "@/lib/cx";
 import type { BookingChoice, BookingGuest } from "../contract";
 
 /** One searchable invite list for clients and staff, the way a calendar guest field works. */
-export function InviteField({ clients, staff, guests, error }: {
+export function InviteField({ clients, staff, guests, error, onChange }: {
   clients: readonly BookingChoice[];
   staff: readonly BookingChoice[];
   guests: readonly BookingGuest[];
   error?: string;
+  onChange?: (guests: BookingGuest[]) => void;
 }) {
   const id = useId();
   const listId = `${id}-list`;
@@ -28,9 +29,9 @@ export function InviteField({ clients, staff, guests, error }: {
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return [];
     return people
-      .filter((person) => person.name.toLowerCase().includes(needle) && !picked.some((item) => item.kind === person.kind && item.id === person.id))
+      .filter((person) => !picked.some((item) => item.kind === person.kind && item.id === person.id))
+      .filter((person) => !needle || person.name.toLowerCase().includes(needle))
       .slice(0, 8);
   }, [people, picked, query]);
 
@@ -44,20 +45,28 @@ export function InviteField({ clients, staff, guests, error }: {
   }, [open]);
 
   function add(person: BookingGuest) {
-    setPicked((current) => (current.some((item) => item.kind === person.kind && item.id === person.id) ? current : [...current, person]));
+    setPicked((current) => {
+      const next = current.some((item) => item.kind === person.kind && item.id === person.id) ? current : [...current, person];
+      onChange?.(next);
+      return next;
+    });
     setQuery("");
     setActive(0);
     setOpen(false);
   }
 
   function remove(person: BookingGuest) {
-    setPicked((current) => current.filter((item) => !(item.kind === person.kind && item.id === person.id)));
+    setPicked((current) => {
+      const next = current.filter((item) => !(item.kind === person.kind && item.id === person.id));
+      onChange?.(next);
+      return next;
+    });
   }
 
   const shown = open && matches.length > 0;
 
   return (
-    <Field id={id} label="Invite" hint="Search for a client or a team member." error={error} optional>
+    <Field id={id} label="Invite" hint="Add a client and/or team members. An active client confirms before the slot is booked." error={error} optional>
       <div ref={root} className="relative">
         <div className="forced-border flex min-h-11 flex-wrap items-center gap-1.5 rounded-md border-control border-border-strong bg-surface-card px-2 py-1.5 focus-within:border-focus-ring">
           {picked.map((person) => (

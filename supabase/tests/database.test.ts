@@ -5119,6 +5119,19 @@ describe("VA bookings", () => {
       expect(await call(asVa, "delete from public.calendar_blocks where id = $1 returning id", [todo.id])).toEqual([{ id: todo.id }]);
     });
   });
+
+  it("a Lead Gen or admin with two-factor can add a titled to-do of their own; a client cannot", async () => {
+    await rolledBack(async () => {
+      const block = (claims: Claims, title: string) =>
+        call<{ id: string }>(claims, "insert into public.calendar_blocks (title, starts_at, ends_at) values ($1, $2, $3) returning id", [title, start, end]);
+      const [closerTodo] = await block(asCloser, "Pipeline prep");
+      expect(await asServer("select va_id from public.calendar_blocks where id = $1", [closerTodo.id])).toEqual([{ va_id: CLOSER }]);
+      const [adminTodo] = await block(asAdmin, "Board pack");
+      expect(await asServer("select va_id from public.calendar_blocks where id = $1", [adminTodo.id])).toEqual([{ va_id: ADMIN }]);
+      await expect(block(asClient, "Mine")).rejects.toThrow();
+      await expect(block(token(ADMIN, ["admin"], "aal1"), "No 2FA")).rejects.toThrow();
+    });
+  });
 });
 
 describe("Closer bookings", () => {
@@ -5225,6 +5238,74 @@ describe("Admin bookings", () => {
       await expect(meet(asCloser, null)).rejects.toMatchObject({ code: "42501" });
       await expect(meet(asVa, null)).rejects.toMatchObject({ code: "42501" });
       await expect(meet(token(ADMIN, ["admin"], "aal1"), null)).rejects.toMatchObject({ code: "42501" });
+    });
+  });
+});
+
+describe("Calendar reschedule", () => {
+  const ahead = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+  const call = async <T = Record<string, unknown>>(claims: Claims, sql: string, params: unknown[] = []) => {
+    await db.exec("savepoint call");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+      await db.exec("set local role authenticated");
+      const rows = (await db.query<T>(sql, params)).rows;
+      await db.exec("reset role");
+      await db.exec("release savepoint call");
+      return rows;
+    } catch (error) {
+      await db.exec("rollback to savepoint call");
+      await db.exec("reset role");
+      throw error;
+    }
+  };
+  const move = (claims: Claims, id: string, from: string, to: string) =>
+    call(claims, "select public.reschedule_calendar_meeting($1, $2, $3)", [id, from, to]);
+  const times = async (id: string) =>
+    (await asServer<{ starts_at: string; ends_at: string }>("select starts_at as starts_at, ends_at as ends_at from public.meetings where id = $1", [id]))[0];
+
+  it("an admin moves any open manual meeting; a VA or Lead Gen only one they created", async () => {
+    await rolledBack(async () => {
+      await db.query(`update public.profiles set status = 'active' where id in ('${VA}', '${CLIENT}')`);
+      await db.query("update public.employee_profiles set review_status = 'approved' where user_id = $1", [VA]);
+      const start = ahead(48);
+      const end = ahead(49);
+      const later = ahead(50);
+      const laterEnd = ahead(51);
+      const [adminMeeting] = await call<{ id: string }>(
+        asAdmin,
+        "select public.create_admin_meeting('Admin sync', $1, $2, null, '{}', null) as id",
+        [start, end],
+      );
+      await move(asAdmin, adminMeeting.id, later, laterEnd);
+      const moved = await times(adminMeeting.id);
+      expect(new Date(moved.starts_at).toISOString()).toBe(new Date(later).toISOString());
+      expect(new Date(moved.ends_at).toISOString()).toBe(new Date(laterEnd).toISOString());
+
+      const [vaMeeting] = await call<{ id: string }>(
+        asVa,
+        "select public.create_va_meeting('VA sync', $1, $2, null, '{}', null) as id",
+        [start, end],
+      );
+      await move(asVa, vaMeeting.id, later, laterEnd);
+      await expect(move(asVa2, vaMeeting.id, ahead(52), ahead(53))).rejects.toMatchObject({ code: expect.stringMatching(/^(IVA01|42501)$/) });
+      await expect(move(asVa, adminMeeting.id, ahead(52), ahead(53))).rejects.toMatchObject({ code: "IVA01" });
+      await move(asAdmin, vaMeeting.id, ahead(52), ahead(53));
+
+      const [closerMeeting] = await call<{ id: string }>(
+        asCloser,
+        "select public.create_closer_meeting('Closer sync', $1, $2, null, '{}', null) as id",
+        [start, end],
+      );
+      await move(asCloser, closerMeeting.id, later, laterEnd);
+      await expect(move(asCloser2, closerMeeting.id, ahead(52), ahead(53))).rejects.toMatchObject({ code: expect.stringMatching(/^(IVA01|42501)$/) });
+
+      await call(asVa, "select public.cancel_va_meeting($1)", [vaMeeting.id]);
+      await expect(move(asAdmin, vaMeeting.id, ahead(54), ahead(55))).rejects.toMatchObject({ code: "IVA30" });
+      await expect(move(asAdmin, adminMeeting.id, ahead(-2), ahead(-1))).rejects.toMatchObject({ code: "IVA38" });
+      await expect(move(asAdmin, adminMeeting.id, laterEnd, later)).rejects.toMatchObject({ code: "IVA30" });
+      await expect(move(asClient, adminMeeting.id, ahead(54), ahead(55))).rejects.toMatchObject({ code: "42501" });
+      await expect(move(token(ADMIN, ["admin"], "aal1"), adminMeeting.id, ahead(54), ahead(55))).rejects.toMatchObject({ code: "42501" });
     });
   });
 });

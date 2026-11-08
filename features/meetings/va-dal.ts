@@ -16,12 +16,14 @@ const VA_REFUSAL: Record<string, string> = {
   IVA33: "Invite at most 20 people.",
   IVA38: "Choose a start time that hasn't passed yet.",
   IVA46: "Choose one of your clients.",
+  PGRST202: "Booking isn't set up on this workspace yet. Try again after the latest database update.",
   "42501": "Your account can't book meetings right now. Contact us if this keeps happening.",
 };
 
 function settle(error: { code?: string; message: string } | null, what: string) {
   if (!error) return { ok: true as const };
-  const message = VA_REFUSAL[error.code ?? ""];
+  const message = VA_REFUSAL[error.code ?? ""]
+    ?? (error.message.includes("Could not find the function") ? VA_REFUSAL.PGRST202 : null);
   if (message) return { ok: false as const, message };
   throw new UpstreamError("supabase", `${what} failed: ${error.message}`, { cause: error });
 }
@@ -62,6 +64,13 @@ export async function cancelCloserMeetingRow(meetingId: string) {
   const supabase = await createClient();
   const { error } = await supabase.rpc("cancel_closer_meeting", { meeting_id: meetingId });
   return settle(error, "Cancelling a closer meeting");
+}
+
+/** Drag or stretch a meeting on the VA, Lead Gen or admin calendar. The RPC checks who may move it. */
+export async function rescheduleCalendarMeetingRow(meetingId: string, startsAt: string, endsAt: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reschedule_calendar_meeting", { meeting_id: meetingId, starts_at: startsAt, ends_at: endsAt });
+  return settle(error, "Rescheduling a meeting");
 }
 
 /**

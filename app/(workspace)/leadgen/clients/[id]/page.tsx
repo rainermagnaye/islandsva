@@ -51,7 +51,13 @@ async function LeadgenClient({ params }: Pick<PageProps<"/leadgen/clients/[id]">
           <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </Card>
         <ClientStepper steps={clientRegistrationSteps({ onboardingStatus: client.onboardingStatus, accountStatus: client.status })} />
-        {showLink && <OnboardingLinkCard clientId={client.id} url={url} />}
+        {showLink && (
+          <OnboardingLinkCard
+            clientId={client.id}
+            url={url}
+            currentPackage={{ packageCode: client.packageCode, termMonths: client.termMonths, startsOn: client.startsOn, timezone: client.timezone }}
+          />
+        )}
         <ClientProfileView client={client} />
       </div>
     </Workspace>

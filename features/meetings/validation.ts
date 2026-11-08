@@ -165,8 +165,8 @@ export function parseDiscoveryOutcome(input: unknown) {
 const vaMeetingSchema = z
   .strictObject({
     title: bookingSchema.shape.title,
-    // "" = a team meeting with no client.
-    clientId: z.union([z.literal(""), z.uuid({ error: "Choose one of your clients." })]).default(""),
+    // Invite chips: at most one client (they confirm) plus staff. Empty = a team call.
+    clientIds: idList.default([]),
     staffIds: idList.default([]),
     date: when("date"),
     startTime: z.string({ error: "Choose a start time." }).regex(HALF_HOUR, "Choose a start time."),
@@ -176,17 +176,23 @@ const vaMeetingSchema = z
       .refine((value) => (VA_MEETING_LENGTHS as readonly number[]).includes(value), "Choose how long it runs."),
     note: bookingSchema.shape.note,
   })
+  .superRefine((value, ctx) => {
+    if (value.clientIds.length > 1) {
+      ctx.addIssue({ code: "custom", path: ["clientId"], message: "Invite one client. Extra people go on the team invite." });
+    }
+  })
   .transform((value) => {
     const startsAt = manilaToIso(value.date, value.startTime);
     const endsAt = new Date(Date.parse(startsAt) + value.minutes * 60_000).toISOString();
-    return { title: value.title, clientId: value.clientId || null, staffIds: value.staffIds, note: value.note, startsAt, endsAt };
+    const clientId: string | null = value.clientIds.length > 0 ? value.clientIds[0] : null;
+    return { title: value.title, clientId, staffIds: value.staffIds, note: value.note, startsAt, endsAt };
   });
 
 export type VaMeetingInput = z.infer<typeof vaMeetingSchema>;
 
 /**
- * "Book › Meeting" from the VA calendar: a title, an optional client (empty = the team only), optional staff
- * guests, a Manila day and half-hour start, a length from the list, and an agenda. Leaves as two UTC instants.
+ * "Book › Meeting": a title, invite chips (at most one client, optional staff), a Manila day and half-hour
+ * start, a length from the list, and an agenda. The first invited client becomes clientId (empty = team only).
  */
 export function parseVaMeeting(input: unknown) {
   return parseWith(vaMeetingSchema, input, ["title", "clientId", "staffIds", "date", "startTime", "minutes", "note"] as const satisfies readonly VaMeetingField[]);
@@ -194,4 +200,31 @@ export function parseVaMeeting(input: unknown) {
 
 export function parseMeetingAnswer(input: unknown) {
   return parseWith(z.strictObject({ meetingId: z.uuid({ error: FORM_ERROR }), answer: z.enum(["accept", "decline"], { error: FORM_ERROR }) }), input, ["meetingId"] as const);
+}
+
+const calendarMoveSchema = z
+  .strictObject({
+    meetingId: z.uuid({ error: FORM_ERROR }),
+    startDate: when("date"),
+    startTime: when("time"),
+    endDate: when("date"),
+    endTime: when("time"),
+  })
+  .superRefine((value, ctx) => {
+    const start = Date.parse(`${value.startDate}T${value.startTime}:00+08:00`);
+    const end = Date.parse(`${value.endDate}T${value.endTime}:00+08:00`);
+    const span = end - start;
+    if (Number.isNaN(start) || Number.isNaN(end) || span <= 0 || span > BOOKING_LIMITS.hours * 3_600_000) {
+      ctx.addIssue({ code: "custom", path: ["endTime"], message: "End the meeting after it starts, within 8 hours." });
+    }
+  })
+  .transform((value) => ({
+    meetingId: value.meetingId,
+    startsAt: manilaToIso(value.startDate, value.startTime),
+    endsAt: manilaToIso(value.endDate, value.endTime),
+  }));
+
+/** A drag or stretch on the staff calendar: the meeting and its new Manila span. */
+export function parseCalendarMove(input: unknown) {
+  return parseWith(calendarMoveSchema, input, ["startTime", "endTime"] as const satisfies readonly BookingField[]);
 }

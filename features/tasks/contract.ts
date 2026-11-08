@@ -100,7 +100,10 @@ export const VA_BLOCK_LENGTHS = [30, 60, 90, 120, 180, 240] as const;
 
 export type VaTaskField = "mode" | "title" | "clientId" | "taskId" | "description" | "date" | "startTime" | "minutes";
 
-/** Time a VA set aside: on one of their tasks (`taskId`, with that task's title and company) or a to-do of their own. */
+/** Calendar id prefix for a titled to-do block, so a click can offer to remove it. */
+export const BLOCK_PREFIX = "block:";
+
+/** Time set aside on the staff calendar: on a VA's task (`taskId`) or a to-do of their own. */
 export type CalendarBlock = {
   id: string;
   taskId: string | null;

@@ -47,7 +47,6 @@ export function CalendarBookButton({
   slots,
   clients,
   team,
-  openTasks,
   meetingBook,
   addSlots,
   taskBook,
@@ -83,7 +82,6 @@ export function CalendarBookButton({
             slots={slots}
             clients={clients}
             team={team}
-            openTasks={openTasks}
             meetingBook={meetingBook}
             addSlots={addSlots}
             taskBook={taskBook}
@@ -104,7 +102,6 @@ function BookDialog({
   slots,
   clients,
   team,
-  openTasks,
   meetingBook,
   addSlots,
   taskBook,
@@ -118,13 +115,12 @@ function BookDialog({
   slots: CalendarBookProps["slots"];
   clients: readonly VaMeetingClient[];
   team: readonly BookingChoice[];
-  openTasks: readonly BookingChoice[];
   meetingBook?: CalendarBookProps["meetingBook"];
   addSlots?: CalendarBookProps["addSlots"];
   taskBook?: CalendarBookProps["taskBook"];
   onClose: () => void;
 }) {
-  const [kind, setKind] = useState<Kind>("slots");
+  const [kind, setKind] = useState<Kind>("meeting");
   const [formKey, setFormKey] = useState(0);
 
   function choose(next: Kind) {
@@ -178,8 +174,8 @@ function BookDialog({
             key={`${formKey}-task`}
             today={today}
             last={last}
-            clients={clients.map((client) => ({ id: client.id, label: client.label }))}
-            tasks={openTasks}
+            defaultDate={date}
+            startTime={time}
             {...(taskBook ? { book: taskBook } : {})}
             onDone={onClose}
           />

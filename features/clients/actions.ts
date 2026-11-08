@@ -7,15 +7,15 @@ import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
-import type { ClientDetailField, ClientNoteField, CreateClientField, NewClientField, PaymentReceivedField, VaMessageField } from "./contract";
+import type { ClientDetailField, ClientNoteField, ClientPackageField, NewClientField, PaymentReceivedField, VaMessageField } from "./contract";
 import { acceptClientAttachment } from "./attachment";
 import { registrationOrigin } from "./link";
-import { addClientNote, confirmClientReviewPaid, createClientProfile, createClientRecord, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, updateClientDetails } from "./service";
+import { addClientNote, confirmClientReviewPaid, createClientProfile, openOnboardingLink, pauseClient, returnClientReview, sendClientActivation as sendActivation, updateClientDetails, updateClientPackage } from "./service";
 import { listActiveAssignments } from "./assignment-dal";
 import { getOwnClientId } from "./dal";
 import { insertVaMessage } from "./message-dal";
-import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
-import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseCreateClient, parseVaMessage } from "./validation";
+import { parseClientPackage, parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
+import { parseClientDetails, parseClientFlag, parseClientId, parseClientNote, parseVaMessage } from "./validation";
 
 /** A Lead Gen adds a pending client with the agreed package, then lands on its profile. */
 export async function addClientProfile(formData: FormData): Promise<SubmitResult<NewClientField>> {
@@ -35,18 +35,44 @@ export async function addClientProfile(formData: FormData): Promise<SubmitResult
   redirect(leadgenClientHref(id));
 }
 
-/** A client added on the list, with no lead. They stay pending until registration. */
-export async function addClient(formData: FormData): Promise<SubmitResult<CreateClientField>> {
+/**
+ * A client an admin adds on the list, with no lead, and the agreed package. The package is required so the
+ * registration link they get later can be finished (it saves the time zone and builds the agreement from it).
+ */
+export async function addClient(formData: FormData): Promise<SubmitResult<NewClientField>> {
   const user = await requireRole(["admin"]);
-  const parsed = parseCreateClient(formEntries(formData));
+  const parsed = parseNewClient(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
 
   try {
-    await createClientRecord(parsed.value, user.id);
+    await createClientProfile(parsed.value, user.id);
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     console.error("Creating a client failed", { service: error.service, error });
     return { ok: false, message: "We couldn't add this client just now. Please try again in a moment." };
+  }
+
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * Sets or changes a pending client's package. An admin may for any client in the agency; a Lead Gen only for a
+ * client they created (RLS on clients enforces both, so a refused write reads as "not found").
+ */
+export async function saveClientPackageAction(formData: FormData): Promise<SubmitResult<ClientPackageField>> {
+  await requireRole(["admin", "closer"]);
+  const parsed = parseClientPackage(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  try {
+    if (!(await updateClientPackage(parsed.value))) {
+      return { ok: false, message: "This client's package can't be changed now. Refresh the page." };
+    }
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Client package save failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't save the package just now. Please try again in a moment." };
   }
 
   refresh();
@@ -139,7 +165,9 @@ export async function generateOnboardingLink(formData: FormData): Promise<Submit
         ok: false,
         message: result.reason === "exists"
           ? "This client already has a registration link. Refresh the page."
-          : "That client no longer exists. Refresh the page.",
+          : result.reason === "no_package"
+            ? "Set the package before sending the registration link."
+            : "That client no longer exists. Refresh the page.",
       };
     }
   } catch (error) {

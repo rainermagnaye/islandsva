@@ -13,13 +13,14 @@ export type DemoCalendarRow = {
   endsAt: string;
 };
 
+/** Demo calls share one colour (sand) so the calendar legend can be by kind. Status lives on the schedules list. */
 const TONE: Record<DemoStatus, Tone> = {
   pending: "sand",
   expired: "sand",
-  confirmed: "lagoon",
-  completed: "lagoon",
-  rejected: "coral",
-  cancelled: "ocean",
+  confirmed: "sand",
+  completed: "sand",
+  rejected: "sand",
+  cancelled: "sand",
 };
 
 /** Bookings as week-calendar events in the VA's zone. A past request reads as expired, a finished call as completed. */

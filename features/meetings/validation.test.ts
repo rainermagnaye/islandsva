@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBooking, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes } from "./validation";
+import { parseBooking, parseCalendarMove, parseDiscoveryOutcome, parseDiscoveryReject, parseDiscoveryTimes, parseVaMeeting } from "./validation";
 
 describe("parseDiscoveryTimes", () => {
   it("accepts none to six half-hour times and returns them in order", () => {
@@ -102,5 +102,73 @@ describe("parseDiscoveryOutcome", () => {
 
   it("refuses an unknown outcome", () => {
     expect(parseDiscoveryOutcome({ meetingId: MEETING, outcome: "cancelled" })).toMatchObject({ ok: false });
+  });
+});
+
+const CLIENT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const STAFF = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+describe("parseVaMeeting", () => {
+  const meeting = {
+    title: "Pipeline review",
+    clientIds: [] as string[],
+    staffIds: [] as string[],
+    date: "2026-11-10",
+    startTime: "10:00",
+    minutes: "30",
+    note: "Agenda",
+  };
+
+  it("books a team call when nobody is invited", () => {
+    const parsed = parseVaMeeting(meeting);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.value.clientId).toBeNull();
+      expect(parsed.value.staffIds).toEqual([]);
+      expect(parsed.value.startsAt).toBe("2026-11-10T02:00:00.000Z");
+      expect(parsed.value.endsAt).toBe("2026-11-10T02:30:00.000Z");
+    }
+  });
+
+  it("takes the invited client and staff", () => {
+    const parsed = parseVaMeeting({ ...meeting, clientIds: [CLIENT], staffIds: [STAFF] });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.value.clientId).toBe(CLIENT);
+      expect(parsed.value.staffIds).toEqual([STAFF]);
+    }
+  });
+
+  it("refuses a second client", () => {
+    const parsed = parseVaMeeting({ ...meeting, clientIds: [CLIENT, OTHER] });
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok && "fieldErrors" in parsed) expect(parsed.fieldErrors.clientId).toMatch(/one client/i);
+  });
+});
+
+describe("parseCalendarMove", () => {
+  const move = {
+    meetingId: MEETING,
+    startDate: "2026-11-10",
+    startTime: "09:15",
+    endDate: "2026-11-10",
+    endTime: "10:45",
+  };
+
+  it("accepts a Manila span, including a 15-minute start", () => {
+    const parsed = parseCalendarMove(move);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.value.meetingId).toBe(MEETING);
+      expect(parsed.value.startsAt).toBe("2026-11-10T01:15:00.000Z");
+      expect(parsed.value.endsAt).toBe("2026-11-10T02:45:00.000Z");
+    }
+  });
+
+  it("refuses an end that is not after the start", () => {
+    const parsed = parseCalendarMove({ ...move, endTime: "09:15" });
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok && "fieldErrors" in parsed) expect(parsed.fieldErrors.endTime).toMatch(/8 hours/);
   });
 });

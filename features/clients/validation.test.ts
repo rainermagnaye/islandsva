@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseClientDetails, parseClientFlag, parseClientNote, parseCreateClient } from "./validation";
-import { parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
+import { parseClientPackage, parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
 
@@ -133,6 +133,32 @@ describe("parseNewClient", () => {
       ok: false,
       fieldErrors: { companyName: expect.any(String), contactName: expect.any(String) },
     });
+  });
+});
+
+describe("parseClientPackage", () => {
+  const now = new Date("2026-10-24T12:00:00Z");
+  const change = { clientId, package: "executive", hoursPerWeek: "40", termMonths: "1", startsOn: "2026-11-10", timezone: "Asia/Manila" };
+
+  it("turns the package into numbers for the client", () => {
+    expect(parseClientPackage(change, now)).toEqual({
+      ok: true,
+      value: { clientId, packageSlug: "executive", hoursPerWeek: 40, termMonths: 1, startsOn: "2026-11-10", timezone: "Asia/Manila" },
+    });
+  });
+
+  it("treats a bad client id, or a price from the form, as a tampered form", () => {
+    expect(parseClientPackage({ ...change, clientId: "nope" }, now)).toMatchObject({ ok: false, formError: expect.any(String) });
+    expect(parseClientPackage({ ...change, monthlyCents: "1" }, now)).toMatchObject({ ok: false, formError: expect.any(String) });
+  });
+
+  it("uses the new-client rules for package, hours, term, time zone and start date", () => {
+    expect(parseClientPackage({ ...change, package: "gold", termMonths: "3", timezone: "Mars/Base" }, now)).toMatchObject({
+      ok: false,
+      fieldErrors: { package: expect.any(String), termMonths: expect.any(String), timezone: expect.any(String) },
+    });
+    expect(parseClientPackage({ ...change, hoursPerWeek: "20" }, now)).toEqual({ ok: false, fieldErrors: { hoursPerWeek: "Choose the hours that come with this package." } });
+    expect(parseClientPackage({ ...change, startsOn: "2026-10-20" }, now)).toMatchObject({ ok: false, fieldErrors: { startsOn: expect.any(String) } });
   });
 });
 

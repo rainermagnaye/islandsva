@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientGesture, draftFrom, draftOf, MANUAL_GESTURE, ownMeeting } from "./booking-draft";
+import { clientGesture, draftFrom, draftOf, MANUAL_GESTURE, ownMeeting, staffGesture } from "./booking-draft";
 import type { Booking } from "./contract";
 
 describe("draftFrom", () => {
@@ -40,5 +40,23 @@ describe("a client's own meetings", () => {
     expect(clientGesture(meeting({ status: "done" }), ME)).toBeNull();
     expect(clientGesture(meeting({ createdBy: "admin" }), ME)).toBeNull();
     expect(clientGesture(undefined, ME)).toBeNull();
+  });
+});
+
+describe("staffGesture", () => {
+  it("lets a requested or scheduled meeting move and stretch", () => {
+    expect(staffGesture({ kind: "manual", status: "scheduled" })).toEqual(MANUAL_GESTURE);
+    expect(staffGesture({ kind: "manual", status: "requested" })).toEqual(MANUAL_GESTURE);
+  });
+
+  it("lets a discovery call move, but keeps it 30 minutes", () => {
+    const gesture = staffGesture({ kind: "discovery", status: "requested" });
+    expect(gesture).toMatchObject({ move: true, resize: false, minLength: 30, maxLength: 30 });
+  });
+
+  it("leaves finished and cancelled meetings in place", () => {
+    expect(staffGesture({ kind: "manual", status: "done" })).toBeNull();
+    expect(staffGesture({ kind: "manual", status: "cancelled" })).toBeNull();
+    expect(staffGesture(undefined)).toBeNull();
   });
 });

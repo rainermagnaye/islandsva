@@ -53,6 +53,7 @@ const REFUSAL: Record<string, string> = {
   IVA34: "You can complete this once the meeting has started.",
   IVA38: "Choose a start time that hasn't passed yet.",
   IVA46: "Choose a client from this agency.",
+  PGRST202: "Booking isn't set up on this workspace yet. Try again after the latest database update.",
   IVA14: "Only an admin or a lead gen from this agency can change this call.",
   IVA22: "Choose a time on the hour or half hour, from now through the next 90 days.",
   IVA23: "This call can't be changed now. Refresh the page.",
@@ -62,6 +63,7 @@ const REFUSAL: Record<string, string> = {
 
 function refused(error: { code?: string; message: string }) {
   return REFUSAL[error.code ?? ""]
+    ?? (error.message.includes("Could not find the function") ? REFUSAL.PGRST202 : null)
     ?? (error.message.includes("attachment") ? "That attachment can't be saved. Use a recording, PDF or image under 2 MB." : null)
     ?? (error.message.includes("note is required") ? "Enter a note." : null);
 }

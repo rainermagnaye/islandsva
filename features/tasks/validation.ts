@@ -176,8 +176,8 @@ const vaTaskSchema = z
 export type VaTaskInput = z.infer<typeof vaTaskSchema>;
 
 /**
- * "Book › Task" from the VA calendar. New: a title, an optional client (none = a to-do of the VA's own), details,
- * a Manila day and half-hour start, and a length. Block: one of the VA's tasks, a day, a start and a length.
+ * "Book › Task" from the staff calendar. New: a title, a Manila day and half-hour start, and a length (a to-do of
+ * their own). Block: one of the VA's tasks, a day, a start and a length.
  */
 export const parseVaTask = (input: unknown) =>
   parseWith<typeof vaTaskSchema, VaTaskField>(vaTaskSchema, input, ["mode", "title", "clientId", "taskId", "description", "date", "startTime", "minutes"]);

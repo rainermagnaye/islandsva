@@ -7,6 +7,7 @@ import { formEntries, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { VaMeetingField } from "./contract";
 import { cancelVaMeeting, createVaMeeting } from "./service";
+import { vaMeetingEntries } from "./form-data";
 import { parseBookingId, parseVaMeeting } from "./validation";
 
 // The VA calendar's meeting actions. The VA check comes first; the database then checks the VA is open, the client
@@ -14,15 +15,13 @@ import { parseBookingId, parseVaMeeting } from "./validation";
 
 function retry(error: unknown, what: string, message: string): SubmitResult<never> {
   if (!(error instanceof UpstreamError)) throw error;
-  console.error(`VA meeting ${what} failed`, { service: error.service, error });
+  console.error(`VA meeting ${what} failed`, { service: error.service, error: error.message });
   return { ok: false, message };
 }
 
 export async function addVaMeeting(formData: FormData): Promise<SubmitResult<VaMeetingField>> {
   await requireRole(["va"]);
-  const entries = formEntries(formData);
-  entries.staffIds = formData.getAll("staffIds").filter((item): item is string => typeof item === "string" && item.length > 0);
-  const parsed = parseVaMeeting(entries);
+  const parsed = parseVaMeeting(vaMeetingEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   try {
     const result = await createVaMeeting(parsed.value);

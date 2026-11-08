@@ -3,7 +3,7 @@ import { env } from "@/lib/env";
 import { UpstreamError } from "@/lib/upstream-error";
 import { cancelBookingRow, completeBookingRow, confirmDiscovery, deleteBookingNote, insertAdminMeeting, insertBooking, insertBookingNote, recordDiscoveryOutcome, rejectDiscovery, rescheduleDiscovery, saveBooking, updateBookingNote } from "./dal";
 import { answerVaMeetingRow, cancelClientBookingRow, completeClientBookingRow, insertClientBooking, insertClientBookingNote, saveClientBooking } from "./client-dal";
-import { cancelCloserMeetingRow, cancelVaMeetingRow, insertCloserMeeting, insertVaMeeting, listVaTeam } from "./va-dal";
+import { cancelCloserMeetingRow, cancelVaMeetingRow, insertCloserMeeting, insertVaMeeting, listVaTeam, rescheduleCalendarMeetingRow } from "./va-dal";
 import { listBookings } from "./booking-dal";
 import { claimConfirmation, releaseConfirmation } from "./confirmation-dal";
 import type { ConfirmationOutcome } from "./contract";
@@ -147,6 +147,11 @@ export function cancelCloserMeeting(meetingId: string) {
 /** Staff a Lead Gen can invite. Call only after requireRole(["closer"]). */
 export function listTeamForCloser(closerId: string) {
   return listVaTeam(closerId);
+}
+
+/** Drag or stretch on the VA, Lead Gen or admin calendar. The RPC checks the actor. */
+export function rescheduleCalendarMeeting(meetingId: string, startsAt: string, endsAt: string) {
+  return rescheduleCalendarMeetingRow(meetingId, startsAt, endsAt);
 }
 
 /**

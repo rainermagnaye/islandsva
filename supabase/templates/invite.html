@@ -9,7 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@700&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body style="margin:0;padding:0;background:#f8fafa;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your Islands VA account is ready. Choose a password to sign in.</div>
+  <!-- invite_for (user metadata, set by the app): "client" gets the client wording; everyone else gets the team wording. -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ if and .Data.invite_for (eq .Data.invite_for "client") }}Your Islands VA client workspace is ready. Choose a password to sign in.{{ else }}Your Islands VA team account is ready. Choose a password to sign in.{{ end }}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafa;">
     <tr>
       <td align="center" style="padding:32px 16px;">
@@ -22,9 +23,9 @@
           </tr>
           <tr>
             <td style="padding:32px;font-family:'Figtree',Arial,Helvetica,sans-serif;">
-              <h1 style="margin:0 0 16px;font-family:'Alegreya',Georgia,'Times New Roman',serif;font-size:28px;line-height:34px;font-weight:700;color:#0e3a45;">You're invited to Islands VA</h1>
+              <h1 style="margin:0 0 16px;font-family:'Alegreya',Georgia,'Times New Roman',serif;font-size:28px;line-height:34px;font-weight:700;color:#0e3a45;">{{ if and .Data.invite_for (eq .Data.invite_for "client") }}Welcome to Islands VA{{ else }}You're invited to the Islands VA team{{ end }}</h1>
               <p style="margin:0 0 8px;font-size:16px;line-height:24px;color:#0e3a45;">{{ if .Data.full_name }}Hi {{ .Data.full_name }},{{ else }}Hi,{{ end }}</p>
-              <p style="margin:0 0 24px;font-size:16px;line-height:24px;color:#0e3a45;">Your Islands VA account is ready. Choose a password to sign in. It only takes a moment.</p>
+              <p style="margin:0 0 24px;font-size:16px;line-height:24px;color:#0e3a45;">{{ if and .Data.invite_for (eq .Data.invite_for "client") }}Your registration is approved and your client workspace is ready. Choose a password to sign in, then meet your assistant, assign tasks and book calls.{{ else }}Your Islands VA team account is ready. Choose a password to sign in and get started. It only takes a moment.{{ end }}</p>
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
                 <tr>
                   <td bgcolor="#ffb662" style="border-radius:10px;">
@@ -32,7 +33,7 @@
                   </td>
                 </tr>
               </table>
-              <p style="margin:0 0 24px;font-size:14px;line-height:20px;color:#4a5b60;">This link works once and expires in 24 hours. If it expires, ask your Islands VA admin to send a new invitation. Weren't expecting this? You can ignore this email.</p>
+              <p style="margin:0 0 24px;font-size:14px;line-height:20px;color:#4a5b60;">This link works once and expires in 24 hours. {{ if and .Data.invite_for (eq .Data.invite_for "client") }}If it expires, contact your Islands VA account manager for a new one.{{ else }}If it expires, ask your Islands VA admin to send a new invitation.{{ end }} Weren't expecting this? You can ignore this email.</p>
               <p style="margin:0;padding-top:16px;border-top:1px solid #dce5e5;font-size:12px;line-height:16px;color:#4a5b60;">Button not working? Copy this link into your browser:<br><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite" style="color:#0e3a45;word-break:break-all;">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=invite</a></p>
             </td>
           </tr>

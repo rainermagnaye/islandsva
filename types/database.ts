@@ -819,6 +819,7 @@ export type Database = {
       };
       confirm_discovery_booking: { Args: { meeting_id: string }; Returns: undefined };
       reschedule_discovery_booking: { Args: { meeting_id: string; starts_at: string }; Returns: undefined };
+      reschedule_calendar_meeting: { Args: { meeting_id: string; starts_at: string; ends_at: string }; Returns: undefined };
       set_discovery_times: { Args: { times: string[] }; Returns: undefined };
       open_discovery_slots: { Args: Record<PropertyKey, never>; Returns: string[] };
       request_discovery_call: {

@@ -15,9 +15,10 @@ import type { InviteInput } from "./validation";
  */
 async function inviteWithRole(email: string, fullName: string, role: Role, invitedBy: string, origin: string) {
   const redirectTo = `${origin}${appRoutes.acceptInvite}`;
-  let invited = await inviteAuthUser(email, fullName, redirectTo);
+  const audience = role === "client" ? "client" : "staff";
+  let invited = await inviteAuthUser(email, fullName, audience, redirectTo);
   if (!invited.ok && invited.reason === "redirect") {
-    invited = await inviteAuthUser(email, fullName);
+    invited = await inviteAuthUser(email, fullName, audience);
   }
   if (!invited.ok) return invited;
 

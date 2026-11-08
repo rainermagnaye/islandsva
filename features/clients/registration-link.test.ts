@@ -17,7 +17,7 @@ vi.mock("@/lib/auth/session", () => session);
 
 const { openOnboardingLink } = await import("./service");
 
-const client = { id: "c1", status: "pending", disabledAt: null, onboardingStatus: "ready", createdById: "closer-1" };
+const client = { id: "c1", status: "pending", disabledAt: null, onboardingStatus: "ready", createdById: "closer-1", packageCode: "executive" };
 
 describe("openOnboardingLink", () => {
   beforeEach(() => {
@@ -37,6 +37,13 @@ describe("openOnboardingLink", () => {
       dal.getClient.mockResolvedValue({ ...client, ...over });
       expect((await openOnboardingLink("c1")).ok).toBe(false);
     }
+    expect(onboarding.issueClientOnboardingLink).not.toHaveBeenCalled();
+  });
+
+  it("stores nothing for a client with no package, since they couldn't finish registration", async () => {
+    session.getSessionUser.mockResolvedValue({ id: "admin-1", roles: ["admin"], aal: "aal2" });
+    dal.getClient.mockResolvedValue({ ...client, packageCode: null });
+    expect(await openOnboardingLink("c1")).toEqual({ ok: false, reason: "no_package" });
     expect(onboarding.issueClientOnboardingLink).not.toHaveBeenCalled();
   });
 

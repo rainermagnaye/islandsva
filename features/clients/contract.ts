@@ -66,10 +66,16 @@ export type ClientSummary = {
   createdAt: string;
 };
 
-/** A client a Closer adds by hand: who they are and the agreed package. Limits mirror the clients CHECKs. */
+/** A client a Lead Gen or an admin adds by hand: who they are and the agreed package. Limits mirror the clients CHECKs. */
 export const NEW_CLIENT_LIMITS = { companyName: 160, contactName: 120, contactEmail: 254, contactPhone: 40 } as const;
 
-export type NewClientField = "companyName" | "contactName" | "contactEmail" | "contactPhone" | "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
+/** The agreed package's fields, on every form that sets one (new client, convert, change package). */
+export type ClientPackageField = "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
+
+export type NewClientField = "companyName" | "contactName" | "contactEmail" | "contactPhone" | ClientPackageField;
+
+/** The package already on a client, to start the change-package form from. */
+export type ClientPackageValues = { packageCode: string | null; termMonths: number | null; startsOn: string | null; timezone: string | null };
 
 /** A page of clients, newest first. */
 export type ClientPage = { clients: ClientSummary[]; total: number; page: number; pageCount: number };
