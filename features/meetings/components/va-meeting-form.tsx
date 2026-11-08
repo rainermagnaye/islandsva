@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import type { SubmitResult } from "@/types/form";
 import { addVaMeeting } from "../va-actions";
-import { BOOKING_LIMITS, BOOKING_TIME_ZONE, VA_MEETING_LENGTHS, type BookingChoice, type VaMeetingField } from "../contract";
+import { BOOKING_LIMITS, BOOKING_TIME_ZONE, VA_MEETING_LENGTHS, type BookingChoice, type BookingGuest, type VaMeetingField } from "../contract";
 import { InviteField } from "./invite-field";
 
 /** A client the VA, Lead Gen or admin works with, and the zone their clock is shown in. */
@@ -29,9 +29,8 @@ function lengthLabel(minutes: number) {
 }
 
 /**
- * "Book › Meeting" on the VA, Lead Gen or admin calendar. With an active client it goes in as a request they accept
- * or decline; with a pending client or no client it's booked right away. Times are Manila; the client's own clock
- * is shown beside them.
+ * "Book › Meeting" on the VA, Lead Gen or admin calendar. Invite a client (they accept if the company is active)
+ * and/or team members. Times are Manila; an invited client's own clock is shown beside them.
  */
 export function VaMeetingForm({
   clients,
@@ -52,10 +51,11 @@ export function VaMeetingForm({
   startTime?: string;
   defaultDate?: string;
 }) {
-  const [clientId, setClientId] = useState("");
+  const [guests, setGuests] = useState<BookingGuest[]>([]);
   const [date, setDate] = useState(defaultDate ?? today);
   const [start, setStart] = useState(startTime);
-  const client = clients.find((item) => item.id === clientId) ?? null;
+  const invited = guests.find((guest) => guest.kind === "client");
+  const client = invited ? (clients.find((item) => item.id === invited.id) ?? { id: invited.id, label: invited.name, timezone: null, active: true }) : null;
   const waiting = Boolean(client && client.active !== false);
   const theirs = client?.timezone && client.timezone !== BOOKING_TIME_ZONE ? convertWallClock(`${date}T${start}`, BOOKING_TIME_ZONE, client.timezone) : null;
 
@@ -72,16 +72,13 @@ export function VaMeetingForm({
       {({ pending, fieldErrors }) => (
         <>
           <TextField label="Title" name="title" required maxLength={BOOKING_LIMITS.title} error={fieldErrors.title} />
-          <Select
-            label="With"
-            name="clientId"
-            value={clientId}
-            onChange={(event) => setClientId(event.target.value)}
-            options={[{ value: "", label: "No client (team only)" }, ...clients.map((item) => ({ value: item.id, label: item.label }))]}
-            hint="Pick a client to ask them for a meeting, or no client for a call with your team."
-            error={fieldErrors.clientId}
+          <InviteField
+            clients={clients}
+            staff={team}
+            guests={[]}
+            error={fieldErrors.clientId ?? fieldErrors.staffIds}
+            onChange={setGuests}
           />
-          <InviteField clients={[]} staff={team} guests={[]} error={fieldErrors.staffIds} />
           <div className="grid gap-3 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,1fr)]">
             <DatePicker label="Date" name="date" required min={today} max={last} value={date} onChange={(next) => next && setDate(next)} timeZone={BOOKING_TIME_ZONE} error={fieldErrors.date} />
             <Select label="Starts (Manila)" name="startTime" value={start} onChange={(event) => setStart(event.target.value)} options={START_TIMES} error={fieldErrors.startTime} />
@@ -96,7 +93,7 @@ export function VaMeetingForm({
           <TextField label="Agenda" name="note" multiline rows={3} optional maxLength={BOOKING_LIMITS.note} error={fieldErrors.note} />
           {waiting ? (
             <Alert tone="info" title={`${client?.label} needs to accept`}>
-              It shows as Requested on both calendars until they accept or decline.
+              The slot stays requested on both calendars until they confirm or decline.
             </Alert>
           ) : (
             <p className="m-0 type-body-sm text-ink-muted">

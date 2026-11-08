@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Panel } from "@/components/ui/card";
 import { Container } from "@/components/ui/container";
+import { ToastProvider } from "@/components/ui/toast";
 import { minutesOf, wallClockIn } from "@/components/ui/date-math";
 import { appRoutes, vaTaskHref } from "@/content/routes";
 import { listAssignedClients } from "@/features/clients/assignment-dal";
@@ -111,6 +112,7 @@ async function VaCalendar() {
 
   return (
     <Container className="workspace-page grid gap-8 py-6 md:py-8">
+      <ToastProvider>
       <VaCalendarView
         ownerId={user.id}
         bookings={bookings}
@@ -129,6 +131,7 @@ async function VaCalendar() {
           </Panel>
         }
       />
+      </ToastProvider>
     </Container>
   );
 }

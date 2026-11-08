@@ -49,4 +49,6 @@ export type IconName =
   | "copy"
   | "filter"
   | "download"
-  | "external";
+  | "external"
+  | "eye"
+  | "eye-off";

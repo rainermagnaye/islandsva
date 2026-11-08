@@ -38,3 +38,13 @@ export const ownMeeting = (booking: Booking | null | undefined, userId: string) 
 export function clientGesture(booking: Booking | undefined, userId: string): ScheduleGesture | null {
   return ownMeeting(booking, userId) && booking?.status === "scheduled" ? MANUAL_GESTURE : null;
 }
+
+const DISCOVERY_GESTURE: ScheduleGesture = { move: true, resize: false, snap: 30, minLength: 30, maxLength: 30 };
+
+/** A booked appointment the staff member can drag: move and stretch, except a discovery call stays 30 minutes. */
+export function staffGesture(booking: Pick<Booking, "kind" | "status"> | undefined): ScheduleGesture | null {
+  if (!booking || booking.status === "cancelled" || booking.status === "done") return null;
+  if (booking.kind === "manual" && (booking.status === "scheduled" || booking.status === "requested")) return MANUAL_GESTURE;
+  if (booking.kind === "discovery" && (booking.status === "requested" || booking.status === "scheduled")) return DISCOVERY_GESTURE;
+  return null;
+}

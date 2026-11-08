@@ -28,11 +28,23 @@ export function noteEntries(formData: FormData) {
   return value;
 }
 
+function inviteIds(formData: FormData, name: string) {
+  return formData.getAll(name).filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
 /** A meeting form's fields: the invite lists as arrays, without the file. */
 export function bookingEntries(formData: FormData) {
   const value = noteEntries(formData);
-  const ids = (name: string) => formData.getAll(name).filter((item): item is string => typeof item === "string" && item.length > 0);
-  value.clientIds = ids("clientIds");
-  value.staffIds = ids("staffIds");
+  value.clientIds = inviteIds(formData, "clientIds");
+  value.staffIds = inviteIds(formData, "staffIds");
+  return value;
+}
+
+/** Book › Meeting: invite chips as arrays (Object.fromEntries would keep only the last of each). */
+export function vaMeetingEntries(formData: FormData) {
+  const value = formEntries(formData);
+  value.clientIds = inviteIds(formData, "clientIds");
+  value.staffIds = inviteIds(formData, "staffIds");
+  delete value.clientId;
   return value;
 }

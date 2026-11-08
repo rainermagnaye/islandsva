@@ -3,12 +3,15 @@
 import { refresh } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { UpstreamError } from "@/lib/upstream-error";
-import { formEntries, toSubmitResult } from "@/lib/validation";
+import { FIELD_ERRORS, formEntries, outageResult, toSubmitResult } from "@/lib/validation";
 import type { SubmitResult } from "@/types/form";
 import type { SlotField } from "@/features/demos/contract";
 import { parseNewSlots } from "@/features/demos/validation";
 import type { VaTaskField } from "@/features/tasks/contract";
+import { bookVaTask } from "@/features/tasks/service";
+import { parseVaTask } from "@/features/tasks/validation";
 import type { VaMeetingField } from "./contract";
+import { vaMeetingEntries } from "./form-data";
 import { cancelCloserMeeting, createCloserMeeting, createCloserSlotMeetings } from "./service";
 import { parseBookingId, parseVaMeeting } from "./validation";
 
@@ -17,7 +20,7 @@ import { parseBookingId, parseVaMeeting } from "./validation";
 
 function retry(error: unknown, what: string, message: string): SubmitResult<never> {
   if (!(error instanceof UpstreamError)) throw error;
-  console.error(`Closer meeting ${what} failed`, { service: error.service, error });
+  console.error(`Closer meeting ${what} failed`, { service: error.service, error: error.message });
   return { ok: false, message };
 }
 
@@ -36,17 +39,28 @@ export async function addCloserSlots(formData: FormData): Promise<SubmitResult<S
   return { ok: true };
 }
 
+/** "Book › Task" on the Lead Gen calendar: a to-do of their own at the chosen time. */
 export async function addCloserTask(formData: FormData): Promise<SubmitResult<VaTaskField>> {
-  await requireRole(["closer"]);
-  void formData;
-  return { ok: false, message: "Tasks are booked from the VA calendar." };
+  const user = await requireRole(["closer"]);
+  const parsed = parseVaTask(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+  try {
+    const result = await bookVaTask(user.id, parsed.value);
+    if (!result.ok) {
+      return result.field
+        ? { ok: false, message: FIELD_ERRORS, fieldErrors: { [result.field]: result.message } as Partial<Record<VaTaskField, string>> }
+        : { ok: false, message: result.message };
+    }
+  } catch (error) {
+    return outageResult(error, "Booking a Lead Gen task");
+  }
+  refresh();
+  return { ok: true };
 }
 
 export async function addCloserMeeting(formData: FormData): Promise<SubmitResult<VaMeetingField>> {
   await requireRole(["closer"]);
-  const entries = formEntries(formData);
-  entries.staffIds = formData.getAll("staffIds").filter((item): item is string => typeof item === "string" && item.length > 0);
-  const parsed = parseVaMeeting(entries);
+  const parsed = parseVaMeeting(vaMeetingEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   try {
     const result = await createCloserMeeting(parsed.value);

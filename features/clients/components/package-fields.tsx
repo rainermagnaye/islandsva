@@ -5,8 +5,9 @@ import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { formatPrice, packages, terms } from "@/content/packages";
 import { PACKAGE_TIMEZONES } from "@/features/leads/contract";
+import type { ClientPackageField, ClientPackageValues } from "../contract";
 
-export type PackageField = "package" | "hoursPerWeek" | "termMonths" | "startsOn" | "timezone";
+export type PackageField = ClientPackageField;
 
 const HOUR_OPTIONS = packages.map((item) => ({ value: String(item.weeklyHours), label: item.hoursPerWeek }));
 const TERM_OPTIONS = terms.map((term) => ({
@@ -26,12 +27,22 @@ function isoDay(offset: number) {
 /**
  * The agreed package: package and hours move together, then term, start date and time zone. The price shown
  * is the catalogue price for that term; the server reads it again from the catalogue, never from the form.
+ * `current` starts the fields from a client's package (the change-package form); `initialSlug` only picks the package.
  */
-export function PackageFields({ initialSlug, fieldErrors }: { initialSlug?: string | null; fieldErrors: Partial<Record<PackageField, string>> }) {
-  const initial = packages.find((item) => item.slug === initialSlug);
+export function PackageFields({
+  initialSlug,
+  current,
+  fieldErrors,
+}: {
+  initialSlug?: string | null;
+  current?: ClientPackageValues;
+  fieldErrors: Partial<Record<PackageField, string>>;
+}) {
+  const initial = packages.find((item) => item.slug === (current?.packageCode ?? initialSlug));
   const [packageSlug, setPackageSlug] = useState(initial?.slug ?? "");
   const [hours, setHours] = useState(initial ? String(initial.weeklyHours) : "");
-  const [termMonths, setTermMonths] = useState("1");
+  const [termMonths, setTermMonths] = useState(current?.termMonths ? String(current.termMonths) : "1");
+  const knownZone = TIMEZONE_OPTIONS.some((zone) => zone.value === current?.timezone);
   const chosen = packages.find((item) => item.slug === packageSlug);
   const term = terms.find((item) => String(item.months) === termMonths);
   const price = chosen && term ? formatPrice(chosen.monthlyPrice[term.months]) : null;
@@ -65,8 +76,28 @@ export function PackageFields({ initialSlug, fieldErrors }: { initialSlug?: stri
       <p className="m-0 rounded-md bg-surface-sunken px-3.5 py-3 type-body-sm text-ink">
         {chosen && term && price ? `${chosen.name}, ${chosen.hoursPerWeek}, ${term.label.toLowerCase()} at ${price} a month.` : "Choose a package to confirm the monthly price."}
       </p>
-      <TextField label="Start date" name="startsOn" type="date" required min={isoDay(0)} max={isoDay(366)} hint="The first day their coverage begins." error={fieldErrors.startsOn} />
-      <Select label="Time zone" name="timezone" required placeholder="Choose their time zone" options={TIMEZONE_OPTIONS} error={fieldErrors.timezone} />
+      <TextField
+        label="Start date"
+        name="startsOn"
+        type="date"
+        required
+        min={isoDay(0)}
+        max={isoDay(366)}
+        // A start that has already passed isn't offered again: they pick a new one.
+        defaultValue={current?.startsOn && current.startsOn.slice(0, 10) >= isoDay(0) ? current.startsOn.slice(0, 10) : undefined}
+        hint="The first day their coverage begins."
+        error={fieldErrors.startsOn}
+      />
+      <Select
+        label="Time zone"
+        name="timezone"
+        required
+        placeholder="Choose their time zone"
+        options={TIMEZONE_OPTIONS}
+        // Only when known: an explicit undefined would override Select's placeholder default and preselect the first zone.
+        {...(knownZone && current?.timezone ? { defaultValue: current.timezone } : {})}
+        error={fieldErrors.timezone}
+      />
     </>
   );
 }

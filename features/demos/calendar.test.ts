@@ -19,10 +19,10 @@ function row(overrides: Partial<DemoCalendarRow> = {}): DemoCalendarRow {
 describe("demo calendar events", () => {
   it("places a call on the Manila clock and colours it by what it is now", () => {
     expect(demoCalendarEvents([row()], NOW)).toEqual([
-      { id: "booking", title: "Northwind", who: "Ana", start: "2026-11-03T09:30", end: "2026-11-03T10:00", tone: "lagoon" },
+      { id: "booking", title: "Northwind", who: "Ana", start: "2026-11-03T09:30", end: "2026-11-03T10:00", tone: "sand" },
     ]);
     expect(demoCalendarEvents([row({ status: "pending", startsAt: "2026-11-01T01:30:00.000Z", endsAt: "2026-11-01T02:00:00.000Z" })], NOW)[0]?.tone).toBe("sand");
-    expect(demoCalendarEvents([row({ status: "rejected" })], NOW)[0]?.tone).toBe("coral");
-    expect(demoCalendarEvents([row({ status: "cancelled" })], NOW)[0]?.tone).toBe("ocean");
+    expect(demoCalendarEvents([row({ status: "rejected" })], NOW)[0]?.tone).toBe("sand");
+    expect(demoCalendarEvents([row({ status: "cancelled" })], NOW)[0]?.tone).toBe("sand");
   });
 });

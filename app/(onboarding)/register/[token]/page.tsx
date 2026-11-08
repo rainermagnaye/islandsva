@@ -54,7 +54,7 @@ async function Registration({ params }: Pick<PageProps<"/register/[token]">, "pa
       </Notice>
     );
   }
-  return <Notice title="Registration received">We&apos;re sending it to the team. Refresh this page in a moment.</Notice>;
+  return <Notice title="Details under review">We&apos;re sending it to the team. Refresh this page in a moment.</Notice>;
 }
 
 function Notice({ title, children }: { title: string; children: ReactNode }) {

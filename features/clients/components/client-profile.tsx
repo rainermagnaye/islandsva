@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { adminClientHref, adminClientVaHref } from "@/content/routes";
 import { cx } from "@/lib/cx";
-import { CLIENT_PROFILE_TABS, clientBadge, type ClientDetail, type ClientNote, type ClientPacketSummary, type ClientProfileTab, type ClientReviewParts } from "../contract";
+import { CLIENT_PROFILE_TABS, clientBadge, type ClientDetail, type ClientNote, type ClientPackageValues, type ClientPacketSummary, type ClientProfileTab, type ClientReviewParts } from "../contract";
 import { clientOnboardingComplete, clientRegistrationSteps, reviewIssueLabels } from "../registration";
 import { OnboardingLinkCard } from "./onboarding-link";
 import { SendActivation } from "./client-activation";
@@ -59,6 +59,9 @@ export function ClientProfile({
   const inReview = client.status === "pending" && !client.disabledAt && client.onboardingStatus === "pending_review";
   const sentBack = client.onboardingStatus === "changes_requested";
   const sentBackText = packet.reviewNote || reviewIssueLabels(packet.reviewIssues).join(", ");
+  // The package changes only while the client is pending; once active it's what they signed up on.
+  const openPending = client.status === "pending" && !client.disabledAt;
+  const currentPackage: ClientPackageValues = { packageCode: client.packageCode, termMonths: client.termMonths, startsOn: client.startsOn, timezone: client.timezone };
 
   return (
     <div className="grid gap-4">
@@ -77,17 +80,17 @@ export function ClientProfile({
             client={client}
             packet={packet}
             review={review}
-            menu={<ClientActions clientId={client.id} editing={showEditor} disabledAt={client.disabledAt} />}
+            menu={<ClientActions clientId={client.id} editing={showEditor} disabledAt={client.disabledAt} currentPackage={openPending ? currentPackage : undefined} />}
           />
         ) : (
           <div className="flex shrink-0 items-center gap-2">
             {canActivate && <SendActivation clientId={client.id} email={client.contactEmail} />}
-            <ClientActions clientId={client.id} editing={showEditor} disabledAt={client.disabledAt} />
+            <ClientActions clientId={client.id} editing={showEditor} disabledAt={client.disabledAt} currentPackage={openPending ? currentPackage : undefined} />
           </div>
         )}
       </Card>
 
-      {client.status === "pending" && !client.disabledAt && <OnboardingLinkCard clientId={client.id} url={packet.url} />}
+      {openPending && <OnboardingLinkCard clientId={client.id} url={packet.url} currentPackage={currentPackage} packageButton={false} />}
       {canActivate && (
         <Alert tone="warning" title="Payment verified, invite not sent">
           Use Send activation to email {client.contactEmail} a link to set a password.

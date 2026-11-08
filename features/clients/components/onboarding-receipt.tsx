@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
 import type { PublicOnboarding } from "../contract";
 import { OnboardingSummary } from "./onboarding-summary";
@@ -9,9 +10,12 @@ export function OnboardingReceipt({ packet }: { packet: PublicOnboarding }) {
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
-        <h1 className="m-0 type-h2">Registration received</h1>
+        <h1 className="m-0 type-h2">Details under review</h1>
         <p className="m-0 text-ink-muted">You can return to this link any time. The form stays locked while the team reviews it.</p>
       </div>
+      <Alert tone="success" title="Your registration was submitted successfully">
+        <p>Our team will review your details and proof of payment. Once approved, your account will be activated within 24 hours.</p>
+      </Alert>
       <OnboardingSummary packet={packet} />
       <Card as="section" padding="md">
         <h2 className="m-0 type-label">Company</h2>

@@ -48,6 +48,7 @@ export function RegistrationSteps({ token, state, open }: { token: string; state
       {step === "payment" && (
         <PaymentStep token={token} currentProof={state.paymentProofName} last={last}>
           <OnboardingSummary
+            showPayment
             packet={{ packageCode: state.terms.package_code, termMonths: state.terms.term_months, monthlyCents: state.terms.monthly_cents, startsOn: state.terms.starts_on, business: state.business }}
           />
         </PaymentStep>

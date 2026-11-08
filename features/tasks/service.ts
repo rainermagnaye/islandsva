@@ -152,9 +152,9 @@ export type VaBookingResult =
 const MANILA = "Asia/Manila";
 
 /**
- * "Book › Task" from the VA calendar. With a client: a task for that client (the client reviews and closes it, as
- * with their own), due when the block ends in the client's zone, and a block for it. Without a client: a to-do
- * block of the VA's own. On an existing task: a block on it. The caller has already checked the VA role.
+ * "Book › Task": a titled to-do on the signed-in person's calendar (VA, Lead Gen or admin). A VA may still attach
+ * it to a client task or an existing open task; Lead Gen and admin send a to-do only. The caller has already
+ * checked the role.
  */
 export async function bookVaTask(vaId: string, input: VaTaskInput): Promise<VaBookingResult> {
   const startsAt = new Date(`${input.date}T${input.startTime}:00+08:00`);
@@ -169,7 +169,11 @@ export async function bookVaTask(vaId: string, input: VaTaskInput): Promise<VaBo
 
   if (!input.clientId) {
     const written = await insertBlock({ taskId: null, title: input.title, ...span });
-    return written.ok ? { ok: true, kind: "todo" } : { ok: false, message: "That time can't be blocked. Check the title and length." };
+    if (written.ok) return { ok: true, kind: "todo" };
+    if (written.reason === "setup") {
+      return { ok: false, message: "Booking isn't set up on this workspace yet. Try again after the latest database update." };
+    }
+    return { ok: false, message: "That time can't be blocked. Check the title and length." };
   }
 
   const client = await assignedClientZone(input.clientId);
@@ -200,7 +204,7 @@ export async function bookVaTask(vaId: string, input: VaTaskInput): Promise<VaBo
   }
   const block = await insertBlock({ taskId: created.id, title: null, ...span });
   // The task stands even if its block didn't save; the VA can block time on it again.
-  return block.ok ? { ok: true, kind: "task" } : { ok: false, message: "The task was added, but its time couldn't be blocked. Use Block time on a task." };
+  return block.ok ? { ok: true, kind: "task" } : { ok: false, message: "The task was added, but its time couldn't be put on the calendar. Open the task to try again." };
 }
 
 /** The VA's blocks still ahead (and today's earlier ones), for the calendar. */

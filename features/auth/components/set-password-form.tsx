@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { TextField } from "@/components/ui/text-field";
+import { PasswordField } from "@/components/ui/password-field";
 import { setPassword } from "../actions";
 import { PASSWORD_RULES, type NewPasswordField } from "../contract";
 
@@ -11,10 +11,9 @@ export function SetPasswordForm() {
     <Form<NewPasswordField> aria-label="Choose a password" onSubmit={setPassword}>
       {({ pending, fieldErrors }) => (
         <>
-          <TextField
+          <PasswordField
             label="New password"
             name="password"
-            type="password"
             autoComplete="new-password"
             required
             minLength={PASSWORD_RULES.min}
@@ -22,10 +21,9 @@ export function SetPasswordForm() {
             hint={`At least ${PASSWORD_RULES.min} characters, with letters and numbers.`}
             error={fieldErrors.password}
           />
-          <TextField
+          <PasswordField
             label="Confirm password"
             name="confirmPassword"
-            type="password"
             autoComplete="new-password"
             required
             maxLength={PASSWORD_RULES.max}

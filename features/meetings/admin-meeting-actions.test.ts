@@ -4,11 +4,13 @@ import { UpstreamError } from "@/lib/upstream-error";
 const requireRole = vi.fn();
 const createAdminMeeting = vi.fn();
 const createAdminSlotMeetings = vi.fn();
+const bookVaTask = vi.fn();
 const refresh = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({ requireRole: (...args: unknown[]) => requireRole(...args) }));
 vi.mock("next/cache", () => ({ refresh: () => refresh() }));
 vi.mock("./dal", () => ({ saveDiscoveryTimes: vi.fn() }));
+vi.mock("@/features/tasks/service", () => ({ bookVaTask: (...args: unknown[]) => bookVaTask(...args) }));
 vi.mock("./service", () => ({
   createAdminMeeting: (...args: unknown[]) => createAdminMeeting(...args),
   createAdminSlotMeetings: (...args: unknown[]) => createAdminSlotMeetings(...args),
@@ -31,6 +33,7 @@ beforeEach(() => {
   requireRole.mockReset().mockResolvedValue({ id: "admin" });
   createAdminMeeting.mockReset().mockResolvedValue({ ok: true });
   createAdminSlotMeetings.mockReset().mockResolvedValue({ ok: true });
+  bookVaTask.mockReset().mockResolvedValue({ ok: true, kind: "todo" });
   refresh.mockReset();
 });
 
@@ -82,5 +85,18 @@ describe("addAdminTask", () => {
   it("checks the admin role before answering", async () => {
     requireRole.mockRejectedValue(new Error("NEXT_HTTP_ERROR_FALLBACK;404"));
     await expect(addAdminTask(new FormData())).rejects.toThrow("404");
+    expect(bookVaTask).not.toHaveBeenCalled();
+  });
+
+  it("saves a to-do and refreshes", async () => {
+    const data = new FormData();
+    data.set("mode", "new");
+    data.set("title", "Board pack");
+    data.set("date", "2026-11-10");
+    data.set("startTime", "20:00");
+    data.set("minutes", "60");
+    expect(await addAdminTask(data)).toEqual({ ok: true });
+    expect(bookVaTask).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });

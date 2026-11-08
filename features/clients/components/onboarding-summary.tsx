@@ -1,14 +1,23 @@
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { formatPackagePrice } from "@/content/currencies";
 import { packages, terms } from "@/content/packages";
+import { payment } from "@/content/payment";
 import { timezoneForCountry } from "@/content/timezones";
 import type { PublicOnboarding } from "../contract";
 
 const day = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 
-/** The package agreed at conversion. The amount cannot be changed from this link. */
-export function OnboardingSummary({ packet }: { packet: Pick<PublicOnboarding, "packageCode" | "termMonths" | "monthlyCents" | "startsOn" | "business"> }) {
+/**
+ * The package agreed at conversion. The amount cannot be changed from this link. `showPayment` adds how to pay
+ * (the payment step only; once the receipt is in, the client doesn't need it again).
+ */
+export function OnboardingSummary({
+  packet,
+  showPayment = false,
+}: {
+  packet: Pick<PublicOnboarding, "packageCode" | "termMonths" | "monthlyCents" | "startsOn" | "business">;
+  showPayment?: boolean;
+}) {
   const pkg = packages.find((item) => item.slug === packet.packageCode);
   const term = terms.find((item) => item.months === packet.termMonths);
   const zone = timezoneForCountry(packet.business.country)?.label ?? "";
@@ -30,13 +39,34 @@ export function OnboardingSummary({ packet }: { packet: Pick<PublicOnboarding, "
           <dd className="m-0 type-body-sm">{zone || "Not set"}</dd>
         </div>
       </dl>
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="m-0 type-label">Payment</h3>
-        <Badge tone="warning" size="sm" icon={null}>
-          Sample
-        </Badge>
-      </div>
-      <p className="m-0 type-body-sm text-ink-muted">These payment instructions are a sample. Transfer the monthly amount above, then upload a PDF or photo of the receipt.</p>
+      {showPayment && (
+        <div className="grid gap-3 border-t border-border pt-3">
+          <h3 className="m-0 type-label">Payment</h3>
+          <p className="m-0 type-body-sm text-ink-muted">
+            Pay the monthly amount above with {payment.provider}: scan the QR code or open the payment link. Then upload a PDF or photo of the receipt.
+          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a 35 KB QR served as-is; resizing could blur the code */}
+            <img src={payment.qr} alt={`${payment.provider} QR code to pay ${payment.payee}`} width={160} height={160} className="size-40 rounded-md" />
+            <dl className="m-0 grid min-w-0 flex-1 basis-48 gap-3">
+              <div>
+                <dt className="type-caption text-ink-muted">Pay to</dt>
+                <dd className="m-0 type-body-sm">
+                  {payment.payee} ({payment.handle})
+                </dd>
+              </div>
+              <div>
+                <dt className="type-caption text-ink-muted">Payment link</dt>
+                <dd className="m-0 type-body-sm break-all">
+                  <a href={payment.url} target="_blank" rel="noopener noreferrer">
+                    {payment.url.replace(/^https:\/\//, "")}
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

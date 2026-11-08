@@ -3,12 +3,12 @@ import { z } from "zod";
 import { packages } from "@/content/packages";
 import { FORM_ERROR, NO_CONTROL_CHARS, NO_CONTROL_CHARS_EXCEPT_WHITESPACE, emailField, parseWith, tooLong, utcDay } from "@/lib/validation";
 import { PACKAGE_TIMEZONES } from "@/features/leads/contract";
-import { NEW_CLIENT_LIMITS, PAYMENT_RECEIVED_LIMITS, type NewClientField, type PaymentReceivedField } from "./contract";
+import { NEW_CLIENT_LIMITS, PAYMENT_RECEIVED_LIMITS, type ClientPackageField, type NewClientField, type PaymentReceivedField } from "./contract";
 import { CLIENT_REVIEW_NOTE_LIMIT, REGISTRATION_STEPS, REVIEW_SECTION_FOR_STEP } from "./registration";
 import { optionalLine } from "./validation";
 
-// A client a Closer adds by hand, an admin's review of a registration packet, and the payment recorded when
-// it's confirmed.
+// A client a Lead Gen or an admin adds by hand, a change to a pending client's package, an admin's review of a
+// registration packet, and the payment recorded when it's confirmed.
 
 const DAY = 86_400_000;
 
@@ -19,17 +19,33 @@ const TIMEZONE_VALUES: readonly string[] = PACKAGE_TIMEZONES.map((zone) => zone.
 const requiredClientLine = (limit: number, missing: string, name: string) =>
   z.string({ error: missing }).trim().min(1, missing).max(limit, tooLong(name, limit)).regex(NO_CONTROL_CHARS, tooLong(name, limit));
 
-const newClientSchema = z.strictObject({
-  companyName: requiredClientLine(NEW_CLIENT_LIMITS.companyName, "Enter the company name.", "the company name"),
-  contactName: requiredClientLine(NEW_CLIENT_LIMITS.contactName, "Enter the contact's name.", "the name"),
-  contactEmail: emailField(NEW_CLIENT_LIMITS.contactEmail),
-  contactPhone: optionalLine(NEW_CLIENT_LIMITS.contactPhone, "the phone number"),
+/** The agreed package, as every package form posts it. */
+const packageShape = {
   package: z.string({ error: "Choose a package." }).trim().refine((slug) => PACKAGE_SLUGS.includes(slug), "Choose a package."),
   hoursPerWeek: z.enum(["20", "40", "80"], { error: "Choose the hours for this package." }),
   termMonths: z.enum(["1", "6", "12"], { error: "Choose how long they'll commit." }),
   startsOn: z.string({ error: "Choose a start date." }).regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a start date."),
   timezone: z.string({ error: "Choose their time zone." }).refine((zone) => TIMEZONE_VALUES.includes(zone), "Choose their time zone."),
+};
+
+const newClientSchema = z.strictObject({
+  companyName: requiredClientLine(NEW_CLIENT_LIMITS.companyName, "Enter the company name.", "the company name"),
+  contactName: requiredClientLine(NEW_CLIENT_LIMITS.contactName, "Enter the contact's name.", "the name"),
+  contactEmail: emailField(NEW_CLIENT_LIMITS.contactEmail),
+  contactPhone: optionalLine(NEW_CLIENT_LIMITS.contactPhone, "the phone number"),
+  ...packageShape,
 });
+
+/** What the schema can't check alone: the hours are the package's own; the start runs from today through the next year. */
+function packageProblems(value: { package: string; hoursPerWeek: string; startsOn: string }, now: Date) {
+  const fieldErrors: Partial<Record<ClientPackageField, string>> = {};
+  const pkg = packages.find((item) => item.slug === value.package);
+  if (!pkg || String(pkg.weeklyHours) !== value.hoursPerWeek) fieldErrors.hoursPerWeek = "Choose the hours that come with this package.";
+  const start = utcDay(value.startsOn);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  if (start === null || start < today - DAY || start > today + 366 * DAY) fieldErrors.startsOn = "Choose a start date from today through the next year.";
+  return fieldErrors;
+}
 
 export type NewClientInput = {
   companyName: string;
@@ -44,19 +60,14 @@ export type NewClientInput = {
 };
 
 /**
- * A client a Closer adds by hand. The hours must be the package's own; the start date runs from today through
- * the next year. The monthly price is not an input — the server reads it from the package catalogue.
+ * A client a Lead Gen or an admin adds by hand. The hours must be the package's own; the start date runs from today
+ * through the next year. The monthly price is not an input — the server reads it from the package catalogue.
  */
 export function parseNewClient(input: unknown, now = new Date()) {
   const parsed = parseWith(newClientSchema, input, Object.keys(newClientSchema.shape) as NewClientField[]);
   if (!parsed.ok) return parsed;
   const { package: packageSlug, hoursPerWeek, termMonths, startsOn, contactPhone, ...rest } = parsed.value;
-  const fieldErrors: Partial<Record<NewClientField, string>> = {};
-  const pkg = packages.find((item) => item.slug === packageSlug);
-  if (!pkg || String(pkg.weeklyHours) !== hoursPerWeek) fieldErrors.hoursPerWeek = "Choose the hours that come with this package.";
-  const start = utcDay(startsOn);
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  if (start === null || start < today - DAY || start > today + 366 * DAY) fieldErrors.startsOn = "Choose a start date from today through the next year.";
+  const fieldErrors: Partial<Record<NewClientField, string>> = packageProblems(parsed.value, now);
   if (Object.keys(fieldErrors).length > 0) return { ok: false as const, fieldErrors };
   return {
     ok: true as const,
@@ -68,6 +79,37 @@ export function parseNewClient(input: unknown, now = new Date()) {
       termMonths: Number(termMonths) as 1 | 6 | 12,
       startsOn,
     } satisfies NewClientInput,
+  };
+}
+
+const clientPackageSchema = z.strictObject({ clientId: z.uuid({ error: FORM_ERROR }), ...packageShape });
+
+export type ClientPackageInput = {
+  clientId: string;
+  packageSlug: string;
+  hoursPerWeek: 20 | 40 | 80;
+  termMonths: 1 | 6 | 12;
+  startsOn: string;
+  timezone: string;
+};
+
+/** Sets or changes a pending client's package, with the same rules as a new client. A bad client id is a tampered form. */
+export function parseClientPackage(input: unknown, now = new Date()) {
+  const parsed = parseWith(clientPackageSchema, input, Object.keys(packageShape) as ClientPackageField[]);
+  if (!parsed.ok) return parsed;
+  const fieldErrors = packageProblems(parsed.value, now);
+  if (Object.keys(fieldErrors).length > 0) return { ok: false as const, fieldErrors };
+  const { clientId, package: packageSlug, hoursPerWeek, termMonths, startsOn, timezone } = parsed.value;
+  return {
+    ok: true as const,
+    value: {
+      clientId,
+      packageSlug,
+      hoursPerWeek: Number(hoursPerWeek) as 20 | 40 | 80,
+      termMonths: Number(termMonths) as 1 | 6 | 12,
+      startsOn,
+      timezone,
+    } satisfies ClientPackageInput,
   };
 }
 

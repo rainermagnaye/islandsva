@@ -3,7 +3,7 @@ import { ROLES, type Role } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UpstreamError } from "@/lib/upstream-error";
-import type { EmployeeReviewStatus, UserSummary } from "./contract";
+import { EMPLOYEE_ROLES, type EmployeeReviewStatus, type UserSummary } from "./contract";
 import { classifyInviteError } from "./invite-result";
 
 /**
@@ -21,6 +21,37 @@ export async function listUsers(limit = 500): Promise<UserSummary[]> {
 
   const extras = await employeeExtras(data.map((row) => row.id));
   return data.map((row) => toSummary(row, extras.get(row.id)));
+}
+
+/**
+ * Employees only: anyone holding an employee role (EMPLOYEE_ROLES; a Super Admin also holds admin), whatever else
+ * they hold. A client contact is a login for their company, not staff. Newest first, at most `limit`.
+ * Filtered in the database so the limit counts staff, not client logins. Read as the signed-in admin (RLS).
+ */
+export async function listEmployees(limit = 500): Promise<UserSummary[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, status, signed_in_at, created_at, roles!roles_user_id_fkey(role), employee:roles!roles_user_id_fkey!inner(role)")
+    .in("employee.role", [...EMPLOYEE_ROLES])
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new UpstreamError("supabase", `Listing employees failed: ${error.message}`, { cause: error });
+
+  const extras = await employeeExtras(data.map((row) => row.id));
+  // `employee` only filters the rows; toSummary reads the full role list from `roles`.
+  return data.map((row) => toSummary(row, extras.get(row.id)));
+}
+
+/** How many employees there are, to tell when the Teams board isn't showing everyone. */
+export async function countEmployees() {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("profiles")
+    .select("id, employee:roles!roles_user_id_fkey!inner(role)", { count: "exact", head: true })
+    .in("employee.role", [...EMPLOYEE_ROLES]);
+  if (error) throw new UpstreamError("supabase", `Counting employees failed: ${error.message}`, { cause: error });
+  return count ?? 0;
 }
 
 const OVERVIEW_PAGE = 1000;
@@ -134,14 +165,18 @@ function toSummary(row: {
 
 // Writes below use the secret key (they bypass RLS): callers must have checked the admin role first.
 
+/** Which invite email wording a person gets: a client contact, or an employee (VA, Lead Gen, admin). */
+export type InviteAudience = "client" | "staff";
+
 /**
  * Creates the auth user and sends the invite email. `redirectTo` is where the link opens (the password
  * form). A URL the project has not allowed comes back as `redirect` so the caller can send the link to
- * the site address instead.
+ * the site address instead. `invite_for` picks the wording in supabase/templates/invite.html (one Supabase
+ * invite template serves everyone); it is only email copy, never used for access.
  */
-export async function inviteAuthUser(email: string, fullName: string, redirectTo?: string) {
+export async function inviteAuthUser(email: string, fullName: string, audience: InviteAudience, redirectTo?: string) {
   const { data, error } = await createAdminClient().auth.admin.inviteUserByEmail(email, {
-    data: { full_name: fullName },
+    data: { full_name: fullName, invite_for: audience },
     redirectTo,
   });
   if (error) {

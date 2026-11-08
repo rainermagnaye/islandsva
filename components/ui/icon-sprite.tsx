@@ -54,6 +54,8 @@ const ICONS = {
   filter: [["p", "M4 5h16l-6 7.5V19l-4 1.5v-8z"]],
   download: [["p", "M12 4v11M7 10l5 5 5-5M5 20h14"]],
   external: [["p", "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"]],
+  eye: [["p", "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"], ["c", 12, 12, 3]],
+  "eye-off": [["p", "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"], ["c", 12, 12, 3], ["p", "M4 4l16 16"]],
 } satisfies Record<IconName, Shape[]>;
 
 /** Rendered once by the root layout. Stroke and colour come from each <Icon>'s <svg> through <use>. */

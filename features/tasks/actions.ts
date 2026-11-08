@@ -203,9 +203,9 @@ export async function deleteTaskComment(formData: FormData): Promise<SubmitResul
   return { ok: true };
 }
 
-/** "Book › Task" on the VA calendar: a task for one of their clients, a to-do of their own, or time on a task. */
+/** "Book › Task" on the VA, Lead Gen or admin calendar: a to-do of their own at the chosen time. */
 export async function bookVaTaskAction(formData: FormData): Promise<SubmitResult<VaTaskField>> {
-  const user = await requireRole(["va"]);
+  const user = await requireRole(["va", "closer", "admin"]);
   const parsed = parseVaTask(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   try {
@@ -222,9 +222,9 @@ export async function bookVaTaskAction(formData: FormData): Promise<SubmitResult
   return { ok: true };
 }
 
-/** Removes one of the VA's own blocks. A block that's already gone counts as removed. */
+/** Removes one of the signed-in person's own to-dos. A block that's already gone counts as removed. */
 export async function removeBlockAction(formData: FormData): Promise<SubmitResult> {
-  await requireRole(["va"]);
+  await requireRole(["va", "closer", "admin"]);
   const parsed = parseBlockId(formEntries(formData));
   if (!parsed.ok) return toSubmitResult(parsed);
   try {

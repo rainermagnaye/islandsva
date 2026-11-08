@@ -3,9 +3,12 @@
 import { useRouter } from "next/navigation";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { wallClockIn } from "@/components/ui/date-math";
+import { useToast } from "@/components/ui/toast";
 import { DemoCalendar } from "@/features/demos/components/demo-calendar";
+import { staffGesture } from "@/features/meetings/booking-draft";
 import { ComingUp } from "@/features/meetings/components/coming-up";
 import { ScheduleTable } from "@/features/meetings/components/schedule-table";
+import { placeStaffBooking } from "@/features/meetings/components/staff-moves";
 import { BOOKING_TIME_ZONE, type Booking } from "@/features/meetings/contract";
 import type { AgendaItem } from "@/features/meetings/agenda";
 import type { ScheduleRow } from "@/features/meetings/schedule";
@@ -43,6 +46,7 @@ export function VaCalendarView({
   tools: ReactNode;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [blockId, setBlockId] = useState<string | null>(null);
   const selected = bookings.find((booking) => booking.id === selectedId) ?? null;
@@ -86,6 +90,12 @@ export function VaCalendarView({
             <ComingUp className="min-h-0 flex-1" items={agenda} review={null} onOpenBooking={open} />
           </>
         }
+        eventGesture={(event) => staffGesture(bookings.find((booking) => booking.id === event.id))}
+        onEventMove={(event, next) => {
+          const booking = bookings.find((item) => item.id === event.id);
+          if (!booking) return false;
+          return placeStaffBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
+        }}
         onEventClick={(event) => {
           const href = links.get(event.id);
           if (href) {
