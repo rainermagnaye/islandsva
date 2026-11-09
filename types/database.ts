@@ -706,6 +706,7 @@ export type Database = {
       save_client_review: { Args: { client_id: string; issues: string[]; note: string }; Returns: undefined };
       accept_client_review: { Args: { client_id: string }; Returns: undefined };
       record_client_invite: { Args: { client_id: string; user_id: string }; Returns: undefined };
+      assign_client_va: { Args: { client_id: string; va_id: string }; Returns: string };
       submit_client_packet: {
         Args: {
           token_hash: string;

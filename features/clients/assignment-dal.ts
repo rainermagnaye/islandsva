@@ -4,8 +4,9 @@ import { UpstreamError } from "@/lib/upstream-error";
 import { isUuid } from "@/lib/uuid";
 import type { AssignedClient } from "./contract";
 
-// A client's VAs. Read with the signed-in session. An admin with 2FA ends one assignment. Creating one happens
-// when the client accepts a shortlist. Several VAs may be active. The name on the row is a snapshot.
+// A client's VAs. Read with the signed-in session. An admin with 2FA assigns one (assign_client_va: after the payment
+// is approved, so the VA is in place before activation) or ends one; a client accepting a shortlist also creates one.
+// Several VAs may be active. The name on the row is a snapshot.
 
 export type VaAssignment = { id: string; vaId: string; vaName: string; startedAt: string };
 
@@ -56,6 +57,23 @@ export async function listActiveAssignmentLoads(): Promise<ActiveAssignmentLoad[
     if (data.length < OVERVIEW_PAGE) return rows;
   }
   throw new UpstreamError("supabase", "Reading VA load exceeded 20 pages");
+}
+
+/** assign_client_va's refusals: IVA01 unknown or other-tenant client; IVA49 not assignable now (step, package full, VA closed). */
+const ASSIGN_REFUSALS = { IVA01: "not_found", IVA49: "not_assignable" } as const;
+
+/**
+ * The admin assigns a VA to the client. Signed-in session: the function checks the admin (2FA), the tenant, the
+ * client's step, the package's VA count and that the VA is open, then withdraws open offers once the package is full.
+ */
+export async function assignClientVa(clientId: string, vaId: string) {
+  if (!isUuid(clientId) || !isUuid(vaId)) return { ok: false as const, reason: "not_found" as const };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("assign_client_va", { client_id: clientId, va_id: vaId });
+  if (!error) return { ok: true as const };
+  const reason = ASSIGN_REFUSALS[error.code as keyof typeof ASSIGN_REFUSALS];
+  if (reason) return { ok: false as const, reason };
+  throw new UpstreamError("supabase", `Assigning a VA to ${clientId} failed (${error.code})`);
 }
 
 /** Ends one active assignment. History stays. Returns the client so the admin can go back to Assistants. */

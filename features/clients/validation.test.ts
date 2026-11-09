@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClientDetails, parseClientFlag, parseClientNote, parseCreateClient } from "./validation";
+import { parseAssignVa, parseClientDetails, parseClientFlag, parseClientNote, parseCreateClient } from "./validation";
 import { parseClientPackage, parseClientReview, parseNewClient, parsePaymentReceived } from "./review-validation";
 
 const clientId = "0b7c6a52-5a4f-4e0b-9a8e-2b1c3d4e5f60";
@@ -254,5 +254,24 @@ describe("parsePaymentReceived", () => {
     expect(parsePaymentReceived({ ...base, reference: "x".repeat(201) }, today)).toMatchObject({ fieldErrors: { reference: expect.any(String) } });
     expect(parsePaymentReceived({ ...base, clientId: "nope" }, today)).toEqual({ ok: false, formError: expect.any(String) });
     expect(parsePaymentReceived({ ...base, actor: clientId }, today)).toEqual({ ok: false, formError: expect.any(String) });
+  });
+});
+
+describe("parseAssignVa", () => {
+  const vaId = "6f1c2b3a-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+
+  it("accepts a client and a VA", () => {
+    expect(parseAssignVa({ clientId, vaId })).toEqual({ ok: true, value: { clientId, vaId } });
+  });
+
+  it("asks for a VA when none is chosen", () => {
+    const result = parseAssignVa({ clientId, vaId: "" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result).toMatchObject({ fieldErrors: { vaId: "Choose a VA." } });
+  });
+
+  it("refuses a bad client id or an extra field", () => {
+    expect(parseAssignVa({ clientId: "nope", vaId }).ok).toBe(false);
+    expect(parseAssignVa({ clientId, vaId, status: "active" }).ok).toBe(false);
   });
 });

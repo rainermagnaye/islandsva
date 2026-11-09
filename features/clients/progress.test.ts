@@ -7,7 +7,7 @@ describe("client registration progress", () => {
 
   it("starts on registration once the lead is converted", () => {
     const steps = clientRegistrationSteps({ ...base, onboardingStatus: "ready" });
-    expect(steps.map((step) => step.label)).toEqual(["Converted", "Registration", "Review", "Activation", "Completed"]);
+    expect(steps.map((step) => step.label)).toEqual(["Converted", "Registration", "Review", "Assign VA", "Activation", "Completed"]);
     expect(steps.find((step) => step.id === "converted")).toMatchObject({ done: true, current: false });
     expect(steps.find((step) => step.current)?.id).toBe("registration");
   });
@@ -22,18 +22,28 @@ describe("client registration progress", () => {
     const steps = clientRegistrationSteps({ ...base, onboardingStatus: "pending_review" });
     expect(steps.find((step) => step.id === "registration")).toMatchObject({ done: true });
     expect(steps.find((step) => step.current)?.id).toBe("review");
+    expect(steps.find((step) => step.id === "assign-va")?.done).toBe(false);
     expect(steps.find((step) => step.id === "activation")?.done).toBe(false);
 
     const returned = clientRegistrationSteps({ ...base, onboardingStatus: "changes_requested" });
     expect(returned.find((step) => step.id === "registration")).toMatchObject({ done: false, current: true });
   });
 
-  it("moves to activation after review, and completes once the invite is sent", () => {
+  it("moves to Assign VA after review, then to activation once the VA is assigned, and completes once the invite is sent", () => {
     const reviewed = clientRegistrationSteps({ ...base, onboardingStatus: "approved" });
     expect(reviewed.find((step) => step.id === "review")).toMatchObject({ done: true });
-    expect(reviewed.find((step) => step.current)?.id).toBe("activation");
+    expect(reviewed.find((step) => step.current)?.id).toBe("assign-va");
+    expect(clientRegistrationSteps({ ...base, onboardingStatus: "approved", vaAssigned: false }).find((step) => step.current)?.id).toBe("assign-va");
+
+    const staffed = clientRegistrationSteps({ ...base, onboardingStatus: "approved", vaAssigned: true });
+    expect(staffed.find((step) => step.id === "assign-va")).toMatchObject({ done: true, current: false });
+    expect(staffed.find((step) => step.current)?.id).toBe("activation");
+
+    // An assignment before review doesn't skip it: the step follows Review.
+    expect(clientRegistrationSteps({ ...base, onboardingStatus: "pending_review", vaAssigned: true }).find((step) => step.id === "assign-va")?.done).toBe(false);
 
     const sent = clientRegistrationSteps({ ...base, onboardingStatus: "invite_sent" });
+    expect(sent.find((step) => step.id === "assign-va")).toMatchObject({ done: true });
     expect(sent.find((step) => step.id === "activation")).toMatchObject({ done: true });
     expect(sent.every((step) => step.done)).toBe(true);
     expect(sent.find((step) => step.current)?.id).toBe("completed");
@@ -42,6 +52,7 @@ describe("client registration progress", () => {
   it("treats an invite or an active account as onboarding finished", () => {
     expect(clientOnboardingComplete(base)).toBe(false);
     expect(clientOnboardingComplete({ onboardingStatus: "approved", accountStatus: "pending" })).toBe(false);
+    expect(clientOnboardingComplete({ onboardingStatus: "approved", accountStatus: "pending", vaAssigned: true })).toBe(false);
     expect(clientOnboardingComplete({ onboardingStatus: "invite_sent", accountStatus: "pending" })).toBe(true);
     expect(clientOnboardingComplete({ onboardingStatus: "ready", accountStatus: "active" })).toBe(true);
   });

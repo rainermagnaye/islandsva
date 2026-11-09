@@ -260,6 +260,7 @@ export async function sendClientActivation(formData: FormData): Promise<SubmitRe
       if (result.reason === "rate") return { ok: false, message: "Too many invitation emails were sent. Wait a while, then try again." };
       if (result.reason === "exists") return { ok: false, message: "That email already has an account." };
       if (result.reason === "redirect") return { ok: false, message: "We couldn't send the activation link. Please try again in a moment." };
+      if (result.reason === "no_va") return { ok: false, message: "Assign the client's VA before sending activation." };
       return { ok: false, message: "This client is not ready for activation. Refresh the page." };
     }
   } catch (error) {

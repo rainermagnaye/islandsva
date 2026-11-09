@@ -188,9 +188,12 @@ export async function approveClientPayment(input: { clientId: string; actor: str
 }
 
 /** Links the new login after the invite email. Same access rule as saveClientReview. */
-export function recordClientInvite(clientId: string, userId: string) {
-  return callReview(
-    () => createAdminClient().rpc("record_client_invite", { client_id: clientId, user_id: userId }),
-    `Linking the login for ${clientId} failed`,
-  );
+export async function recordClientInvite(clientId: string, userId: string) {
+  const { error } = await createAdminClient().rpc("record_client_invite", { client_id: clientId, user_id: userId });
+  if (!error) return { ok: true as const };
+  // IVA50: the package's VAs are not all assigned yet (20261109111500_admin_va_assignment).
+  if (error.code === "IVA50") return { ok: false as const, reason: "no_va" as const };
+  const refusal = packetRefusal(error.code ?? "");
+  if (refusal) return { ok: false as const, reason: refusal };
+  throw new UpstreamError("supabase", `Linking the login for ${clientId} failed`, { cause: error });
 }

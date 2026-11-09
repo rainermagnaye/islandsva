@@ -1462,6 +1462,9 @@ describe("client onboarding", () => {
     const login = "00000000-0000-0000-0000-0000000000aa";
     await as("supabase_auth_admin", {}, `insert into auth.users (id, email) values ('${login}', 'packet-login@x.co')`);
     await asServer("insert into public.roles (user_id, role, assigned_by) values ($1, 'client', $2)", [login, ADMIN]);
+    // Activation waits for the package's VA (20261109111500_admin_va_assignment).
+    await expect(asServer("select public.record_client_invite($1, $2)", [clientId, login])).rejects.toMatchObject({ code: "IVA50" });
+    await asServer("insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [clientId, VA]);
     await asServer("select public.record_client_invite($1, $2)", [clientId, login]);
     const [sent] = await asServer<{ onboarding_status: string; user_id: string; status: string }>(
       "select onboarding_status, user_id, status from public.clients where id = $1",
@@ -5307,5 +5310,160 @@ describe("Calendar reschedule", () => {
       await expect(move(asClient, adminMeeting.id, ahead(54), ahead(55))).rejects.toMatchObject({ code: "42501" });
       await expect(move(token(ADMIN, ["admin"], "aal1"), adminMeeting.id, ahead(54), ahead(55))).rejects.toMatchObject({ code: "42501" });
     });
+  });
+});
+
+describe("Admin VA assignment (20261109111500_admin_va_assignment)", () => {
+  const VA_X = "44444444-4444-4444-8444-444444444401";
+  const VA_Y = "44444444-4444-4444-8444-444444444402";
+  const VA_Z = "44444444-4444-4444-8444-444444444403";
+  const VA_OFF = "44444444-4444-4444-8444-444444444404";
+  const ADMIN_O = "44444444-4444-4444-8444-444444444405";
+  const LOGIN = "44444444-4444-4444-8444-444444444406";
+  const asOtherAdmin = { ...token(ADMIN_O, ["admin"], "aal2"), app_metadata: { roles: ["admin"], tenant_id: "" } };
+
+  const assign = (client: string, va: string, claims: Claims = asAdmin) =>
+    asUser<{ id: string }>(claims, "select public.assign_client_va($1, $2) as id", [client, va]);
+
+  /** A pending client at the given registration step, with a package (or none). */
+  const company = async (name: string, step: string, packageCode: string | null = "essentials") => {
+    const hours = packageCode === "day-and-night" ? 80 : packageCode === "executive" ? 40 : 20;
+    const [{ id }] = await asServer<{ id: string }>(
+      "insert into public.clients (company_name, contact_name, contact_email, created_by) values ($1, 'Contact', $2, $3) returning id",
+      [name, `${name.toLowerCase().replace(/\s+/g, "-")}@assign.co`, CLOSER],
+    );
+    await asServer("update public.clients set onboarding_status = $2 where id = $1", [id, step]);
+    if (packageCode) {
+      await asServer(
+        `update public.clients set package_code = $2, hours_per_week = $3, term_months = 1, monthly_cents = 90000,
+           starts_on = '2026-12-01', timezone = 'Asia/Manila' where id = $1`,
+        [id, packageCode, hours],
+      );
+    }
+    return id;
+  };
+
+  beforeAll(async () => {
+    await as("supabase_auth_admin", {}, `
+      insert into auth.users (id, email, raw_user_meta_data) values
+        ('${VA_X}', 'assign-x@x.co', '{"full_name":"Xena Lim"}'),
+        ('${VA_Y}', 'assign-y@x.co', '{"full_name":"Yuri Tan"}'),
+        ('${VA_Z}', 'assign-z@x.co', '{"full_name":"Zara Ong"}'),
+        ('${VA_OFF}', 'assign-off@x.co', '{"full_name":"Off Duty"}'),
+        ('${ADMIN_O}', 'assign-admin-o@x.co', '{}'),
+        ('${LOGIN}', 'assign-login@x.co', '{}')`);
+    await asServer(`update public.profiles set status = 'active' where id in ('${VA_X}', '${VA_Y}', '${VA_Z}', '${ADMIN_O}', '${LOGIN}')`);
+    await asServer(`update public.profiles set status = 'inactive' where id = '${VA_OFF}'`);
+    await asServer(`
+      insert into public.roles (user_id, role) values
+        ('${VA_X}', 'va'), ('${VA_Y}', 'va'), ('${VA_Z}', 'va'), ('${VA_OFF}', 'va'), ('${ADMIN_O}', 'admin'), ('${LOGIN}', 'client')`);
+    const [{ id: other }] = await asServer<{ id: string }>("insert into public.tenants (name, slug) values ('Assign other', 'assign-other') returning id");
+    await asServer(`update public.profiles set tenant_id = $1 where id = '${ADMIN_O}'`, [other]);
+    asOtherAdmin.app_metadata.tenant_id = other;
+  });
+
+  it("assigns the VA to an approved client, as the admin, and withdraws the open offers once the package is staffed", async () => {
+    const client = await company("Assign Approved", "approved");
+    // An offer made before the client was approved for activation: nothing left to choose once the VA is set.
+    await asServer("insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3)", [client, VA_Y, ADMIN]);
+    const [{ id }] = await assign(client, VA_X);
+    expect(await asServer("select va_id, va_first_name, assigned_by, status from public.client_va_assignments where id = $1", [id])).toEqual([
+      { va_id: VA_X, va_first_name: "Xena", assigned_by: ADMIN, status: "active" },
+    ]);
+    expect(await asServer("select count(*)::int as n from public.va_shortlists where client_id = $1 and status = 'offered'", [client])).toEqual([{ n: 0 }]);
+    // The audit log names the admin for the assignment.
+    expect(
+      await asServer("select actor_id, actor_kind from public.audit_log where record_type = 'client_va_assignments' and record_id = $1 and action = 'insert'", [id]),
+    ).toEqual([{ actor_id: ADMIN, actor_kind: "user" }]);
+    // Essentials has one VA: a second is refused, the same VA too.
+    await expect(assign(client, VA_Z)).rejects.toMatchObject({ code: "IVA49" });
+    await expect(assign(client, VA_X)).rejects.toMatchObject({ code: "IVA49" });
+  });
+
+  it("assigns two VAs on Day and night, then refuses a third", async () => {
+    const client = await company("Assign Shifts", "approved", "day-and-night");
+    await asServer("insert into public.va_shortlists (client_id, va_id, offered_by) values ($1, $2, $3)", [client, VA_Z, ADMIN]);
+    await assign(client, VA_X);
+    // One of two: the offer stays open.
+    expect(await asServer("select count(*)::int as n from public.va_shortlists where client_id = $1 and status = 'offered'", [client])).toEqual([{ n: 1 }]);
+    await assign(client, VA_Y);
+    expect(await asServer("select count(*)::int as n from public.va_shortlists where client_id = $1 and status = 'offered'", [client])).toEqual([{ n: 0 }]);
+    await expect(assign(client, VA_Z)).rejects.toMatchObject({ code: "IVA49" });
+  });
+
+  it("refuses a client that isn't approved, is disabled or has no package, and a VA that isn't open", async () => {
+    for (const step of ["ready", "pending_customer", "pending_review", "changes_requested"]) {
+      const client = await company(`Assign ${step}`, step);
+      await expect(assign(client, VA_X)).rejects.toMatchObject({ code: "IVA49" });
+    }
+    const disabled = await company("Assign Disabled", "approved");
+    await asServer("update public.clients set disabled_at = now() where id = $1", [disabled]);
+    await expect(assign(disabled, VA_X)).rejects.toMatchObject({ code: "IVA49" });
+    const noPackage = await company("Assign No Package", "approved", null);
+    await expect(assign(noPackage, VA_X)).rejects.toMatchObject({ code: "IVA49" });
+    const ready = await company("Assign Open Check", "approved");
+    await expect(assign(ready, VA_OFF)).rejects.toMatchObject({ code: "IVA49" });
+    // Not a VA at all.
+    await expect(assign(ready, CLOSER)).rejects.toMatchObject({ code: "IVA49" });
+    await expect(assign("44444444-4444-4444-8444-4444444444ff", VA_X)).rejects.toMatchObject({ code: "IVA01" });
+  });
+
+  it("lets only a signed-in admin with two-factor assign, and only in their own agency", async () => {
+    const client = await company("Assign Who", "approved");
+    for (const claims of [asCloser, asVa, asClient, token(ADMIN, ["admin"], "aal1")]) {
+      await expect(assign(client, VA_X, claims)).rejects.toMatchObject({ code: "42501" });
+    }
+    await expect(as("anon", {}, "select public.assign_client_va($1, $2)", [client, VA_X])).rejects.toThrow(/permission denied/);
+    await expect(asServer("select public.assign_client_va($1, $2)", [client, VA_X])).rejects.toThrow(/permission denied/);
+    await expect(assign(client, VA_X, asOtherAdmin)).rejects.toMatchObject({ code: "IVA01" });
+    // A direct session with an admin's claims is not signed in.
+    await rolledBack(async () => {
+      await expect(direct(asAdmin, "select public.assign_client_va($1, $2)", [client, VA_X])).rejects.toMatchObject({ code: "42501" });
+    });
+    expect(await asServer("select count(*)::int as n from public.client_va_assignments where client_id = $1", [client])).toEqual([{ n: 0 }]);
+  });
+
+  it("clears the accept flag after its own insert, so a second signed-in insert in that transaction is refused", async () => {
+    const client = await company("Assign Flag", "approved", "day-and-night");
+    await rolledBack(async () => {
+      // A grant the API doesn't have, so the guard is reached rather than the privilege check.
+      await db.exec("grant insert (client_id, va_id) on public.client_va_assignments to authenticated");
+      await direct(asAdmin, "select public.assign_client_va($1, $2)", [client, VA_X], "authenticated");
+      await expect(
+        direct(asAdmin, "insert into public.client_va_assignments (client_id, va_id) values ($1, $2)", [client, VA_Y], "authenticated"),
+      ).rejects.toMatchObject({ code: "IVA28" });
+    });
+  });
+
+  it("still lets the client accept an offer and an admin end an assignment as before", async () => {
+    // The accept path is unchanged; replacing a VA is: end the old one, then assign again.
+    const client = await company("Assign Replace", "approved");
+    const [{ id }] = await assign(client, VA_X);
+    await asUser(asAdmin, "update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [id]);
+    await assign(client, VA_Y);
+    expect(await asServer("select va_id from public.client_va_assignments where client_id = $1 and status = 'active'", [client])).toEqual([{ va_id: VA_Y }]);
+  });
+
+  it("holds activation until the package's VAs are assigned", async () => {
+    const one = await company("Assign Invite One", "approved");
+    await expect(asServer("select public.record_client_invite($1, $2)", [one, LOGIN])).rejects.toMatchObject({ code: "IVA50" });
+    await assign(one, VA_X);
+    await rolledBack(async () => {
+      await direct({}, "select public.record_client_invite($1, $2)", [one, LOGIN]);
+      expect(await direct({}, "select onboarding_status from public.clients where id = $1", [one])).toEqual([{ onboarding_status: "invite_sent" }]);
+    });
+
+    const two = await company("Assign Invite Two", "approved", "day-and-night");
+    await assign(two, VA_Y);
+    await expect(asServer("select public.record_client_invite($1, $2)", [two, LOGIN])).rejects.toMatchObject({ code: "IVA50" });
+    await assign(two, VA_Z);
+    await rolledBack(async () => {
+      await direct({}, "select public.record_client_invite($1, $2)", [two, LOGIN]);
+    });
+    // An ended assignment doesn't count.
+    const ended = await company("Assign Invite Ended", "approved");
+    const [{ id }] = await assign(ended, VA_X);
+    await asUser(asAdmin, "update public.client_va_assignments set status = 'ended', ended_at = now() where id = $1", [id]);
+    await expect(asServer("select public.record_client_invite($1, $2)", [ended, LOGIN])).rejects.toMatchObject({ code: "IVA50" });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REGISTRATION_STEPS, REVIEW_SECTION_FOR_STEP, openRegistrationSteps, registrationIssues, registrationView, reviewIssueLabels, reviewIssueSteps } from "./registration";
+import { REGISTRATION_STEPS, REVIEW_SECTION_FOR_STEP, openRegistrationSteps, registrationIssues, registrationLinkOpen, registrationView, reviewIssueLabels, reviewIssueSteps } from "./registration";
 
 const complete = {
   companyName: "Acme",
@@ -108,5 +108,23 @@ describe("review sections: the admin's three steps and what is stored", () => {
     expect(reviewIssueLabels(["payment", "consent", "basic"])).toEqual(["Details", "Agreement", "Payment proof"]);
     expect(reviewIssueLabels(["address", "contacts", "package"])).toEqual(["Details", "Agreement"]);
     expect(reviewIssueLabels(["unknown"])).toEqual([]);
+  });
+});
+
+describe("registrationLinkOpen", () => {
+  const pending = { accountStatus: "pending" as const, disabledAt: null };
+
+  it("shows the link until the client submits, and again when sent back", () => {
+    expect(registrationLinkOpen({ ...pending, onboardingStatus: "ready" })).toBe(true);
+    expect(registrationLinkOpen({ ...pending, onboardingStatus: "pending_customer" })).toBe(true);
+    expect(registrationLinkOpen({ ...pending, onboardingStatus: "changes_requested" })).toBe(true);
+  });
+
+  it("hides it once submitted, approved or invited, and for an active or disabled client", () => {
+    expect(registrationLinkOpen({ ...pending, onboardingStatus: "pending_review" })).toBe(false);
+    expect(registrationLinkOpen({ ...pending, onboardingStatus: "approved" })).toBe(false);
+    expect(registrationLinkOpen({ ...pending, onboardingStatus: "invite_sent" })).toBe(false);
+    expect(registrationLinkOpen({ accountStatus: "active", disabledAt: null, onboardingStatus: "ready" })).toBe(false);
+    expect(registrationLinkOpen({ ...pending, disabledAt: "2026-11-01T00:00:00Z", onboardingStatus: "ready" })).toBe(false);
   });
 });
