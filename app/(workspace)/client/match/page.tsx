@@ -5,6 +5,7 @@ import { todayIn, wallClockIn } from "@/components/ui/date-math";
 import type { Tone } from "@/components/ui/tone";
 import { clientVaHref } from "@/content/routes";
 import { listActiveAssignments } from "@/features/clients/assignment-dal";
+import { vasForPackage } from "@/features/clients/assistants";
 import { getClient, getOwnClientId } from "@/features/clients/dal";
 import { listClientDemos, listOpenSlots } from "@/features/demos/booking-dal";
 import { bookableTimes, demoState, formatInZone, safeTimeZone } from "@/features/demos/contract";
@@ -97,6 +98,7 @@ async function ClientMatch() {
         today={todayIn(zone)}
         direct={direct}
         busyWith={busyWith}
+        teamComplete={assignments.length >= vasForPackage(client.packageCode)}
       />
     </Workspace>
   );

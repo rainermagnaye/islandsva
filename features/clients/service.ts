@@ -7,6 +7,7 @@ import { inviteClient, rollbackInvite } from "@/features/users/service";
 import type { ClientBusiness } from "./contract";
 import { approveClientPayment, issueClientOnboardingLink, recordClientInvite, saveClientReview } from "./onboarding-dal";
 import { listActiveAssignments } from "./assignment-dal";
+import { vaSlotsLeft } from "./assistants";
 import { onboardingUrl, registrationOrigin } from "./link";
 import { canSeeRegistrationLink } from "./link-access";
 import { createOnboardingToken, onboardingTokenHash } from "./token";
@@ -128,13 +129,17 @@ export async function sendClientActivation(clientId: string, invitedBy: string, 
   if (!client || client.disabledAt || client.status !== "pending" || client.onboardingStatus !== "approved") {
     return { ok: false as const, reason: "not_found" as const };
   }
+  // The client meets their VA on first sign-in, so the package's VAs are assigned before the email goes out.
+  // record_client_invite refuses too (IVA50); checking here first means no invite is sent and rolled back.
+  const assignments = await listActiveAssignments(clientId);
+  if (vaSlotsLeft(client.packageCode, assignments.length) > 0) return { ok: false as const, reason: "no_va" as const };
   const invited = await inviteClient(client.contactEmail, client.contactName, invitedBy, origin);
   if (!invited.ok) return invited;
   try {
     const linked = await recordClientInvite(clientId, invited.userId);
     if (!linked.ok) {
       await rollbackInvite(invited.userId);
-      return { ok: false as const, reason: "not_found" as const };
+      return { ok: false as const, reason: linked.reason === "no_va" ? ("no_va" as const) : ("not_found" as const) };
     }
   } catch (error) {
     await rollbackInvite(invited.userId).catch((cleanupError: unknown) => console.error("Orphaned client invite", { userId: invited.userId, cleanupError }));

@@ -7,6 +7,7 @@ export const CLIENT_REGISTRATION_STEPS = [
   { id: "converted", label: "Converted" },
   { id: "registration", label: "Registration" },
   { id: "review", label: "Review" },
+  { id: "assign-va", label: "Assign VA" },
   { id: "activation", label: "Activation" },
   { id: "completed", label: "Completed" },
 ] as const;
@@ -114,16 +115,20 @@ export type ClientRegistrationStep = {
 /**
  * Converted is done once the lead is a client. Registration is the one form: company details, consent and payment.
  * It checks when that form is with the team, and opens again when they send it back.
- * Review checks when an admin accepts it. Activation checks when the password invite is sent, and that completes it.
+ * Review checks when an admin accepts it. Assign VA checks once the package's VAs are assigned (activation can't be
+ * sent before). Activation checks when the password invite is sent, and that completes it.
  */
 export function clientRegistrationSteps(progress: {
   onboardingStatus: ClientOnboardingStatus;
   accountStatus: ClientStatus;
+  /** Every VA the package includes is assigned (vaSlotsLeft is 0). Only read while approved: later it must be true. */
+  vaAssigned?: boolean;
 }): ClientRegistrationStep[] {
   const submitted = progress.accountStatus === "active" || progress.onboardingStatus === "pending_review" || progress.onboardingStatus === "approved" || progress.onboardingStatus === "invite_sent";
   const reviewed = progress.accountStatus === "active" || progress.onboardingStatus === "approved" || progress.onboardingStatus === "invite_sent";
   const activated = progress.accountStatus === "active" || progress.onboardingStatus === "invite_sent";
-  const flags = [true, submitted, reviewed, activated, activated];
+  const staffed = activated || (reviewed && progress.vaAssigned === true);
+  const flags = [true, submitted, reviewed, staffed, activated, activated];
   const open = flags.findIndex((step) => !step);
   const current = open === -1 ? flags.length - 1 : open;
   return CLIENT_REGISTRATION_STEPS.map((step, index) => ({
@@ -135,8 +140,17 @@ export function clientRegistrationSteps(progress: {
 }
 
 /** The invite is sent (or the account is already active): the admin stepper has nothing left to show. */
-export function clientOnboardingComplete(progress: { onboardingStatus: ClientOnboardingStatus; accountStatus: ClientStatus }) {
+export function clientOnboardingComplete(progress: { onboardingStatus: ClientOnboardingStatus; accountStatus: ClientStatus; vaAssigned?: boolean }) {
   return clientRegistrationSteps(progress).every((step) => step.done);
+}
+
+/**
+ * Whether the team still needs the client's registration link: until the client submits the form, and again if it's
+ * sent back for a change. Once submitted (in review, approved, invited) or active, there's nothing left to fill in.
+ */
+export function registrationLinkOpen(state: { accountStatus: ClientStatus; onboardingStatus: ClientOnboardingStatus; disabledAt: string | null }) {
+  if (state.accountStatus !== "pending" || state.disabledAt) return false;
+  return state.onboardingStatus === "ready" || state.onboardingStatus === "pending_customer" || state.onboardingStatus === "changes_requested";
 }
 
 export type RegistrationView = "closed" | "steps" | "receipt" | "complete" | "processing";

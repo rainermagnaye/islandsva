@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantTaskCounts, clientAssistantRows, packageBalanceLabel } from "./assistants";
+import { assistantTaskCounts, canAssignVa, clientAssistantRows, packageBalanceLabel, vaSlotsLeft, vasForPackage } from "./assistants";
 
 describe("assistantTaskCounts", () => {
   it("counts closed against every task for that VA", () => {
@@ -39,5 +39,40 @@ describe("packageBalanceLabel", () => {
   it("shows contracted weekly hours until timesheets exist", () => {
     expect(packageBalanceLabel(20)).toBe("20 h / week");
     expect(packageBalanceLabel(null)).toBe("Not set");
+  });
+});
+
+describe("vasForPackage", () => {
+  it("gives Day and night two VAs and every other package one", () => {
+    expect(vasForPackage("day-and-night")).toBe(2);
+    expect(vasForPackage("essentials")).toBe(1);
+    expect(vasForPackage("executive")).toBe(1);
+    expect(vasForPackage(null)).toBe(1);
+  });
+
+  it("counts the slots still open and never goes below zero", () => {
+    expect(vaSlotsLeft("essentials", 0)).toBe(1);
+    expect(vaSlotsLeft("essentials", 1)).toBe(0);
+    expect(vaSlotsLeft("day-and-night", 1)).toBe(1);
+    expect(vaSlotsLeft("day-and-night", 3)).toBe(0);
+  });
+});
+
+describe("canAssignVa", () => {
+  const approved = { status: "pending", onboardingStatus: "approved", disabledAt: null, packageCode: "essentials" };
+
+  it("allows an approved, invited or active client with a package", () => {
+    expect(canAssignVa(approved)).toBe(true);
+    expect(canAssignVa({ ...approved, onboardingStatus: "invite_sent" })).toBe(true);
+    expect(canAssignVa({ ...approved, status: "active", onboardingStatus: null })).toBe(true);
+  });
+
+  it("refuses before approval, when disabled, without a package, or once inactive", () => {
+    for (const step of ["ready", "pending_customer", "pending_review", "changes_requested"]) {
+      expect(canAssignVa({ ...approved, onboardingStatus: step })).toBe(false);
+    }
+    expect(canAssignVa({ ...approved, disabledAt: "2026-11-01T00:00:00Z" })).toBe(false);
+    expect(canAssignVa({ ...approved, packageCode: null })).toBe(false);
+    expect(canAssignVa({ ...approved, status: "inactive" })).toBe(false);
   });
 });

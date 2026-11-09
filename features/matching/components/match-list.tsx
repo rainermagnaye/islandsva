@@ -18,6 +18,7 @@ export type { OfferView };
 /**
  * The client's offers: request a demo with a VA, then add them as an assistant or decline. With `direct`, the
  * client already has a VA (demos are for the first one), so offers are added or declined without a demo.
+ * With `teamComplete`, the admin has assigned every VA the package includes, so nothing is waiting on the client.
  */
 export function MatchList({
   offers,
@@ -27,6 +28,7 @@ export function MatchList({
   today,
   direct,
   busyWith,
+  teamComplete,
 }: {
   offers: readonly OfferView[];
   team: readonly { id: string; name: string; tone: Tone; href: string }[];
@@ -36,6 +38,7 @@ export function MatchList({
   direct: boolean;
   /** The VA the client already has an open demo with: one demo at a time. */
   busyWith: string | null;
+  teamComplete: boolean;
 }) {
   const [dialog, setDialog] = useState<{ kind: "profile" | "request" | "accepted" | "declined"; offer: OfferView } | null>(null);
   const close = () => setDialog(null);
@@ -70,12 +73,14 @@ export function MatchList({
       ) : (
         <Card as="section" aria-labelledby="no-offers" className="grid justify-items-center gap-2 py-12 text-center">
           <h2 id="no-offers" className="m-0 type-h3">
-            {team.length > 0 ? "No new offers right now" : "We're finding your matches"}
+            {teamComplete ? (team.length > 1 ? "Your assistants are ready" : "Your assistant is ready") : team.length > 0 ? "No new offers right now" : "We're finding your matches"}
           </h2>
           <p className="m-0 max-w-[52ch] text-ink-muted">
-            {team.length > 0
-              ? "Need another VA? Ask your Islands VA contact, and new offers will show up here."
-              : "Your Islands VA contact will offer VAs here. You can meet each one on a demo call before you decide."}
+            {teamComplete
+              ? `Islands VA has assigned ${team.length > 1 ? "your VAs" : "your VA"} for your package, so there's nothing to choose. Open a name below to get started.`
+              : team.length > 0
+                ? "Need another VA? Ask your Islands VA contact, and new offers will show up here."
+                : "Your Islands VA contact will offer VAs here. You can meet each one on a demo call before you decide."}
           </p>
         </Card>
       )}

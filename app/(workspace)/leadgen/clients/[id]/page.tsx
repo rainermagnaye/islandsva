@@ -7,7 +7,9 @@ import { Card } from "@/components/ui/card";
 import { appRoutes } from "@/content/routes";
 import { ClientProfileView, ClientStatusBadge, ClientStepper } from "@/features/clients/components/client-profile-view";
 import { OnboardingLinkCard } from "@/features/clients/components/onboarding-link";
-import { clientRegistrationSteps } from "@/features/clients/registration";
+import { listActiveAssignments } from "@/features/clients/assignment-dal";
+import { vaSlotsLeft } from "@/features/clients/assistants";
+import { clientRegistrationSteps, registrationLinkOpen } from "@/features/clients/registration";
 import { getClient } from "@/features/clients/dal";
 import { onboardingUrl, registrationOrigin } from "@/features/clients/link";
 import { canSeeRegistrationLink } from "@/features/clients/link-access";
@@ -33,9 +35,13 @@ async function LeadgenClient({ params }: Pick<PageProps<"/leadgen/clients/[id]">
   if (!client) notFound();
   // The token is server-only and the link needs no sign-in: read it only after this client is visible to the Lead Gen,
   // and only for the Lead Gen who created it (every Lead Gen in the agency can read the client).
-  const showLink = client.status === "pending" && !client.disabledAt && canSeeRegistrationLink(user, client);
+  const showLink =
+    registrationLinkOpen({ accountStatus: client.status, onboardingStatus: client.onboardingStatus, disabledAt: client.disabledAt }) &&
+    canSeeRegistrationLink(user, client);
   const token = showLink ? await getRegistrationToken(id) : null;
   const url = token ? onboardingUrl(token, await registrationOrigin()) : null;
+  // The Assign VA step is the only one waiting on assignments: read them only while it can be the current step.
+  const assignments = client.onboardingStatus === "approved" && client.status === "pending" ? await listActiveAssignments(id) : [];
 
   return (
     <Workspace
@@ -50,7 +56,13 @@ async function LeadgenClient({ params }: Pick<PageProps<"/leadgen/clients/[id]">
           </h1>
           <ClientStatusBadge status={client.status} disabledAt={client.disabledAt} />
         </Card>
-        <ClientStepper steps={clientRegistrationSteps({ onboardingStatus: client.onboardingStatus, accountStatus: client.status })} />
+        <ClientStepper
+          steps={clientRegistrationSteps({
+            onboardingStatus: client.onboardingStatus,
+            accountStatus: client.status,
+            vaAssigned: vaSlotsLeft(client.packageCode, assignments.length) === 0,
+          })}
+        />
         {showLink && (
           <OnboardingLinkCard
             clientId={client.id}

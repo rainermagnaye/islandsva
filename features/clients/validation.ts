@@ -160,6 +160,16 @@ const assignmentIdSchema = z.strictObject({ assignmentId: z.uuid({ error: FORM_E
 
 export const parseAssignmentId = (input: unknown) => parseWith(assignmentIdSchema, input, []);
 
+const assignVaSchema = z.strictObject({
+  clientId: z.uuid({ error: FORM_ERROR }),
+  vaId: z.uuid({ error: "Choose a VA." }),
+});
+
+export type AssignVaField = "vaId";
+
+/** The admin's pick of the client's VA, before activation or for a free slot after. */
+export const parseAssignVa = (input: unknown) => parseWith<typeof assignVaSchema, AssignVaField>(assignVaSchema, input, ["vaId"]);
+
 const noteSchema = z.strictObject({
   clientId: z.uuid({ error: FORM_ERROR }),
   body: z
