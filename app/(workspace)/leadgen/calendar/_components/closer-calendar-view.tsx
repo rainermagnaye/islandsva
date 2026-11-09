@@ -13,7 +13,6 @@ import { CLOSER_LEGEND } from "@/features/meetings/calendar-legend";
 import { staffGesture } from "@/features/meetings/booking-draft";
 import { ComingUp } from "@/features/meetings/components/coming-up";
 import { DiscoveryInbox } from "@/features/meetings/components/discovery-inbox";
-import { placeStaffBooking } from "@/features/meetings/components/staff-moves";
 import type { Booking, BookingChoice, DiscoveryRequest } from "@/features/meetings/contract";
 import { BLOCK_PREFIX } from "@/features/tasks/contract";
 import type { VaMeetingClient } from "@/features/meetings/components/va-meeting-form";
@@ -143,8 +142,9 @@ export function CloserCalendarView({
             if (requests.some((item) => item.meetingId === event.id)) return staffGesture({ kind: "discovery", status: "requested" });
             return null;
           }}
-          onEventMove={(event, next) => {
+          onEventMove={async (event, next) => {
             const tell = (message: string, tone: "success" | "danger") => toast.show({ title: message, tone });
+            const { placeStaffBooking } = await import("@/features/meetings/components/staff-moves");
             const booking = bookings.find((item) => item.id === event.id);
             if (booking) return placeStaffBooking(booking, next, tell);
             const request = requests.find((item) => item.meetingId === event.id);
