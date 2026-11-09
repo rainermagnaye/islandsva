@@ -83,6 +83,13 @@ function usd(cents: number) {
   return `USD ${cents < 0 ? "-" : ""}${whole}.${String(Math.abs(cents) % 100).padStart(2, "0")}`;
 }
 
+/** How the term is paid (v2): billed monthly, or the whole term upfront. Same rule as amountDue in content/packages. */
+function payment(terms: AgreementTerms) {
+  if (terms.term_months === null || terms.monthly_cents === null) return NOT_SET;
+  if (terms.term_months <= 1) return "billed monthly";
+  return `${usd(terms.monthly_cents * terms.term_months)} paid upfront for the ${terms.term_months}-month term`;
+}
+
 function placeholders(terms: AgreementTerms): Record<string, string> {
   const pkg = packages.find((item) => item.slug === terms.package_code);
   return {
@@ -92,6 +99,7 @@ function placeholders(terms: AgreementTerms): Record<string, string> {
     hours: terms.hours_per_week === null ? NOT_SET : String(terms.hours_per_week),
     term: terms.term_months === null ? NOT_SET : terms.term_months === 1 ? "1 month" : `${terms.term_months} months`,
     monthly: terms.monthly_cents === null ? NOT_SET : usd(terms.monthly_cents),
+    payment: payment(terms),
     start: terms.starts_on ?? NOT_SET,
   };
 }

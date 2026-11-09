@@ -61,7 +61,7 @@ export default function PackagesPage() {
                   <div>
                     <dt className="type-label text-ink">Price</dt>
                     <dd className="m-0 text-ink-muted">
-                      From <strong className="text-ink">{formatPrice(startingPrice(p), p.currency)}</strong> / month
+                      From <strong className="text-ink">{formatPrice(startingPrice(p), p.currency)}</strong> / month on 12 months, paid upfront
                     </dd>
                   </div>
                 </dl>

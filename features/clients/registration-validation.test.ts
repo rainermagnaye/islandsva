@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
 import { AGREEMENT_CHANGED, parseAgreementAcceptance, parsePaymentProofStep, parseRegistrationDetails } from "./registration-validation";
 
 const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456";
@@ -48,10 +49,13 @@ describe("parseRegistrationDetails", () => {
 });
 
 describe("parseAgreementAcceptance", () => {
-  const form = { token, version: "v1", fingerprint, signerName: " Ana Cruz ", accept: "yes" };
+  const form = { token, version: CURRENT_AGREEMENT_VERSION, fingerprint, signerName: " Ana Cruz ", accept: "yes" };
 
   it("returns the trimmed name with the version and fingerprint", () => {
-    expect(parseAgreementAcceptance(form)).toEqual({ ok: true, value: { token, version: "v1", fingerprint, signerName: "Ana Cruz" } });
+    expect(parseAgreementAcceptance(form)).toEqual({
+      ok: true,
+      value: { token, version: CURRENT_AGREEMENT_VERSION, fingerprint, signerName: "Ana Cruz" },
+    });
   });
 
   it("needs a name of 1 to 120 characters with no control characters", () => {
@@ -61,12 +65,15 @@ describe("parseAgreementAcceptance", () => {
   });
 
   it("needs the box ticked", () => {
-    expect(parseAgreementAcceptance({ token, version: "v1", fingerprint, signerName: "Ana" })).toMatchObject({ ok: false, fieldErrors: { accept: expect.stringContaining("accept") } });
+    expect(parseAgreementAcceptance({ token, version: CURRENT_AGREEMENT_VERSION, fingerprint, signerName: "Ana" })).toMatchObject({
+      ok: false,
+      fieldErrors: { accept: expect.stringContaining("accept") },
+    });
     expect(parseAgreementAcceptance({ ...form, accept: "no" })).toMatchObject({ ok: false, fieldErrors: { accept: expect.any(String) } });
   });
 
   it("an old version is a stale page: read it again", () => {
-    expect(parseAgreementAcceptance({ ...form, version: "v0" })).toEqual({ ok: false, formError: AGREEMENT_CHANGED });
+    expect(parseAgreementAcceptance({ ...form, version: "v1" })).toEqual({ ok: false, formError: AGREEMENT_CHANGED });
   });
 
   it("a bad token, fingerprint or an unknown key is a tampered form", () => {

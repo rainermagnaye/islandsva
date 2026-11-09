@@ -107,7 +107,7 @@ export function formatPackagePrice(usdCents: number, country: string) {
 
 /** Month to month package prices in a country's currency, for the discovery call form (loaded once a country is chosen). */
 export function localPackagePrices(country: string) {
-  const terms = "Save 5% on a 6 month term or 10% on 12 months.";
+  const terms = "Save 5% on 6 months or 10% on 12 months, paid upfront.";
   const usd = currencyForCountry(country) === "USD";
   return {
     bySlug: Object.fromEntries(packages.map((p) => [p.slug, formatPackagePrice(p.monthlyPrice[1], country)])) as Record<string, string>,

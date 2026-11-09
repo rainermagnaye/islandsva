@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
 import { agreementTerms, renderAgreement } from "./agreement";
 import { agreementHash } from "./agreement-hash";
 
@@ -40,8 +41,8 @@ const { acceptAgreement, agreementReviewFor } = await import("./service");
 
 const token = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK123456";
 const terms = agreementTerms({ companyName: "Acme", countryOnFile: "United States", packageCode: "essentials", hoursPerWeek: 20, termMonths: 6, monthlyCents: 85500, startsOn: "2026-11-01" });
-const text = renderAgreement("v1", terms);
-const input = { token, version: "v1", fingerprint: agreementHash(text), signerName: "Ana" };
+const text = renderAgreement(CURRENT_AGREEMENT_VERSION, terms);
+const input = { token, version: CURRENT_AGREEMENT_VERSION, fingerprint: agreementHash(text), signerName: "Ana" };
 
 describe("acceptAgreement", () => {
   beforeEach(() => {
@@ -51,7 +52,14 @@ describe("acceptAgreement", () => {
 
   it("sends the server's own text and terms", async () => {
     expect(await acceptAgreement(input, "f".repeat(64))).toEqual({ ok: true, status: "pending_customer" });
-    expect(registration.acceptClientAgreementRow).toHaveBeenCalledWith({ token, version: "v1", body: text, termsSeen: terms, signerName: "Ana", ipHash: "f".repeat(64) });
+    expect(registration.acceptClientAgreementRow).toHaveBeenCalledWith({
+      token,
+      version: CURRENT_AGREEMENT_VERSION,
+      body: text,
+      termsSeen: terms,
+      signerName: "Ana",
+      ipHash: "f".repeat(64),
+    });
   });
 
   it("refuses a page that showed other text, without calling the database", async () => {
