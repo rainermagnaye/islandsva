@@ -146,7 +146,7 @@ export function ClientProfile({
       ) : tab === "consents" ? (
         review.record
       ) : tab === "invoices" ? (
-        <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} country={client.business.country} />
+        <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} termMonths={client.termMonths} country={client.business.country} />
       ) : (
         <ClientProfileView client={client} />
       )}

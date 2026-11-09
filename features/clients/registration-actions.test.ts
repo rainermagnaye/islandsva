@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_AGREEMENT_VERSION } from "@/content/agreement";
 import { UpstreamError } from "@/lib/upstream-error";
 import { FIELD_ERRORS, FORM_ERROR, OUTAGE_MESSAGE } from "@/lib/validation";
 import { AGREEMENT_CHANGED } from "./registration-validation";
@@ -30,7 +31,7 @@ const form = (fields: Record<string, string | File>) => {
   return data;
 };
 const details = { token, companyName: "Cruz Co", contactName: "Ana", contactPhone: "", industry: "Legal", country: "United States", website: "", jobTitle: "", street: "", city: "Austin", state: "", zip: "", staffCount: "", about: "Inbox help." };
-const agreement = { token, version: "v1", fingerprint: "a".repeat(64), signerName: " Ana Cruz ", accept: "yes" };
+const agreement = { token, version: CURRENT_AGREEMENT_VERSION, fingerprint: "a".repeat(64), signerName: " Ana Cruz ", accept: "yes" };
 const proof = () => ({ token, proof: new File([new Uint8Array([1, 2, 3])], "receipt.pdf", { type: "application/pdf" }) });
 
 const NOT_OPEN = "This registration can't be changed now.";
@@ -77,7 +78,10 @@ describe("acceptAgreementAction", () => {
   it("passes the trimmed name and the hashed client IP, never the raw one", async () => {
     expect(await acceptAgreementAction(form(agreement))).toEqual({ ok: true });
     expect(hashIp).toHaveBeenCalledWith("203.0.113.7");
-    expect(acceptAgreement).toHaveBeenCalledWith({ token, version: "v1", fingerprint: "a".repeat(64), signerName: "Ana Cruz" }, "f".repeat(64));
+    expect(acceptAgreement).toHaveBeenCalledWith(
+      { token, version: CURRENT_AGREEMENT_VERSION, fingerprint: "a".repeat(64), signerName: "Ana Cruz" },
+      "f".repeat(64),
+    );
     expect(refresh).toHaveBeenCalledOnce();
   });
 

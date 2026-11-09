@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { formatPackagePrice } from "@/content/currencies";
-import { packages, terms } from "@/content/packages";
+import { amountDue, packages, paidUpfront, terms } from "@/content/packages";
 import { adminClientPaymentHref } from "@/content/routes";
 import { timezoneForCountry } from "@/content/timezones";
 import { CLIENT_STATUS_LABELS, type ClientDetail, type ClientStatus } from "../contract";
@@ -97,6 +97,7 @@ export function ClientProfileView({ client }: { client: ClientDetail }) {
           <Field label="Hours" value={pkg?.hoursPerWeek ?? null} />
           <Field label="Term" value={term?.label ?? null} />
           <Field label="Monthly price" value={client.monthlyCents ? formatPackagePrice(client.monthlyCents, business.country) : null} />
+          <Field label="Billing" value={billingLine(client.monthlyCents, client.termMonths, business.country)} />
           <Field label="Start date" value={client.startsOn ? day.format(new Date(`${client.startsOn.slice(0, 10)}T00:00:00Z`)) : null} />
           <Field label="Time zone" value={zone} />
         </DetailsCard>
@@ -105,25 +106,35 @@ export function ClientProfileView({ client }: { client: ClientDetail }) {
   );
 }
 
+/** "USD 9,120 paid upfront for 6 months" or "USD 1,600 billed monthly". */
+function billingLine(monthlyCents: number | null, termMonths: number | null, country: string) {
+  if (!monthlyCents || !termMonths) return null;
+  const due = formatPackagePrice(amountDue(monthlyCents, termMonths), country);
+  return paidUpfront(termMonths) ? `${due} paid upfront for ${termMonths} months` : `${due} billed monthly`;
+}
+
 /** Payment proof uploaded with the registration. Invoices themselves come later. */
 export function ClientInvoices({
   clientId,
   proofName,
   proofType,
   amount,
+  termMonths,
   country,
 }: {
   clientId: string;
   proofName: string | null;
   proofType: string | null;
+  /** The agreed monthly rate; the amount paid follows from the term. */
   amount: number | null;
+  termMonths: number | null;
   country?: string;
 }) {
   if (!proofName) return <EmptyState compact title="No invoices yet" description="Payment proof appears here once the customer submits their registration." />;
   return (
     <Card as="section" padding="md" className="grid gap-2">
       <h2 className="m-0 type-label">Payment proof</h2>
-      {amount ? <p className="m-0 type-body-sm">{formatPackagePrice(amount, country ?? "")} a month.</p> : null}
+      {amount ? <p className="m-0 type-body-sm">{billingLine(amount, termMonths, country ?? "")}.</p> : null}
       <AttachmentPreview href={adminClientPaymentHref(clientId)} name={proofName} type={proofType ?? typeFromName(proofName)} />
     </Card>
   );

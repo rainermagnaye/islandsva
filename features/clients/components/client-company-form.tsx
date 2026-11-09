@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { COUNTRIES } from "@/content/countries";
 import { formatPackagePrice } from "@/content/currencies";
-import { packages, terms } from "@/content/packages";
+import { amountDue, packages, paidUpfront, terms } from "@/content/packages";
 import { timezoneForCountry } from "@/content/timezones";
 import { INDUSTRIES, STAFF_COUNTS } from "@/features/leads/contract";
 import { saveClientDetails } from "../actions";
@@ -96,10 +96,18 @@ function PackageCard({ client, country }: { client: ClientDetail; country: strin
       <ReadOnly label="Hours" value={pkg?.hoursPerWeek ?? ""} />
       <ReadOnly label="Term" value={term?.label ?? ""} />
       <ReadOnly label="Monthly price" value={client.monthlyCents ? formatPackagePrice(client.monthlyCents, country) : ""} />
+      <ReadOnly label="Billing" value={billingLine(client.monthlyCents, client.termMonths, country)} />
       <ReadOnly label="Start date" value={start} />
       <ReadOnly label="Time zone" value={zone ?? ""} />
     </Section>
   );
+}
+
+/** "USD 9,120 paid upfront for 6 months" or "USD 1,600 billed monthly". */
+function billingLine(monthlyCents: number | null, termMonths: number | null, country: string) {
+  if (!monthlyCents || !termMonths) return "";
+  const due = formatPackagePrice(amountDue(monthlyCents, termMonths), country);
+  return paidUpfront(termMonths) ? `${due} paid upfront for ${termMonths} months` : `${due} billed monthly`;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

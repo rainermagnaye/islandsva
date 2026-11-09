@@ -20,10 +20,14 @@ export type Package = {
   featured?: boolean;
 };
 
-export const terms: { months: SubscriptionTerm; label: string; note: string }[] = [
-  { months: 1, label: "Monthly", note: "Billed monthly" },
-  { months: 6, label: "6 months", note: "Save 5%" },
-  { months: 12, label: "12 months", note: "Save 10%" },
+/**
+ * Monthly is billed each month. A 6- or 12-month term is one payment, upfront, for the whole term at the lower
+ * monthly rate. `note` is the short saving shown on the term pills; `billing` says how the term is paid.
+ */
+export const terms: { months: SubscriptionTerm; label: string; note: string; billing: string }[] = [
+  { months: 1, label: "Monthly", note: "Billed monthly", billing: "Billed monthly" },
+  { months: 6, label: "6 months", note: "Save 5%", billing: "Paid upfront" },
+  { months: 12, label: "12 months", note: "Save 10%", billing: "Paid upfront" },
 ];
 
 // TODO(content): confirm package names, inclusions and prices before launch.
@@ -91,6 +95,26 @@ export const packages: Package[] = [
 /** Lowest monthly price across commitment terms, shown as "from" on cards. */
 export function startingPrice(pkg: Package) {
   return Math.min(...Object.values(pkg.monthlyPrice));
+}
+
+/** A term longer than a month is paid once, upfront, for the whole term. */
+export function paidUpfront(termMonths: number) {
+  return termMonths > 1;
+}
+
+/** What the client pays now: the whole term for 6 or 12 months, one month for Monthly. */
+export function amountDue(monthlyCents: number, termMonths: number) {
+  return paidUpfront(termMonths) ? monthlyCents * termMonths : monthlyCents;
+}
+
+/**
+ * What a term saves against paying month to month: per month, and over the whole term. Zero for Monthly, and for a
+ * rate that isn't below the package's month-to-month price (an unknown package or a custom price).
+ */
+export function termSavings(packageSlug: string | null, monthlyCents: number, termMonths: number) {
+  const pkg = packages.find((item) => item.slug === packageSlug);
+  const perMonth = pkg && paidUpfront(termMonths) ? Math.max(0, pkg.monthlyPrice[1] - monthlyCents) : 0;
+  return { perMonth, total: perMonth * termMonths };
 }
 
 export function formatPrice(minor: number, currency = "USD", display: "symbol" | "code" = "symbol") {

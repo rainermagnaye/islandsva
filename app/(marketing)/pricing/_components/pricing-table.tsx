@@ -1,14 +1,38 @@
 import { Grid, GridItem } from "@/components/ui/grid";
 import { ServiceCard } from "@/components/ui/service-card";
-import { formatPrice, packages, terms, type SubscriptionTerm } from "@/content/packages";
+import { amountDue, formatPrice, packages, paidUpfront, termSavings, terms, type SubscriptionTerm } from "@/content/packages";
 import { contactHref } from "@/content/routes";
 
 // Every term's price is in the HTML; radio inputs + :has() show the selected one. Zero JavaScript.
 const visibleWhen: Record<SubscriptionTerm, string> = {
-  1: "hidden group-has-[#term-1:checked]/pricing:inline",
-  6: "hidden group-has-[#term-6:checked]/pricing:inline",
-  12: "hidden group-has-[#term-12:checked]/pricing:inline",
+  1: "hidden group-has-[#term-1:checked]/pricing:block",
+  6: "hidden group-has-[#term-6:checked]/pricing:block",
+  12: "hidden group-has-[#term-12:checked]/pricing:block",
 };
+
+const unitClass = "ml-1 type-body-sm font-sans font-normal text-ink-muted";
+
+/** Monthly shows the price a month. 6 and 12 months show the one upfront payment, then the monthly rate and saving. */
+function TermPrice({ slug, monthly, months }: { slug: string; monthly: number; months: SubscriptionTerm }) {
+  if (!paidUpfront(months)) {
+    return (
+      <>
+        {formatPrice(monthly)}
+        <small className={unitClass}>/ month</small>
+      </>
+    );
+  }
+  const saving = termSavings(slug, monthly, months);
+  return (
+    <>
+      {formatPrice(amountDue(monthly, months))}
+      <small className={unitClass}>{`/ ${months} months, paid upfront`}</small>
+      <span className="mt-1 block type-body-sm font-sans font-normal text-ink-muted">
+        {`${formatPrice(monthly)} / month, save ${formatPrice(saving.perMonth)} a month`}
+      </span>
+    </>
+  );
+}
 
 export function PricingTable() {
   return (
@@ -46,10 +70,9 @@ export function PricingTable() {
               description={p.tagline}
               price={terms.map((t) => (
                 <span key={t.months} className={visibleWhen[t.months]}>
-                  {formatPrice(p.monthlyPrice[t.months], p.currency)}
+                  <TermPrice slug={p.slug} monthly={p.monthlyPrice[t.months]} months={t.months} />
                 </span>
               ))}
-              priceUnit="/ month"
               features={[p.hoursPerWeek, ...p.features]}
               featured={p.featured}
               ctaLabel={`Choose ${p.name}`}
@@ -60,8 +83,8 @@ export function PricingTable() {
       </Grid>
 
       <p className="m-0 max-w-(--container-prose) type-body-sm text-ink-muted">
-        Prices in US dollars, billed monthly. 6- and 12-month terms are billed monthly at the lower rate for the length of the
-        term. Taxes may apply.
+        Prices in US dollars. Monthly is billed each month. 6- and 12-month terms are one payment, made upfront for the whole
+        term at the lower monthly rate. Taxes may apply.
       </p>
     </div>
   );

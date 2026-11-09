@@ -1,5 +1,5 @@
 import { industries } from "./brands";
-import { formatPrice, packages, startingPrice } from "./packages";
+import { amountDue, formatPrice, packages, startingPrice } from "./packages";
 import { services } from "./services";
 
 export type Faq = { question: string; answer: string };
@@ -18,9 +18,9 @@ function savedPercent(months: 6 | 12) {
 function priceAnswer() {
   const lines = packages.map(
     (pkg) =>
-      `${pkg.name} is ${formatPrice(startingPrice(pkg))} a month on a 12-month term, or ${formatPrice(pkg.monthlyPrice[1])} month to month`,
+      `${pkg.name} is ${formatPrice(pkg.monthlyPrice[1])} month to month, or ${formatPrice(startingPrice(pkg))} a month on a 12-month term (${formatPrice(amountDue(pkg.monthlyPrice[12], 12))} paid upfront)`,
   );
-  return `${lines.join(". ")}. A 6-month term saves ${savedPercent(6)}%.`;
+  return `${lines.join(". ")}. A 6-month term, also paid upfront, saves ${savedPercent(6)}%.`;
 }
 
 const workAnswer = `The day-to-day work that lives on a computer: ${list(services.map((service) => service.title.toLowerCase()))}. If you're unsure a task fits, ask us on your discovery call.`;
@@ -70,19 +70,19 @@ export const pricingFaqs: Faq[] = [
   { question: "How much does it cost?", answer: priceAnswer() },
   {
     question: "Why is the 12-month price lower?",
-    answer: `A longer term costs less each month. A 6-month term saves ${savedPercent(6)}% and a 12-month term saves ${savedPercent(12)}%, compared with paying month to month. The "from" price on each package is the 12-month price.`,
+    answer: `A longer term is paid upfront in one payment, so every month costs less. A 6-month term saves ${savedPercent(6)}% and a 12-month term saves ${savedPercent(12)}%, compared with paying month to month. The "from" price on each package is the 12-month monthly rate.`,
   },
   {
     question: "Can I pay month to month?",
-    answer: "Yes. You can pay month to month, or commit to 6 or 12 months for a lower monthly price.",
+    answer: "Yes. Month to month is billed each month. Or pay for 6 or 12 months upfront, in one payment, at a lower monthly rate.",
   },
   {
     question: "What am I paying for?",
-    answer: "One monthly price for the package you choose: a dedicated assistant and the work listed for that package. The pricing table is the full comparison.",
+    answer: "One price for the package you choose: a dedicated assistant and the work listed for that package, billed monthly or paid upfront for a 6- or 12-month term. The pricing table is the full comparison.",
   },
   {
     question: "Do I have to sign a long contract?",
-    answer: "No. Month to month is available. A 6- or 12-month term is only there if you want the lower monthly price.",
+    answer: "No. Month to month is available. A 6- or 12-month term is paid upfront and is only there if you want the lower monthly rate.",
   },
 ];
 

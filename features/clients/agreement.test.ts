@@ -81,6 +81,13 @@ describe("renderAgreement", () => {
     expect(text).toContain("Café Co");
   });
 
+  it("v2 states the upfront total for 6 and 12 months and monthly billing for Monthly", () => {
+    expect(renderAgreement("v2", terms)).toContain("Price: USD 855.00 a month, USD 5,130.00 paid upfront for the 6-month term.");
+    expect(renderAgreement("v2", { ...terms, term_months: 12, monthly_cents: 81000 })).toContain("USD 9,720.00 paid upfront for the 12-month term");
+    expect(renderAgreement("v2", { ...terms, term_months: 1, monthly_cents: 90000 })).toContain("Price: USD 900.00 a month, billed monthly.");
+    expect(renderAgreement("v2", { ...terms, monthly_cents: null })).toContain("Price: (not set) a month, (not set).");
+  });
+
   it("the current version exists", () => {
     expect(AGREEMENTS[CURRENT_AGREEMENT_VERSION]).toBeDefined();
   });
@@ -88,6 +95,7 @@ describe("renderAgreement", () => {
   // A published version never changes: the acceptance stores the text and its version. Edit wording as a new version.
   it("pins each published version's text", () => {
     expect(agreementHash(renderAgreement("v1", terms))).toBe("e80bddca83f1a90a522422afaea237782c24a58a5db92e47c490e802dcd56ca5");
+    expect(agreementHash(renderAgreement("v2", terms))).toBe("b3bfa4895a0e276a3a6b2d2bbb53e65396447d7546472029e5f842c6c04d3a37");
   });
 });
 

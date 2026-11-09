@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
-import { formatPrice, packages, terms } from "@/content/packages";
+import { amountDue, formatPrice, packages, paidUpfront, termSavings, terms } from "@/content/packages";
 import { PACKAGE_TIMEZONES } from "@/features/leads/contract";
 import type { ClientPackageField, ClientPackageValues } from "../contract";
 
@@ -12,9 +12,16 @@ export type PackageField = ClientPackageField;
 const HOUR_OPTIONS = packages.map((item) => ({ value: String(item.weeklyHours), label: item.hoursPerWeek }));
 const TERM_OPTIONS = terms.map((term) => ({
   value: String(term.months),
-  label: term.months === 1 ? term.label : `${term.label} (${term.note})`,
+  label: term.months === 1 ? term.label : `${term.label} (${term.note}, ${term.billing.toLowerCase()})`,
 }));
 const TIMEZONE_OPTIONS = PACKAGE_TIMEZONES.map((zone) => ({ value: zone.value, label: zone.label }));
+
+/** "$1,600 a month" for Monthly; "$9,120 paid upfront ($1,520 a month, save $80 a month)" for 6 and 12 months. */
+function priceSummary(slug: string, monthly: number, months: number) {
+  if (!paidUpfront(months)) return `${formatPrice(monthly)} a month`;
+  const saving = termSavings(slug, monthly, months);
+  return `${formatPrice(amountDue(monthly, months))} paid upfront (${formatPrice(monthly)} a month, save ${formatPrice(saving.perMonth)} a month)`;
+}
 
 function isoDay(offset: number) {
   const now = new Date();
@@ -26,7 +33,8 @@ function isoDay(offset: number) {
 
 /**
  * The agreed package: package and hours move together, then term, start date and time zone. The price shown
- * is the catalogue price for that term; the server reads it again from the catalogue, never from the form.
+ * is the catalogue price for that term (6 and 12 months as one upfront payment); the server reads it again from
+ * the catalogue, never from the form.
  * `current` starts the fields from a client's package (the change-package form); `initialSlug` only picks the package.
  */
 export function PackageFields({
@@ -45,7 +53,7 @@ export function PackageFields({
   const knownZone = TIMEZONE_OPTIONS.some((zone) => zone.value === current?.timezone);
   const chosen = packages.find((item) => item.slug === packageSlug);
   const term = terms.find((item) => String(item.months) === termMonths);
-  const price = chosen && term ? formatPrice(chosen.monthlyPrice[term.months]) : null;
+  const summary = chosen && term ? priceSummary(chosen.slug, chosen.monthlyPrice[term.months], term.months) : null;
 
   function choosePackage(slug: string) {
     setPackageSlug(slug);
@@ -74,7 +82,7 @@ export function PackageFields({
       <Select label="Hours" name="hoursPerWeek" required placeholder="Choose the hours" options={HOUR_OPTIONS} value={hours} onChange={(event) => chooseHours(event.target.value)} error={fieldErrors.hoursPerWeek} />
       <Select label="Term" name="termMonths" required options={TERM_OPTIONS} value={termMonths} onChange={(event) => setTermMonths(event.target.value)} error={fieldErrors.termMonths} />
       <p className="m-0 rounded-md bg-surface-sunken px-3.5 py-3 type-body-sm text-ink">
-        {chosen && term && price ? `${chosen.name}, ${chosen.hoursPerWeek}, ${term.label.toLowerCase()} at ${price} a month.` : "Choose a package to confirm the monthly price."}
+        {chosen && term && summary ? `${chosen.name}, ${chosen.hoursPerWeek}, ${term.label.toLowerCase()}: ${summary}.` : "Choose a package to confirm the price."}
       </p>
       <TextField
         label="Start date"

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
+import { amountDue } from "@/content/packages";
 import { TextField } from "@/components/ui/text-field";
 import { confirmClientRegistration } from "../actions";
 import { PAYMENT_RECEIVED_LIMITS, type PaymentReceivedField } from "../contract";
@@ -12,13 +13,14 @@ const today = () => new Date().toISOString().slice(0, 10);
 /**
  * Approving a registration records the payment the client's proof shows (the amount received, any bank or transfer
  * fee, the date it arrived and its reference), then sends the password invite. The sales summary totals these. The
- * amount starts at the client's agreed monthly price. The checklist (server-rendered) must be fully ticked: until the
+ * amount starts at what the client owes now: one month for Monthly, the whole term for 6 and 12 months (upfront). The checklist (server-rendered) must be fully ticked: until the
  * form is valid the button looks disabled (CSS only) and the browser won't submit it. `approvable` is false while the
  * agreement doesn't cover the current terms; the database refuses then anyway.
  */
 export function ConfirmPaymentForm({
   clientId,
   monthlyCents,
+  termMonths,
   checklist,
   approvable,
   onDone,
@@ -26,6 +28,7 @@ export function ConfirmPaymentForm({
 }: {
   clientId: string;
   monthlyCents: number | null;
+  termMonths: number | null;
   checklist: ReactNode;
   approvable: boolean;
   onDone: () => void;
@@ -52,7 +55,7 @@ export function ConfirmPaymentForm({
               name="amount"
               inputMode="decimal"
               required
-              defaultValue={monthlyCents ? (monthlyCents / 100).toFixed(2) : ""}
+              defaultValue={monthlyCents ? (amountDue(monthlyCents, termMonths ?? 1) / 100).toFixed(2) : ""}
               error={fieldErrors.amount}
             />
             <TextField compact label="Fee (USD)" name="fee" inputMode="decimal" optional hint="Bank or transfer fee taken out." error={fieldErrors.fee} />

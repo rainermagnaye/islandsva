@@ -48,11 +48,12 @@ export function ClientReviewActions({ client, packet, review, menu }: { client: 
           <ClientProfileView client={client} />
           {review.evidence}
           {packet.paymentProofName && (
-            <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} country={client.business.country} />
+            <ClientInvoices clientId={client.id} proofName={packet.paymentProofName} proofType={packet.paymentProofType} amount={client.monthlyCents} termMonths={client.termMonths} country={client.business.country} />
           )}
           <ConfirmPaymentForm
             clientId={client.id}
             monthlyCents={client.monthlyCents}
+            termMonths={client.termMonths}
             checklist={review.checklist}
             approvable={review.approvable}
             onDone={() => setReviewing(false)}
