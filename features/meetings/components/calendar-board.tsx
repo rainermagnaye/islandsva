@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { wallClockIn, type IsoDate } from "@/components/ui/date-math";
 import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import { useToast } from "@/components/ui/toast";
-import { DemoCalendar } from "@/features/demos/components/demo-calendar";
 import type { DemoCalendarRow } from "@/features/demos/calendar";
 import { busyFrom } from "@/features/demos/slot-times";
 import { BLOCK_PREFIX } from "@/features/tasks/contract";
@@ -13,10 +12,10 @@ import { KIND_LEGEND } from "../calendar-legend";
 import { draftOf, staffGesture } from "../booking-draft";
 import { BOOKING_TIME_ZONE, type Booking, type BookingChoice } from "../contract";
 import type { ScheduleRow } from "../schedule";
-import { ScheduleTable } from "./schedule-table";
-import { placeStaffBooking } from "./staff-moves";
 import type { VaMeetingClient } from "./va-meeting-form";
 
+const DemoCalendar = lazy(() => import("@/features/demos/components/demo-calendar").then((m) => ({ default: m.DemoCalendar })));
+const ScheduleTable = lazy(() => import("./schedule-table").then((m) => ({ default: m.ScheduleTable })));
 const AdminBookingForm = lazy(() => import("./admin-booking-form").then((m) => ({ default: m.AdminBookingForm })));
 const AdminBookingDetail = lazy(() => import("./admin-booking-detail").then((m) => ({ default: m.AdminBookingDetail })));
 const AdminBookButton = lazy(() => import("./admin-book-button").then((m) => ({ default: m.AdminBookButton })));
@@ -101,54 +100,59 @@ export function CalendarBoard({
 
   return (
     <div className="grid gap-7">
-      <DemoCalendar
-        rows={rows}
-        now={now}
-        today={today}
-        nowMinutes={nowMinutes}
-        extraEvents={shown}
-        legend={KIND_LEGEND}
-        viewsInHeader
-        actions={
-          <Suspense fallback={<Button type="button" variant="ghost" iconLeft="plus" disabled>Book</Button>}>
-            <AdminBookButton
-              today={today}
-              last={last}
-              slots={{ busy: busyFrom(bookings, []), offered: [], windows: [] }}
-              clients={clients}
-              team={staff}
-              openTasks={openTasks}
-              draft={createDraft}
-              onDraftChange={(draft) => {
-                setSelectedId(null);
-                setEditing(false);
-                setCreateDraft(draft);
-              }}
-            />
-          </Suspense>
-        }
-        onSlotClick={(day, minute) => { setSelectedId(null); setEditing(false); setCreateDraft({ date: day, time: timeFromMinute(minute) }); }}
-        eventGesture={(event) => staffGesture(bookings.find((booking) => booking.id === event.id))}
-        onEventMove={(event, next) => {
-          const booking = bookings.find((item) => item.id === event.id);
-          if (!booking) return false;
-          return placeStaffBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
-        }}
-        onEventClick={(event) => {
-          if (event.id.startsWith(BLOCK_PREFIX)) {
-            setSelectedId(null);
-            setEditing(false);
-            setCreateDraft(null);
-            setBlockId(event.id.slice(BLOCK_PREFIX.length));
-            return true;
+      <Suspense fallback={<div className="min-h-[32rem] rounded-xl bg-surface-sunken" aria-hidden />}>
+        <DemoCalendar
+          rows={rows}
+          now={now}
+          today={today}
+          nowMinutes={nowMinutes}
+          extraEvents={shown}
+          legend={KIND_LEGEND}
+          viewsInHeader
+          actions={
+            <Suspense fallback={<Button type="button" variant="ghost" iconLeft="plus" disabled>Book</Button>}>
+              <AdminBookButton
+                today={today}
+                last={last}
+                slots={{ busy: busyFrom(bookings, []), offered: [], windows: [] }}
+                clients={clients}
+                team={staff}
+                openTasks={openTasks}
+                draft={createDraft}
+                onDraftChange={(draft) => {
+                  setSelectedId(null);
+                  setEditing(false);
+                  setCreateDraft(draft);
+                }}
+              />
+            </Suspense>
           }
-          if (!ids.has(event.id)) return false;
-          setBlockId(null);
-          open(event.id);
-          return true;
-        }}
-      />
-      <ScheduleTable rows={schedule} onOpenBooking={open} />
+          onSlotClick={(day, minute) => { setSelectedId(null); setEditing(false); setCreateDraft({ date: day, time: timeFromMinute(minute) }); }}
+          eventGesture={(event) => staffGesture(bookings.find((booking) => booking.id === event.id))}
+          onEventMove={async (event, next) => {
+            const booking = bookings.find((item) => item.id === event.id);
+            if (!booking) return false;
+            const { placeStaffBooking } = await import("./staff-moves");
+            return placeStaffBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
+          }}
+          onEventClick={(event) => {
+            if (event.id.startsWith(BLOCK_PREFIX)) {
+              setSelectedId(null);
+              setEditing(false);
+              setCreateDraft(null);
+              setBlockId(event.id.slice(BLOCK_PREFIX.length));
+              return true;
+            }
+            if (!ids.has(event.id)) return false;
+            setBlockId(null);
+            open(event.id);
+            return true;
+          }}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ScheduleTable rows={schedule} onOpenBooking={open} />
+      </Suspense>
 
       {selected && !editing && (
         <Suspense fallback={null}>

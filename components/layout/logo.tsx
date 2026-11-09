@@ -1,4 +1,3 @@
-import { getImageProps } from "next/image";
 import Link from "next/link";
 import { routes } from "@/content/routes";
 import { site } from "@/content/site";
@@ -6,6 +5,8 @@ import { cx } from "@/lib/cx";
 
 // mark.png is the supplied badge with the white moon-disc removed and the trunk knocked out.
 // trunk.png is only that trunk, tinted with the theme text color: dark on light, light on dark.
+// Plain <img> (not getImageProps): the mark is unoptimized and already tiny; getImageProps was
+// hydrating with different attributes on the server and client in Next 16.
 const MARK = { src: "/logo/mark.png", width: 214, height: 215 } as const;
 
 export function LogoLockup({
@@ -20,12 +21,10 @@ export function LogoLockup({
   /** Trunk mask colour. Light on the fixed dark footer, theme ink everywhere else. */
   trunkClassName?: string;
 }) {
-  const { props } = getImageProps({ alt, sizes, unoptimized: true, ...MARK });
-
   return (
     <span className={cx("relative block", className)} style={{ aspectRatio: "214 / 215" }}>
-      {/* eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element -- a 9 KB mark served as-is at 44px (unoptimized above); alt comes from the spread */}
-      <img {...props} className="block h-full w-full" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- a 9 KB mark served as-is at 44px */}
+      <img src={MARK.src} width={MARK.width} height={MARK.height} alt={alt} sizes={sizes} className="block h-full w-full" />
       <span
         aria-hidden="true"
         className={cx("pointer-events-none absolute inset-0", trunkClassName)}

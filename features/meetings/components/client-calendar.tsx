@@ -8,18 +8,19 @@ import { DropdownMenu, type MenuItem } from "@/components/ui/dropdown-menu";
 import type { ScheduleEvent } from "@/components/ui/schedule-events";
 import { useToast } from "@/components/ui/toast";
 import { appRoutes, clientTaskHref } from "@/content/routes";
-import { DemoCalendar } from "@/features/demos/components/demo-calendar";
 import { deadlineEvent, taskIdFromEvent, type DeadlineSource } from "@/features/tasks/deadline-event";
 import type { AgendaItem, AgendaKind } from "../agenda";
 import { clientGesture, draftFrom, draftOf, ownMeeting, type BookingDraft } from "../booking-draft";
 import { BOOKING_TIME_ZONE, type Booking, type BookingChoice } from "../contract";
 import type { ScheduleRow } from "../schedule";
-import { ScheduleTable } from "./schedule-table";
 import { ComingUp } from "./coming-up";
 
 /** One of the client's demo calls, as the calendar draws it. */
 export type CalendarDemo = { id: string; vaName: string; startsAt: string; endsAt: string; state: "pending" | "confirmed" | "completed" };
 
+// Grid and schedules list stay off the first-load script (same split as the staff calendars).
+const DemoCalendar = lazy(() => import("@/features/demos/components/demo-calendar").then((m) => ({ default: m.DemoCalendar })));
+const ScheduleTable = lazy(() => import("./schedule-table").then((m) => ({ default: m.ScheduleTable })));
 const ClientBookingForm = lazy(() => import("./client-booking-form").then((m) => ({ default: m.ClientBookingForm })));
 const ClientBookingDetail = lazy(() => import("./client-booking-detail").then((m) => ({ default: m.ClientBookingDetail })));
 
@@ -142,44 +143,48 @@ export function ClientCalendar({
 
   return (
     <>
-      <DemoCalendar
-        rows={[]}
-        now={now}
-        today={today}
-        nowMinutes={nowMinutes}
-        extraEvents={events}
-        legend={[]}
-        actions={<Button type="button" iconLeft="plus" onClick={() => book(today, 9 * 60)}>New meeting</Button>}
-        onSlotClick={book}
-        eventGesture={(event) => clientGesture(bookings.find((booking) => booking.id === event.id), userId)}
-        onEventMove={async (event, next) => {
-          const booking = bookings.find((item) => item.id === event.id);
-          if (!booking) return false;
-          const { placeBooking } = await import("./client-moves");
-          return placeBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
-        }}
-        toolbar={
-          <span className="relative inline-flex">
-            <DropdownMenu label={active ? `Filter, ${active} active` : "Filter"} icon="filter" iconOnly variant="plain" align="end" items={filterItems} />
-            {active > 0 && <span aria-hidden="true" className="pointer-events-none absolute -top-1 -right-1 grid size-4 place-items-center rounded-pill bg-action-primary type-caption font-bold text-on-action-primary">{active}</span>}
-          </span>
-        }
-        aside={<ComingUp items={items} review={review} onOpenBooking={open} />}
-        onEventClick={(event) => {
-          const taskId = taskIdFromEvent(event.id);
-          if (taskId) {
-            router.push(clientTaskHref(taskId));
-            return true;
+      <Suspense fallback={<div className="min-h-[32rem] rounded-xl bg-surface-sunken" aria-hidden />}>
+        <DemoCalendar
+          rows={[]}
+          now={now}
+          today={today}
+          nowMinutes={nowMinutes}
+          extraEvents={events}
+          legend={[]}
+          actions={<Button type="button" iconLeft="plus" onClick={() => book(today, 9 * 60)}>New meeting</Button>}
+          onSlotClick={book}
+          eventGesture={(event) => clientGesture(bookings.find((booking) => booking.id === event.id), userId)}
+          onEventMove={async (event, next) => {
+            const booking = bookings.find((item) => item.id === event.id);
+            if (!booking) return false;
+            const { placeBooking } = await import("./client-moves");
+            return placeBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
+          }}
+          toolbar={
+            <span className="relative inline-flex">
+              <DropdownMenu label={active ? `Filter, ${active} active` : "Filter"} icon="filter" iconOnly variant="plain" align="end" items={filterItems} />
+              {active > 0 && <span aria-hidden="true" className="pointer-events-none absolute -top-1 -right-1 grid size-4 place-items-center rounded-pill bg-action-primary type-caption font-bold text-on-action-primary">{active}</span>}
+            </span>
           }
-          if (event.id.startsWith(DEMO_PREFIX)) {
-            router.push(appRoutes.clientMatch);
+          aside={<ComingUp items={items} review={review} onOpenBooking={open} />}
+          onEventClick={(event) => {
+            const taskId = taskIdFromEvent(event.id);
+            if (taskId) {
+              router.push(clientTaskHref(taskId));
+              return true;
+            }
+            if (event.id.startsWith(DEMO_PREFIX)) {
+              router.push(appRoutes.clientMatch);
+              return true;
+            }
+            if (bookings.some((booking) => booking.id === event.id)) open(event.id);
             return true;
-          }
-          if (bookings.some((booking) => booking.id === event.id)) open(event.id);
-          return true;
-        }}
-      />
-      <ScheduleTable rows={schedule} onOpenBooking={open} />
+          }}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ScheduleTable rows={schedule} onOpenBooking={open} />
+      </Suspense>
       {draft && (
         <Suspense fallback={null}>
           <ClientBookingForm mode="create" draft={draft} staff={team} creatorName="You" onClose={() => setDraft(null)} onDone={() => done("Meeting added.")} />

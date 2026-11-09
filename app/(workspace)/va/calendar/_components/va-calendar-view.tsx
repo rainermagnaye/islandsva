@@ -4,16 +4,16 @@ import { useRouter } from "next/navigation";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { wallClockIn } from "@/components/ui/date-math";
 import { useToast } from "@/components/ui/toast";
-import { DemoCalendar } from "@/features/demos/components/demo-calendar";
 import { staffGesture } from "@/features/meetings/booking-draft";
 import { ComingUp } from "@/features/meetings/components/coming-up";
-import { ScheduleTable } from "@/features/meetings/components/schedule-table";
-import { placeStaffBooking } from "@/features/meetings/components/staff-moves";
 import { BOOKING_TIME_ZONE, type Booking } from "@/features/meetings/contract";
 import type { AgendaItem } from "@/features/meetings/agenda";
 import type { ScheduleRow } from "@/features/meetings/schedule";
 import { BLOCK_PREFIX, CALENDAR_LEGEND, type CalendarExtra } from "./calendar-events";
 
+// Calendar grid and schedules list stay off the first-load script; they match the Lead Gen calendar's split.
+const DemoCalendar = lazy(() => import("@/features/demos/components/demo-calendar").then((m) => ({ default: m.DemoCalendar })));
+const ScheduleTable = lazy(() => import("@/features/meetings/components/schedule-table").then((m) => ({ default: m.ScheduleTable })));
 const BookingDetail = lazy(() => import("@/features/meetings/components/booking-detail").then((m) => ({ default: m.BookingDetail })));
 const VaMeetingCancel = lazy(() => import("@/features/meetings/components/va-meeting-cancel").then((m) => ({ default: m.VaMeetingCancel })));
 const RemoveBlockDialog = lazy(() => import("./remove-block-dialog").then((m) => ({ default: m.RemoveBlockDialog })));
@@ -75,43 +75,48 @@ export function VaCalendarView({
 
   return (
     <>
-      <DemoCalendar
-        rows={[]}
-        now={now}
-        today={today}
-        nowMinutes={nowMinutes}
-        extraEvents={events}
-        legend={CALENDAR_LEGEND}
-        viewsInHeader
-        actions={actions}
-        aside={
-          <>
-            <div className="shrink-0">{tools}</div>
-            <ComingUp className="min-h-0 flex-1" items={agenda} review={null} onOpenBooking={open} />
-          </>
-        }
-        eventGesture={(event) => staffGesture(bookings.find((booking) => booking.id === event.id))}
-        onEventMove={(event, next) => {
-          const booking = bookings.find((item) => item.id === event.id);
-          if (!booking) return false;
-          return placeStaffBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
-        }}
-        onEventClick={(event) => {
-          const href = links.get(event.id);
-          if (href) {
-            router.push(href);
-            return true;
+      <Suspense fallback={<div className="min-h-[32rem] rounded-xl bg-surface-sunken" aria-hidden />}>
+        <DemoCalendar
+          rows={[]}
+          now={now}
+          today={today}
+          nowMinutes={nowMinutes}
+          extraEvents={events}
+          legend={CALENDAR_LEGEND}
+          viewsInHeader
+          actions={actions}
+          aside={
+            <>
+              <div className="shrink-0">{tools}</div>
+              <ComingUp className="min-h-0 flex-1" items={agenda} review={null} onOpenBooking={open} />
+            </>
           }
-          if (event.id.startsWith(BLOCK_PREFIX)) {
-            setSelectedId(null);
-            setBlockId(event.id.slice(BLOCK_PREFIX.length));
+          eventGesture={(event) => staffGesture(bookings.find((booking) => booking.id === event.id))}
+          onEventMove={async (event, next) => {
+            const booking = bookings.find((item) => item.id === event.id);
+            if (!booking) return false;
+            const { placeStaffBooking } = await import("@/features/meetings/components/staff-moves");
+            return placeStaffBooking(booking, next, (message, tone) => toast.show({ title: message, tone }));
+          }}
+          onEventClick={(event) => {
+            const href = links.get(event.id);
+            if (href) {
+              router.push(href);
+              return true;
+            }
+            if (event.id.startsWith(BLOCK_PREFIX)) {
+              setSelectedId(null);
+              setBlockId(event.id.slice(BLOCK_PREFIX.length));
+              return true;
+            }
+            if (bookings.some((booking) => booking.id === event.id)) open(event.id);
             return true;
-          }
-          if (bookings.some((booking) => booking.id === event.id)) open(event.id);
-          return true;
-        }}
-      />
-      <ScheduleTable rows={schedule} onOpenBooking={open} />
+          }}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ScheduleTable rows={schedule} onOpenBooking={open} />
+      </Suspense>
       {selected && (
         <Suspense fallback={null}>
           <BookingDetail

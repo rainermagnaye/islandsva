@@ -13,11 +13,9 @@ const APP_DIR = ".next/server/app";
 // Pages already over the budget when nested routes were first measured (2026-10-27), each held to its size
 // then. Remove a page once it's back under the budget; never add one or raise a cap (docs/decisions.md).
 const OVER_BUDGET_CAPS_KB = {
-  "/admin/demos": 176.8,
   "/admin/leads/[id]": 176.3,
   "/admin/clients/[id]": 170.2,
   "/va/calendar": 169.0,
-  "/client/calendar": 168.0,
   "/admin/users/[id]": 167.1,
   "/admin/users": 161.6,
 };
