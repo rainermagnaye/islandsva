@@ -14,6 +14,7 @@ export function VaRegistration({ user, profile }: { user: UserSummary; profile: 
   const status = registrationStatus(sections);
   const meta: EmployeeProfileMeta = {
     registrationStatus: status,
+    createdAt: user.createdAt,
     invitationSentAt: profile?.invitationSentAt ?? user.createdAt,
     registrationCompletedAt: status === "completed" ? (profile?.registrationCompletedAt ?? null) : null,
     progress: steps.find((item) => item.current)?.label ?? "Invitation sent",

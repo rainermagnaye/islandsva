@@ -7,7 +7,7 @@ import { ROLE_LABELS } from "@/lib/auth/roles";
 import { employeeAccessBadge, type UserSummary } from "../contract";
 
 function accessOf(user: UserSummary) {
-  return { roles: user.roles, accountStatus: user.status, review: user.reviewStatus, signedIn: user.signedInAt !== null };
+  return { roles: user.roles, accountStatus: user.status, review: user.reviewStatus, signedIn: user.signedInAt !== null, invited: user.invited };
 }
 
 function clipped(value: string) {

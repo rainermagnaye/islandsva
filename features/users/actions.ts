@@ -11,7 +11,7 @@ import type { SubmitResult } from "@/types/form";
 import { emptyEmployeeDetails, openReviewSections, REVIEW_SECTIONS, EMPLOYEE_LIMITS, employeeSections, type InviteField, type MyProfileField, type EmployeeDetailField } from "./contract";
 import { getUser } from "./dal";
 import { getEmployeeProfile, saveEmployeeProfile } from "./employee-dal";
-import { confirmEmployeeProfile, deactivateEmployee, inviteEmployee as invite, removeEmployeeAccount, returnEmployeeProfile } from "./service";
+import { confirmEmployeeProfile, createEmployee as create, deactivateEmployee, inviteEmployee as invite, sendEmployeeInvitation as sendInvitation, removeEmployeeAccount, returnEmployeeProfile } from "./service";
 import { parseInvite, parseMyProfile, parseReviewReturn, parseEmployeeId } from "./validation";
 import { AVATAR_TYPES, persistEmployeeForm } from "./employee-form";
 
@@ -42,6 +42,57 @@ export async function inviteEmployee(formData: FormData): Promise<SubmitResult<I
   }
 
   refresh(); // re-render the user list in the same round trip
+  return { ok: true };
+}
+
+/** Creates the employee's account and profile without sending the invite email (sent later from the profile). */
+export async function createEmployeeProfile(formData: FormData): Promise<SubmitResult<InviteField>> {
+  const admin = await requireRole(["admin"]);
+  const parsed = parseInvite(formEntries(formData));
+  if (!parsed.ok) return toSubmitResult(parsed);
+
+  try {
+    const result = await create(parsed.value, admin.id);
+    if (!result.ok) {
+      if (result.reason === "exists") {
+        return { ok: false, message: FIELD_ERRORS, fieldErrors: { email: "That email already has an account." } };
+      }
+      if (result.reason === "rate") return { ok: false, message: "Too many requests. Wait a while, then try again." };
+      return { ok: false, message: "We couldn't create the profile. Please try again in a moment." };
+    }
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Employee create failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't create the profile. Please try again in a moment." };
+  }
+
+  refresh(); // re-render the user list in the same round trip
+  return { ok: true };
+}
+
+/** Sends (or re-sends) the invite email to an employee who has not signed in yet. */
+export async function sendEmployeeInvite(userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  await requireRole(["admin"]);
+  const parsed = parseEmployeeId({ userId });
+  if (!parsed.ok) return { ok: false, message: "That account couldn't be found." };
+
+  try {
+    const origin = await requestOrigin();
+    if (!origin) return { ok: false, message: "We couldn't send the invitation. Please try again in a moment." };
+    const result = await sendInvitation(parsed.value.userId, origin);
+    if (!result.ok) {
+      if (result.reason === "missing") return { ok: false, message: "That account couldn't be found." };
+      if (result.reason === "exists") return { ok: false, message: "This person has already accepted an invitation." };
+      if (result.reason === "rate") return { ok: false, message: "Too many invitation emails were sent. Wait a while, then try again." };
+      return { ok: false, message: "We couldn't send the invitation. Please try again in a moment." };
+    }
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    console.error("Employee invite failed", { service: error.service, error });
+    return { ok: false, message: "We couldn't send the invitation. Please try again in a moment." };
+  }
+
+  refresh(); // show the new invite date on the profile
   return { ok: true };
 }
 

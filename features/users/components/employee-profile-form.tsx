@@ -173,7 +173,8 @@ export function EmployeeProfileForm({
               <Section title="System metadata">
                 <ReadOnly label="Registration status" value={REGISTRATION_STATUS_LABELS[meta.registrationStatus]} />
                 <ReadOnly label="Progress tracker" value={meta.progress} />
-                <ReadOnly label="Date of invitation sent" value={formatProfileDate(meta.invitationSentAt)} />
+                <ReadOnly label="Date created" value={formatProfileDate(meta.createdAt)} />
+                <ReadOnly label="Date of invitation sent" value={meta.invitationSentAt ? formatProfileDate(meta.invitationSentAt) : "Not sent yet"} />
                 <ReadOnly label="Date of registration completed" value={formatProfileDate(meta.registrationCompletedAt)} />
               </Section>
             </div>}

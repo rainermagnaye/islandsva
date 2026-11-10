@@ -10,6 +10,7 @@ import type { EmployeeProfileMeta } from "../profile-fields";
 import { EmployeeReviewActions } from "./employee-review-actions";
 import { RegistrationStepper, EmployeeProfileView } from "./employee-profile-view";
 import { ProfileMenu } from "./employee-profile-menu";
+import { SendInvitationButton } from "./send-invitation-button";
 
 const EmployeeProfileForm = lazy(() => import("./employee-profile-form").then((module) => ({ default: module.EmployeeProfileForm })));
 
@@ -45,6 +46,8 @@ export function EmployeeProfileScreen({
   const [pictureVersion, setPictureVersion] = useState(0);
   const name = details.fullName || user.email;
   const ownAccount = user.id === actorId;
+  // Only someone who hasn't signed in yet needs an invite; a disabled profile gets none.
+  const canInvite = user.status !== "inactive" && user.signedInAt === null;
 
   function choosePhoto(file: File | undefined) {
     const next = file && file.size > 0 ? file : null;
@@ -101,7 +104,8 @@ export function EmployeeProfileScreen({
             }
           />
         ) : (
-          <div className="ml-auto flex">
+          <div className="ml-auto flex items-center gap-3">
+            {canInvite && !editing && <SendInvitationButton userId={user.id} name={name} invited={meta.invitationSentAt !== null} />}
             <ProfileMenu
               userId={user.id}
               name={name}
