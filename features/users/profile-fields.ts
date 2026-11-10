@@ -59,7 +59,10 @@ export function maritalChoices(current: MaritalStatus | "") {
 
 export type EmployeeProfileMeta = {
   registrationStatus: RegistrationStatus;
-  invitationSentAt: string;
+  /** When the account was created (with Create or Send invitation). */
+  createdAt: string;
+  /** When the last invite email went out; null if the account was created without one. */
+  invitationSentAt: string | null;
   registrationCompletedAt: string | null;
   progress: string;
   timeFormat: TimeFormat;

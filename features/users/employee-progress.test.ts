@@ -18,10 +18,11 @@ describe("employee registration progress", () => {
 
   it("walks the stepper from the invitation to registration", () => {
     const steps = registrationSteps(employeeSections(emptyEmployeeDetails("Ada")), { signedIn: true, review: "pending", returned: [] });
-    expect(steps.map((step) => step.label)).toEqual(["Invitation sent", "Password", "Registration", "Review", "Completed"]);
+    expect(steps.map((step) => step.label)).toEqual(["Created", "Invitation sent", "Password", "Registration", "Review", "Completed"]);
     expect(steps.find((step) => step.current)?.id).toBe("registration");
-    expect(steps[0]).toMatchObject({ done: true, current: false });
-    expect(steps[1]).toMatchObject({ id: "password", done: true });
+    expect(steps[0]).toMatchObject({ id: "created", done: true, current: false });
+    expect(steps[1]).toMatchObject({ id: "invitation", done: true, current: false });
+    expect(steps[2]).toMatchObject({ id: "password", done: true });
   });
 
   it("stops on the password until they sign in, and opens registration again when a section is sent back", () => {
@@ -97,6 +98,20 @@ describe("VA portal access", () => {
     expect(employeeAccessBadge({ roles: va, accountStatus: "invited", review: "pending", signedIn: true })).toMatchObject({ label: "Pending", validated: false });
     expect(employeeAccessBadge({ roles: va, accountStatus: "invited", review: "pending_review", signedIn: true }).label).toBe("Pending Review");
     expect(employeeAccessBadge({ roles: va, accountStatus: "active", review: "approved", signedIn: true })).toMatchObject({ label: "Active", validated: true });
+  });
+
+  it("shows New for an account created without an invite, until one is sent or they sign in", () => {
+    expect(employeeAccessBadge({ roles: va, accountStatus: "invited", review: null, signedIn: false, invited: false })).toMatchObject({ label: "New", tone: "neutral" });
+    expect(employeeAccessBadge({ roles: ["closer"], accountStatus: "invited", review: null, signedIn: false, invited: false }).label).toBe("New");
+    expect(employeeAccessBadge({ roles: va, accountStatus: "invited", review: null, signedIn: false, invited: true }).label).toBe("Invited");
+    expect(employeeAccessBadge({ roles: va, accountStatus: "inactive", review: null, signedIn: false, invited: false }).label).toBe("Deactivated");
+
+    const notInvited = registrationSteps(employeeSections(emptyEmployeeDetails("Ada")), { signedIn: false, review: "pending", returned: [], invited: false });
+    expect(notInvited[0]).toMatchObject({ id: "created", current: true });
+    expect(notInvited[1]).toMatchObject({ id: "invitation", done: false, current: false });
+    const sent = registrationSteps(employeeSections(emptyEmployeeDetails("Ada")), { signedIn: false, review: "pending", returned: [], invited: true });
+    expect(sent[1]).toMatchObject({ id: "invitation", done: true, current: false });
+    expect(sent.find((step) => step.current)?.id).toBe("password");
   });
 
   it("leaves Closers and admins on the account status", () => {

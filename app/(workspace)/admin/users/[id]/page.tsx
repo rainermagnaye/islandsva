@@ -5,7 +5,7 @@ import { Workspace, WorkspaceSkeleton } from "@/components/layout/workspace";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { appRoutes } from "@/content/routes";
 import { EmployeeProfile } from "@/features/users/components/employee-profile";
-import { getUser, employeeHasHistory } from "@/features/users/dal";
+import { getInvitedAt, getUser, employeeHasHistory } from "@/features/users/dal";
 import { getEmployeeProfile } from "@/features/users/employee-dal";
 import { parseEmployeeId } from "@/features/users/validation";
 import { requireRole } from "@/lib/auth/session";
@@ -26,7 +26,8 @@ async function Employee({ params }: Pick<PageProps<"/admin/users/[id]">, "params
   if (!parseEmployeeId({ userId: id }).ok) notFound();
   const user = await getUser(id);
   if (!user) notFound();
-  const [profile, hasHistory] = await Promise.all([getEmployeeProfile(user.id), employeeHasHistory(user.id)]);
+  // getInvitedAt reads Supabase Auth with the secret key; requireRole above has already checked the admin.
+  const [profile, hasHistory, invitedAt] = await Promise.all([getEmployeeProfile(user.id), employeeHasHistory(user.id), getInvitedAt(user.id)]);
 
   const name = user.fullName || user.email;
 
@@ -43,7 +44,7 @@ async function Employee({ params }: Pick<PageProps<"/admin/users/[id]">, "params
         />
       }
     >
-      <EmployeeProfile user={user} actorId={admin.id} profile={profile} hasHistory={hasHistory} />
+      <EmployeeProfile user={user} actorId={admin.id} profile={profile} hasHistory={hasHistory} invitedAt={invitedAt} />
     </Workspace>
   );
 }

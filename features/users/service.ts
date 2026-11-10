@@ -3,7 +3,8 @@ import { cache } from "react";
 import { appRoutes } from "@/content/routes";
 import type { Role } from "@/lib/auth/roles";
 import { vaPortalOpen, type ReviewSection } from "./contract";
-import { deleteAuthUser, getUser, grantRole, inviteAuthUser, listUsers, searchProfiles, setAccountInactive, employeeHasHistory } from "./dal";
+import { inviteEligibility } from "./invite-eligibility";
+import { createAuthUser, deleteAuthUser, emailHasAccount, getInvitedAt, getUser, setAuthUserLocked, grantRole, inviteAuthUser, listUsers, type InviteAudience, searchProfiles, setAccountInactive, employeeHasHistory } from "./dal";
 import { getEmployeeProfile, setEmployeeReview, employeeHasAvatar } from "./employee-dal";
 import type { InviteInput } from "./validation";
 
@@ -14,23 +15,31 @@ import type { InviteInput } from "./validation";
  * site address instead — the same form still opens from the link.
  */
 async function inviteWithRole(email: string, fullName: string, role: Role, invitedBy: string, origin: string) {
-  const redirectTo = `${origin}${appRoutes.acceptInvite}`;
-  const audience = role === "client" ? "client" : "staff";
-  let invited = await inviteAuthUser(email, fullName, audience, redirectTo);
-  if (!invited.ok && invited.reason === "redirect") {
-    invited = await inviteAuthUser(email, fullName, audience);
-  }
+  // An existing account (for example one made with Create) is invited from its own profile instead.
+  if (await emailHasAccount(email)) return { ok: false as const, reason: "exists" as const };
+  const invited = await sendInvite(email, fullName, role === "client" ? "client" : "staff", origin);
   if (!invited.ok) return invited;
+  await grantOrRollback(invited.userId, role, invitedBy);
+  return { ok: true as const, userId: invited.userId };
+}
 
+/** Grants the role to a new account, or deletes the account again if that fails. */
+async function grantOrRollback(userId: string, role: Role, grantedBy: string) {
   try {
-    await grantRole(invited.userId, role, invitedBy);
+    await grantRole(userId, role, grantedBy);
   } catch (error) {
-    await deleteAuthUser(invited.userId).catch((cleanupError: unknown) =>
-      console.error("Orphaned invited user", { userId: invited.userId, cleanupError }),
+    await deleteAuthUser(userId).catch((cleanupError: unknown) =>
+      console.error("Orphaned invited user", { userId, cleanupError }),
     );
     throw error;
   }
-  return { ok: true as const, userId: invited.userId };
+}
+
+/** Sends the invite email; if the link address is not allowed yet, sends it with the site address instead. */
+async function sendInvite(email: string, fullName: string, audience: InviteAudience, origin: string) {
+  const invited = await inviteAuthUser(email, fullName, audience, `${origin}${appRoutes.acceptInvite}`);
+  if (!invited.ok && invited.reason === "redirect") return inviteAuthUser(email, fullName, audience);
+  return invited;
 }
 
 /** Invites an employee. */
@@ -38,6 +47,57 @@ export async function inviteEmployee(input: InviteInput, invitedBy: string, orig
   const invited = await inviteWithRole(input.email, input.fullName, input.role, invitedBy, origin);
   if (!invited.ok) return invited;
   return { ok: true as const };
+}
+
+/**
+ * Creates an employee's account and profile without emailing them. The account can't sign in until the
+ * invite is sent later from their profile (see createAuthUser).
+ */
+export async function createEmployee(input: InviteInput, createdBy: string) {
+  const created = await createAuthUser(input.email, input.fullName, "staff");
+  if (!created.ok) return created;
+  await grantOrRollback(created.userId, input.role, createdBy);
+  return { ok: true as const, userId: created.userId };
+}
+
+/**
+ * Sends (or sends again) the invite email to an employee who has not signed in yet. Clients are invited
+ * from their company record, and a disabled or signed-in account needs no invite.
+ */
+export async function sendEmployeeInvitation(userId: string, origin: string) {
+  const user = await getUser(userId);
+  const eligibility = inviteEligibility(user);
+  if (!user || eligibility !== "ok") return { ok: false as const, reason: eligibility === "ok" ? ("missing" as const) : eligibility };
+
+  // A profile made with Create is locked until its first invite. Every send unlocks first (a locked account
+  // can't use the link), which also repairs a lock left by an earlier failed send. If this send fails, the
+  // account is locked again only while no invite has ever gone out.
+  await setAuthUserLocked(user.id, false);
+  let invited: Awaited<ReturnType<typeof sendInvite>>;
+  try {
+    invited = await sendInvite(user.email, user.fullName, "staff", origin);
+  } catch (error) {
+    await relockIfNeverInvited(user.id);
+    throw error;
+  }
+  if (!invited.ok) {
+    await relockIfNeverInvited(user.id);
+    return invited;
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Locks the account again after a failed send, unless an invite has gone out (read now, not before the send,
+ * so a second admin's send that succeeded at the same moment isn't locked out). Failures here are logged;
+ * the send error is what the admin sees.
+ */
+async function relockIfNeverInvited(userId: string) {
+  try {
+    if ((await getInvitedAt(userId)) === null) await setAuthUserLocked(userId, true);
+  } catch (lockError) {
+    console.error("Account left unlocked after a failed invite", { userId, lockError });
+  }
 }
 
 /** Invites the client contact and grants the client role. The caller links the login to the company. */

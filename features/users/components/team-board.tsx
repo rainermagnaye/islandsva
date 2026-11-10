@@ -91,9 +91,7 @@ export function TeamBoard({ users, total, initialQuery = "" }: { users: readonly
       <Modal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
-        title="Invite a team member"
-        description="They'll get an email to choose a password. Admins also set up two-factor sign-in."
-      >
+        title="Invite a team member"      >
         {inviteOpen ? (
           <Suspense fallback={null}>
             <InviteEmployeeForm key={formKey} />

@@ -173,6 +173,8 @@ export type InviteAudience = "client" | "staff";
  * form). A URL the project has not allowed comes back as `redirect` so the caller can send the link to
  * the site address instead. `invite_for` picks the wording in supabase/templates/invite.html (one Supabase
  * invite template serves everyone); it is only email copy, never used for access.
+ * For an account made by `createAuthUser` that has not accepted an invite yet, Supabase sends the invite to
+ * that same account instead of creating one; an account that already accepted comes back as `exists`.
  */
 export async function inviteAuthUser(email: string, fullName: string, audience: InviteAudience, redirectTo?: string) {
   const { data, error } = await createAdminClient().auth.admin.inviteUserByEmail(email, {
@@ -185,6 +187,91 @@ export async function inviteAuthUser(email: string, fullName: string, audience: 
     throw new UpstreamError("supabase-auth", `Invite failed: ${error.message}`, { cause: error });
   }
   return { ok: true as const, userId: data.user.id };
+}
+
+/**
+ * Creates the auth user without sending any email (the profile row follows by trigger). The email stays
+ * unconfirmed, there is no password, and the account is locked (banned): without the lock, whoever controls
+ * the mailbox could reach the account through "forgot password" or a magic link before the invite is sent.
+ * `setAuthUserLocked` lifts it when the invite goes out. Same metadata as an invite, so the later invite
+ * email gets the right wording.
+ */
+export async function createAuthUser(email: string, fullName: string, audience: InviteAudience) {
+  const { data, error } = await createAdminClient().auth.admin.createUser({
+    email,
+    email_confirm: false,
+    ban_duration: LOCKED_FOR,
+    user_metadata: { full_name: fullName, invite_for: audience },
+  });
+  if (error) {
+    const reason = classifyInviteError(error, false);
+    if (reason) return { ok: false as const, reason };
+    throw new UpstreamError("supabase-auth", `Creating user failed: ${error.message}`, { cause: error });
+  }
+  return { ok: true as const, userId: data.user.id };
+}
+
+/**
+ * When the last invite email went to this account, or null if none was ever sent. Only Supabase Auth
+ * records it, so this reads with the secret key: callers must have checked the admin role first.
+ * Unknown ids are null.
+ */
+export async function getInvitedAt(userId: string): Promise<string | null> {
+  const { data, error } = await createAdminClient().auth.admin.getUserById(userId);
+  if (error) {
+    if (error.status === 404) return null;
+    throw new UpstreamError("supabase-auth", `Reading user ${userId} failed: ${error.message}`, { cause: error });
+  }
+  return data.user.invited_at ?? null;
+}
+
+/**
+ * Whether any account already uses this email. Checked before a new invite, because Supabase reuses an
+ * unaccepted account instead of failing, and the invite's rollback would then delete that account. Uses the
+ * secret key so the check sees every account whoever invites (an admin, or a Lead Gen activating a client):
+ * callers must have checked the role first. Returns only yes or no.
+ */
+export async function emailHasAccount(email: string) {
+  const { count, error } = await createAdminClient().from("profiles").select("id", { count: "exact", head: true }).eq("email", email.toLowerCase());
+  if (error) throw new UpstreamError("supabase", `Checking for an existing account failed: ${error.message}`, { cause: error });
+  return (count ?? 0) > 0;
+}
+
+/** A lock with no practical end (about 100 years); only `setAuthUserLocked(…, false)` lifts it. */
+const LOCKED_FOR = "876000h";
+
+/**
+ * Locks or unlocks sign-in for an account made with Create. A locked account gets no session from a
+ * password, reset link, magic link or refresh. Not used for Deactivate, which stays on profiles.status.
+ */
+export async function setAuthUserLocked(userId: string, locked: boolean) {
+  const { error } = await createAdminClient().auth.admin.updateUserById(userId, { ban_duration: locked ? LOCKED_FOR : "none" });
+  if (error) throw new UpstreamError("supabase-auth", `${locked ? "Locking" : "Unlocking"} user ${userId} failed: ${error.message}`, { cause: error });
+}
+
+const AUTH_PAGE = 1000;
+
+const AUTH_PAGES = 20;
+
+/**
+ * Which of these accounts were created without an invite and have never signed in (shown as "New").
+ * Only Supabase Auth records invites, so this reads with the secret key: callers must have checked the
+ * admin role first. One Auth call per 1,000 accounts.
+ */
+export async function listUninvitedIds(ids: readonly string[]): Promise<Set<string>> {
+  const wanted = new Set(ids);
+  const uninvited = new Set<string>();
+  if (wanted.size === 0) return uninvited;
+  const admin = createAdminClient();
+  for (let page = 1; page <= AUTH_PAGES; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: AUTH_PAGE });
+    if (error) throw new UpstreamError("supabase-auth", `Listing auth users failed: ${error.message}`, { cause: error });
+    for (const user of data.users) {
+      if (wanted.has(user.id) && !user.invited_at && !user.last_sign_in_at) uninvited.add(user.id);
+    }
+    if (data.users.length < AUTH_PAGE) return uninvited;
+  }
+  throw new UpstreamError("supabase-auth", "Listing auth users exceeded 20 pages");
 }
 
 /** Soft deactivate. profiles has no update policy, so this uses the secret key after the admin check. */

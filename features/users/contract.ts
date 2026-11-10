@@ -50,6 +50,8 @@ export type UserSummary = {
   /** Null when this person has no employee profile yet. */
   reviewStatus: EmployeeReviewStatus | null;
   createdAt: string;
+  /** False when the account was created without an invite email. Set only where the page reads it from Auth (Teams). */
+  invited?: boolean;
 };
 
 export type AccountStatus = Enums<"account_status">;
@@ -211,7 +213,10 @@ export function employeeAccessBadge(input: {
   accountStatus: AccountStatus;
   review: EmployeeReviewStatus | null;
   signedIn: boolean;
+  /** False when the account was created without an invite email. Only the admin profile knows; elsewhere it is left out. */
+  invited?: boolean;
 }): AccessBadge {
+  if (input.invited === false && input.accountStatus === "invited" && !input.signedIn) return { label: "New", tone: "neutral", validated: false };
   if (!isVaAccount(input.roles)) {
     const tone = input.accountStatus === "active" ? "success" : input.accountStatus === "inactive" ? "neutral" : "info";
     return { label: STATUS_LABELS[input.accountStatus], tone, validated: false };
@@ -224,6 +229,7 @@ export function employeeAccessBadge(input: {
 }
 
 export const REGISTRATION_STEPS = [
+  { id: "created", label: "Created" },
   { id: "invitation", label: "Invitation sent" },
   { id: "password", label: "Password" },
   { id: "registration", label: "Registration" },
@@ -237,18 +243,22 @@ export type RegistrationProgress = {
   signedIn: boolean;
   review: EmployeeReviewStatus;
   returned: readonly ReviewSection[];
+  /** False when the account was created without an invite email yet. Defaults to sent. */
+  invited?: boolean;
 };
 
 /**
  * Registration is one step. It checks only when every section is valid, and opens again when an admin sends a section back.
- * Invitation is always done. Skills is typed skills or a résumé. Experiences also needs a reference.
+ * Created and Invitation are done once the invite is sent; a profile made with Create stops on Created. Skills is typed skills or a résumé. Experiences also needs a reference.
  */
 export function registrationSteps(sections: Record<EmployeeSection, boolean>, progress: RegistrationProgress): RegistrationStep[] {
   const sentBack = progress.review === "pending" && progress.returned.length > 0;
   const locked = progress.review === "pending_review" || progress.review === "approved";
   const described = sections.basic && sections.address && sections.contact && (sections.education || sections.resume) && sections.experience;
   const confirmed = progress.review === "approved";
-  const flags = [true, progress.signedIn, locked || (described && !sentBack), confirmed, confirmed];
+  // A profile made with Create sits on Created until the invite goes out (or they sign in some other way).
+  const invited = progress.invited !== false || progress.signedIn;
+  const flags = [invited, invited, progress.signedIn, locked || (described && !sentBack), confirmed, confirmed];
   const firstOpen = flags.findIndex((done) => !done);
   const current = firstOpen === -1 ? flags.length - 1 : firstOpen;
   return REGISTRATION_STEPS.map((step, index) => ({

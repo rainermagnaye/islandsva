@@ -92,7 +92,8 @@ export function EmployeeProfileView({ userId, details, email, meta }: { userId: 
         <DetailsCard title="System metadata">
           <Field label="Registration status" value={REGISTRATION_STATUS_LABELS[meta.registrationStatus]} />
           <Field label="Progress tracker" value={meta.progress} />
-          <Field label="Date of invitation sent" value={formatProfileDate(meta.invitationSentAt)} />
+          <Field label="Date created" value={formatProfileDate(meta.createdAt)} />
+          <Field label="Date of invitation sent" value={meta.invitationSentAt ? formatProfileDate(meta.invitationSentAt) : "Not sent yet"} />
           <Field label="Date of registration completed" value={formatProfileDate(meta.registrationCompletedAt)} />
           <Field label="Time format" value={TIME_FORMAT_LABELS[meta.timeFormat]} />
         </DetailsCard>
