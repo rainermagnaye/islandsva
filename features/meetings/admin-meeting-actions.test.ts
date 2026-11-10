@@ -75,7 +75,13 @@ describe("addAdminSlots", () => {
     const data = new FormData();
     data.set("date", "2026-11-10");
     data.append("times", "10:00");
-    expect(await addAdminSlots(data)).toEqual({ ok: true });
+    // Slots must still be ahead, so pin the clock before the picked day (the date is fixed in this test).
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-01T00:00:00Z") });
+    try {
+      expect(await addAdminSlots(data)).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
     expect(createAdminSlotMeetings).toHaveBeenCalledOnce();
     expect(refresh).toHaveBeenCalledOnce();
   });
