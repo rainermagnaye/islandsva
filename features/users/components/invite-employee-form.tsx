@@ -14,11 +14,11 @@ type Intent = "invite" | "create";
 /**
  * Send invitation creates the account and emails the link. Create only makes the account and profile;
  * the invitation is sent later from the profile. The clicked button sets the intent before the form submits
- * (Enter submits through the first button, which also fires its click).
+ * (Enter submits through the first button in the DOM, Create, which also fires its click).
  */
 export function InviteEmployeeForm() {
-  const intentRef = useRef<Intent>("invite");
-  const [intent, setIntent] = useState<Intent>("invite");
+  const intentRef = useRef<Intent>("create");
+  const [intent, setIntent] = useState<Intent>("create");
 
   function choose(next: Intent) {
     intentRef.current = next;
@@ -54,12 +54,13 @@ export function InviteEmployeeForm() {
             hint="Admins must set up two-factor sign-in the first time they sign in."
             error={fieldErrors.role}
           />
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" loading={pending && intent === "invite"} disabled={pending} iconLeft="plus" onClick={() => choose("invite")}>
-              {pending && intent === "invite" ? "Sending" : "Send invitation"}
-            </Button>
-            <Button type="submit" variant="ghost" loading={pending && intent === "create"} disabled={pending} onClick={() => choose("create")}>
+          {/* Create comes first in the DOM so Enter creates (no email); row-reverse shows it on the far right. */}
+          <div className="flex flex-row-reverse flex-wrap gap-3">
+            <Button type="submit" loading={pending && intent === "create"} disabled={pending} iconLeft="plus" onClick={() => choose("create")}>
               {pending && intent === "create" ? "Creating" : "Create"}
+            </Button>
+            <Button type="submit" variant="ghost" loading={pending && intent === "invite"} disabled={pending} iconLeft="mail" onClick={() => choose("invite")}>
+              {pending && intent === "invite" ? "Sending" : "Send invitation"}
             </Button>
           </div>
         </>
